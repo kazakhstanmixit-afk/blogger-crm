@@ -330,11 +330,11 @@ export default function BloggerList({ currentUser }) {
                       />
                     </td>
                   )}
-                  <td style={{position:'sticky',left:0,background:b.in_work?'#0d2016':isWaiting?'#2a1a00':isFresh?'#0d1a2e':'var(--surface-2)',zIndex:1,fontWeight:500,whiteSpace:'nowrap'}}>
+                  <td style={{fontWeight:500,whiteSpace:'nowrap'}}>
                     {b.name}
                     {isFresh && <span className="badge-new">new</span>}
                   </td>
-                  <td style={{position:'sticky',left:140,background:b.in_work?'#0d2016':isWaiting?'#2a1a00':isFresh?'#0d1a2e':'var(--surface-2)',zIndex:1}} onClick={e=>e.stopPropagation()}>
+                  <td onClick={e=>e.stopPropagation()}>
                     <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
                   </td>
                   <td onClick={e=>e.stopPropagation()}>
