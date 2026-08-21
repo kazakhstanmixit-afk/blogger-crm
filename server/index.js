@@ -127,7 +127,7 @@ app.delete('/api/users/:id', auth, (req, res) => {
 
 // BLOGGERS
 app.get('/api/bloggers', auth, (req, res) => {
-  const { search, status, manager, in_work, sort, platform, cpv_max, reach_min, batch_id, exclude_declined } = req.query;
+  const { search, status, manager, in_work, sort, platform, cpv_max, reach_min, batch_id, exclude_declined, exclude_in_work } = req.query;
   const users = db.get('users').value();
   let list = db.get('bloggers').value();
 
@@ -142,6 +142,7 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (cpv_max) { const m = parseFloat(cpv_max); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best <= m; }); }
   if (reach_min) { const m = parseInt(reach_min); list = list.filter(b => (b.instagram_avg_reach||0) >= m || (b.tiktok_avg_reach||0) >= m); }
   if (exclude_declined === '1') list = list.filter(b => b.status !== 'declined');
+  if (exclude_in_work === '1') list = list.filter(b => !b.in_work);
 
   if (sort === 'cpv_asc') list = list.sort((a,b) => Math.min(a.cpv_reels||9999,a.cpv_tiktok||9999,a.cpv_both||9999) - Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999));
   else if (sort === 'cpv_desc') list = list.sort((a,b) => Math.min(b.cpv_reels||0,b.cpv_tiktok||0,b.cpv_both||0) - Math.min(a.cpv_reels||0,a.cpv_tiktok||0,a.cpv_both||0));
@@ -154,7 +155,12 @@ app.get('/api/bloggers', auth, (req, res) => {
       return new Date(b.created_at||0) - new Date(a.created_at||0);
     });
   }
-  res.json(list.map(b => ({ ...b, manager_name: (users.find(u => u.id === b.assigned_manager_id)||{}).username || null })));
+  const total = list.length;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const offset = (page - 1) * limit;
+  const paged = list.slice(offset, offset + limit);
+  res.json({ data: paged.map(b => ({ ...b, manager_name: (users.find(u => u.id === b.assigned_manager_id)||{}).username || null })), total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 // check duplicate
