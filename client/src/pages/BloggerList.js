@@ -4,11 +4,11 @@ import BloggerModal from '../components/BloggerModal';
 import ImportModal from '../components/ImportModal';
 
 const STATUS_OPTIONS = [
-  { value: 'new', label: 'Новый', color: '#94a3b8' },
-  { value: 'contacted', label: 'Написали', color: '#f59e0b' },
-  { value: 'replied', label: 'Ответили', color: '#a78bfa' },
-  { value: 'in_work', label: 'В работе', color: '#22c55e' },
-  { value: 'declined', label: 'Отказ (контент)', color: '#ef4444' },
+  { value: 'new', label: 'Новый', color: '#64748b' },
+  { value: 'contacted', label: 'Написали', color: '#92400e' },
+  { value: 'replied', label: 'Ответили', color: '#5b21b6' },
+  { value: 'in_work', label: 'В работе', color: '#15803d' },
+  { value: 'declined', label: 'Отказ (контент)', color: '#991b1b' },
   { value: 'declined_bad', label: 'Отказ (чёрный список)', color: '#7f1d1d' },
 ];
 
@@ -20,24 +20,34 @@ function isNew(iso) { return iso && daysSince(iso) <= 3; }
 
 function StatusDropdown({ value, onChange }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({top:0,left:0});
   const ref = useRef();
   const current = STATUS_OPTIONS.find(s => s.value === value) || STATUS_OPTIONS[0];
+
   useEffect(() => {
     const handler = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    const rect = ref.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
+    setOpen(!open);
+  };
+
   return (
     <div ref={ref} style={{position:'relative',display:'inline-block'}}>
-      <span className={`status-badge status-${value}`} onClick={e=>{e.stopPropagation();setOpen(!open)}} style={{cursor:'pointer',userSelect:'none'}}>
+      <span className={`status-badge status-${value}`} onClick={handleClick} style={{cursor:'pointer',userSelect:'none'}}>
         {current.label} ▾
       </span>
       {open && (
-        <div style={{position:'absolute',top:'100%',left:0,zIndex:100,background:'var(--surface-1)',border:'1px solid var(--border)',borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',minWidth:180,marginTop:4}}>
+        <div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.12)',minWidth:200,marginTop:4}}>
           {STATUS_OPTIONS.map(s => (
             <div key={s.value} onClick={e=>{e.stopPropagation();onChange(s.value);setOpen(false);}}
-              style={{padding:'8px 14px',cursor:'pointer',fontSize:12,color:s.color,fontWeight:500}}
-              onMouseOver={e=>e.currentTarget.style.background='var(--surface-2)'}
+              style={{padding:'8px 14px',cursor:'pointer',fontSize:12,color:s.color,fontWeight:500,borderBottom:'1px solid #f0f2f7'}}
+              onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}>
               {s.label}
             </div>
@@ -48,7 +58,7 @@ function StatusDropdown({ value, onChange }) {
   );
 }
 
-function EditableCell({ value, onSave, type='text', prefix='', suffix='' }) {
+function EditableCell({ value, onSave, type='text', suffix='' }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value||'');
   const [saved, setSaved] = useState(false);
@@ -59,7 +69,7 @@ function EditableCell({ value, onSave, type='text', prefix='', suffix='' }) {
 
   const handleSave = async () => {
     setEditing(false);
-    if (val != value) {
+    if (String(val) !== String(value||'')) {
       await onSave(val);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -71,19 +81,20 @@ function EditableCell({ value, onSave, type='text', prefix='', suffix='' }) {
       onChange={e=>setVal(e.target.value)}
       onBlur={handleSave}
       onKeyDown={e=>{ if(e.key==='Enter') handleSave(); if(e.key==='Escape') setEditing(false); }}
-      style={{width:90,padding:'2px 6px',fontSize:12,border:'1px solid var(--border-accent)',borderRadius:4,background:'var(--surface-1)',color:'var(--text-primary)'}}
+      style={{width:90,padding:'2px 6px',fontSize:12,border:'1px solid #4f6ef7',borderRadius:4,background:'#fff',color:'#1a1d2e',outline:'none'}}
       onClick={e=>e.stopPropagation()}
     />
   );
   return (
-    <span onClick={e=>{e.stopPropagation();setEditing(true);}} style={{cursor:'text',borderBottom:'1px dashed var(--border)',paddingBottom:1}}>
-      {saved && <span style={{color:'#22c55e',marginRight:4}}>✓</span>}
-      {prefix}{value ? fmtNum(value) : <span style={{color:'var(--text-muted)'}}>—</span>}{suffix}
+    <span onClick={e=>{e.stopPropagation();setEditing(true);}}
+      style={{cursor:'text',borderBottom:'1px dashed #c8cfe0',paddingBottom:1,fontSize:12,whiteSpace:'nowrap'}}>
+      {saved && <span style={{color:'#16a34a',marginRight:3}}>✓</span>}
+      {value ? <>{fmtNum(value)}{suffix}</> : <span style={{color:'#9ba3be'}}>—</span>}
     </span>
   );
 }
 
-function CommentCell({ value, bloggerId, onSave }) {
+function CommentCell({ value, onSave }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value||'');
   const [saved, setSaved] = useState(false);
@@ -93,20 +104,20 @@ function CommentCell({ value, bloggerId, onSave }) {
 
   const handleSave = async () => {
     setEditing(false);
-    if (val !== value) { await onSave(val); setSaved(true); setTimeout(()=>setSaved(false),2000); }
+    if (val !== (value||'')) { await onSave(val); setSaved(true); setTimeout(()=>setSaved(false),2000); }
   };
 
   if (editing) return (
     <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)}
       onBlur={handleSave} onKeyDown={e=>{if(e.key==='Enter')handleSave();if(e.key==='Escape')setEditing(false);}}
-      style={{width:160,padding:'2px 6px',fontSize:12,border:'1px solid var(--border-accent)',borderRadius:4,background:'var(--surface-1)',color:'var(--text-primary)'}}
+      style={{width:160,padding:'2px 6px',fontSize:12,border:'1px solid #4f6ef7',borderRadius:4,background:'#fff',color:'#1a1d2e',outline:'none'}}
       onClick={e=>e.stopPropagation()} placeholder="Добавить комментарий..."
     />
   );
   return (
     <span onClick={e=>{e.stopPropagation();setEditing(true);}} title={value||''}
-      style={{cursor:'text',borderBottom:'1px dashed var(--border)',paddingBottom:1,maxWidth:160,display:'inline-block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12,color:value?'var(--text-primary)':'var(--text-muted)'}}>
-      {saved && <span style={{color:'#22c55e',marginRight:4}}>✓</span>}
+      style={{cursor:'text',borderBottom:'1px dashed #c8cfe0',paddingBottom:1,maxWidth:160,display:'inline-block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12,color:value?'#1a1d2e':'#9ba3be'}}>
+      {saved && <span style={{color:'#16a34a',marginRight:3}}>✓</span>}
       {value || 'добавить...'}
     </span>
   );
@@ -126,12 +137,15 @@ export default function BloggerList({ currentUser }) {
   const [batchFilter, setBatchFilter] = useState('');
   const [inWorkOnly, setInWorkOnly] = useState(false);
   const [excludeDeclined, setExcludeDeclined] = useState(false);
+  const [excludeInWork, setExcludeInWork] = useState(false);
   const [sort, setSort] = useState('default');
   const [showFilters, setShowFilters] = useState(false);
   const [editBlogger, setEditBlogger] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [pendingBlogger, setPendingBlogger] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [showDistribute, setShowDistribute] = useState(false);
   const timer = useRef(null);
 
   const fetchBloggers = useCallback(async () => {
@@ -146,12 +160,16 @@ export default function BloggerList({ currentUser }) {
     if (reachMin) p.set('reach_min', reachMin);
     if (batchFilter) p.set('batch_id', batchFilter);
     if (excludeDeclined) p.set('exclude_declined', '1');
+    if (excludeInWork) p.set('exclude_in_work', '1');
     const res = await apiFetch('/api/bloggers?' + p);
     setBloggers(await res.json());
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, batchFilter, excludeDeclined]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, batchFilter, excludeDeclined, excludeInWork]);
 
-  useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(setUsers); apiFetch('/api/batches').then(r=>r.json()).then(setBatches); }, []);
+  useEffect(() => {
+    apiFetch('/api/users').then(r=>r.json()).then(setUsers);
+    apiFetch('/api/batches').then(r=>r.json()).then(setBatches);
+  }, []);
   useEffect(() => { clearTimeout(timer.current); timer.current = setTimeout(fetchBloggers, 300); }, [fetchBloggers]);
 
   const patch = async (id, fields) => {
@@ -166,10 +184,12 @@ export default function BloggerList({ currentUser }) {
     await apiFetch(isEdit ? `/api/bloggers/${data.id}` : '/api/bloggers', { method: isEdit?'PUT':'POST', body: JSON.stringify(data) });
     setEditBlogger(null); setShowAdd(false); fetchBloggers();
   };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Удалить?')) return;
     await apiFetch(`/api/bloggers/${id}`, { method:'DELETE' }); fetchBloggers();
   };
+
   const handleExport = async () => {
     const token = localStorage.getItem('token');
     const p = new URLSearchParams();
@@ -184,17 +204,43 @@ export default function BloggerList({ currentUser }) {
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bloggers_export.xlsx'; a.click();
   };
+
   const handleTemplate = async () => {
     const token = localStorage.getItem('token');
     const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/template', { headers:{ Authorization:`Bearer ${token}` } });
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'blogger_template.xlsx'; a.click();
   };
+
   const handleClearAll = async () => {
     if (!window.confirm('Удалить ВСЕХ блогеров? Это нельзя отменить!')) return;
     const token = localStorage.getItem('token');
     await fetch((process.env.REACT_APP_API_URL||'')+'/api/bloggers/all',{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
     fetchBloggers(); apiFetch('/api/batches').then(r=>r.json()).then(setBatches);
+  };
+
+  const handleDistribute = async (managerIds) => {
+    const ids = Array.from(selected);
+    await apiFetch('/api/bloggers/distribute', {
+      method: 'POST',
+      body: JSON.stringify({ blogger_ids: ids, manager_ids: managerIds }),
+    });
+    setSelected(new Set());
+    setShowDistribute(false);
+    fetchBloggers();
+  };
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === bloggers.length) setSelected(new Set());
+    else setSelected(new Set(bloggers.map(b => b.id)));
   };
 
   const waiting = bloggers.filter(b => b.status==='contacted' && b.contacted_at && daysSince(b.contacted_at) >= 3);
@@ -266,8 +312,10 @@ export default function BloggerList({ currentUser }) {
           <div className="filter-row">
             <label>Платформа</label>
             <select className="select-filter" value={platformFilter} onChange={e=>setPlatformFilter(e.target.value)}>
-              <option value="">Любая</option><option value="instagram">Только Инст</option>
-              <option value="tiktok">Только ТТ</option><option value="both">Инст + ТТ</option>
+              <option value="">Любая</option>
+              <option value="instagram">Только Инст</option>
+              <option value="tiktok">Только ТТ</option>
+              <option value="both">Инст + ТТ</option>
             </select>
           </div>
           <div className="filter-row">
@@ -279,8 +327,21 @@ export default function BloggerList({ currentUser }) {
             <input className="filter-input" type="number" placeholder="напр. 20000" value={reachMin} onChange={e=>setReachMin(e.target.value)} />
           </div>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>setInWorkOnly(e.target.checked)} /> Только в работе</label>
+          <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>setExcludeInWork(e.target.checked)} /> Исключить в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeDeclined} onChange={e=>setExcludeDeclined(e.target.checked)} /> Исключить отказы</label>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ setStatusFilter('');setManagerFilter('');setPlatformFilter('');setCpvMax('');setReachMin('');setBatchFilter('');setInWorkOnly(false);setExcludeDeclined(false); }}>Сбросить</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{
+            setStatusFilter('');setManagerFilter('');setPlatformFilter('');setCpvMax('');
+            setReachMin('');setBatchFilter('');setInWorkOnly(false);setExcludeDeclined(false);setExcludeInWork(false);
+          }}>Сбросить</button>
+        </div>
+      )}
+
+      {/* Панель выбранных */}
+      {selected.size > 0 && currentUser.role === 'admin' && (
+        <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'10px 16px',marginBottom:10,display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
+          <button className="btn btn-primary btn-sm" onClick={()=>setShowDistribute(true)}>👥 Распределить по менеджерам</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
         </div>
       )}
 
@@ -288,9 +349,16 @@ export default function BloggerList({ currentUser }) {
         <table style={{minWidth:1400}}>
           <thead>
             <tr>
-              {currentUser.role==='admin' && <th style={{width:28}}>✓</th>}
-              <th style={{position:'sticky',left:0,background:'var(--surface-1)',zIndex:2}}>Ник</th>
-              <th style={{position:'sticky',left:140,background:'var(--surface-1)',zIndex:2}}>Статус</th>
+              {currentUser.role==='admin' && (
+                <th style={{width:32}}>
+                  <input type="checkbox" className="in-work-check"
+                    checked={selected.size === bloggers.length && bloggers.length > 0}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
+              )}
+              <th>Ник</th>
+              <th>Статус</th>
               <th>Комментарий</th>
               <th>Менеджер</th>
               <th>Ссылки</th>
@@ -312,21 +380,23 @@ export default function BloggerList({ currentUser }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={20} style={{textAlign:'center',padding:40,color:'var(--text-muted)'}}>Загрузка...</td></tr>
+              <tr><td colSpan={20} style={{textAlign:'center',padding:40,color:'#9ba3be'}}>Загрузка...</td></tr>
             ) : bloggers.length === 0 ? (
               <tr><td colSpan={20}><div className="empty-state"><div style={{fontSize:36}}>👥</div><p>Пусто. Добавьте или импортируйте блогеров.</p></div></td></tr>
             ) : bloggers.map(b => {
               const isWaiting = b.status==='contacted' && b.contacted_at && daysSince(b.contacted_at) >= 3;
               const isFresh = isNew(b.created_at);
+              const isSelected = selected.has(b.id);
               return (
                 <tr key={b.id}
                   className={b.in_work?'in-work-row':isWaiting?'warning-row':isFresh?'new-batch-row':''}
-                  onClick={e=>{ if(!e.target.closest('input')&&!e.target.closest('a')&&!e.target.closest('button')&&!e.target.closest('.status-dropdown')) setEditBlogger(b); }}
-                  style={{cursor:'pointer'}}>
+                  style={{background: isSelected ? '#eef1fe' : undefined, cursor:'pointer'}}
+                  onClick={e=>{ if(!e.target.closest('input')&&!e.target.closest('a')&&!e.target.closest('button')&&!e.target.closest('[data-dropdown]')) setEditBlogger(b); }}>
                   {currentUser.role==='admin' && (
                     <td onClick={e=>e.stopPropagation()}>
-                      <input type="checkbox" className="in-work-check" checked={!!b.in_work}
-                        onChange={()=>{ if(!b.in_work) setPendingBlogger(b); else patch(b.id,{in_work:false,status:'replied'}); }}
+                      <input type="checkbox" className="in-work-check"
+                        checked={isSelected}
+                        onChange={()=>toggleSelect(b.id)}
                       />
                     </td>
                   )}
@@ -334,13 +404,17 @@ export default function BloggerList({ currentUser }) {
                     {b.name}
                     {isFresh && <span className="badge-new">new</span>}
                   </td>
-                  <td onClick={e=>e.stopPropagation()}>
-                    <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
+                  <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
+                    <StatusDropdown value={b.status} onChange={v=>patch(b.id,{
+                      status:v,
+                      in_work:v==='in_work',
+                      decline_reason:v.startsWith('declined')?v.replace('declined_',''):null
+                    })} />
                   </td>
                   <td onClick={e=>e.stopPropagation()}>
-                    <CommentCell value={b.last_comment} bloggerId={b.id} onSave={v=>patch(b.id,{last_comment:v})} />
+                    <CommentCell value={b.last_comment} onSave={v=>patch(b.id,{last_comment:v})} />
                   </td>
-                  <td>{b.manager_name?<span className="tag">{b.manager_name}</span>:<span style={{color:'var(--text-muted)',fontSize:11}}>—</span>}</td>
+                  <td>{b.manager_name?<span className="tag">{b.manager_name}</span>:<span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
                   <td style={{whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
                     {b.instagram_url && <a href={b.instagram_url} target="_blank" rel="noreferrer" className="td-link">📸</a>}
                     {b.tiktok_url && <a href={b.tiktok_url} target="_blank" rel="noreferrer" className="td-link">🎵</a>}
@@ -357,11 +431,9 @@ export default function BloggerList({ currentUser }) {
                   <td><span className={`cpv-badge ${cpvClass(b.cpv_both)}`}>{b.cpv_both?b.cpv_both+'₸':'—'}</span></td>
                   <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_stories} type="number" suffix="₸" onSave={v=>patch(b.id,{price_stories:Number(v)})} /></td>
                   <td><span className={`cpv-badge ${cpvClass(b.cpv_stories)}`}>{b.cpv_stories?b.cpv_stories+'₸':'—'}</span></td>
-                  <td style={{fontSize:11,color:isFresh?'var(--text-success)':'var(--text-muted)',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>
+                  <td style={{fontSize:11,color:isFresh?'#4f6ef7':'#9ba3be',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>
                   <td onClick={e=>e.stopPropagation()}>
-                    <div className="actions-cell">
-                      <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(b.id)}>🗑</button>
-                    </div>
+                    <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(b.id)}>🗑</button>
                   </td>
                 </tr>
               );
@@ -370,9 +442,15 @@ export default function BloggerList({ currentUser }) {
         </table>
       </div>
 
-      {(showAdd||editBlogger) && <BloggerModal blogger={editBlogger} users={users} currentUser={currentUser} onSave={handleSave} onClose={()=>{setShowAdd(false);setEditBlogger(null);}} />}
-      {showImport && <ImportModal onClose={()=>{setShowImport(false);fetchBloggers();apiFetch('/api/batches').then(r=>r.json()).then(setBatches);}} />}
+      {(showAdd||editBlogger) && (
+        <BloggerModal blogger={editBlogger} users={users} currentUser={currentUser}
+          onSave={handleSave} onClose={()=>{setShowAdd(false);setEditBlogger(null);}} />
+      )}
+      {showImport && (
+        <ImportModal onClose={()=>{setShowImport(false);fetchBloggers();apiFetch('/api/batches').then(r=>r.json()).then(setBatches);}} />
+      )}
 
+      {/* Модалка взять в работу */}
       {pendingBlogger && (
         <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setPendingBlogger(null)}>
           <div className="modal" style={{maxWidth:400}}>
@@ -380,7 +458,7 @@ export default function BloggerList({ currentUser }) {
               <div className="modal-title">Взять в работу?</div>
               <button className="modal-close" onClick={()=>setPendingBlogger(null)}>×</button>
             </div>
-            <p style={{color:'var(--text-secondary)',fontSize:13,marginBottom:16}}>
+            <p style={{color:'#5a6380',fontSize:13,marginBottom:16}}>
               <strong>{pendingBlogger.name}</strong> — выбери ответственного менеджера
             </p>
             <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
@@ -389,10 +467,10 @@ export default function BloggerList({ currentUser }) {
                     await patch(pendingBlogger.id,{in_work:true,assigned_manager_id:u.id,status:'in_work'});
                     setPendingBlogger(null);
                   }}
-                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1px solid var(--border)',borderRadius:8,cursor:'pointer',background:'var(--surface-1)'}}
-                  onMouseOver={e=>e.currentTarget.style.borderColor='var(--border-accent)'}
-                  onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
-                  <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-accent)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-accent)'}}>
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1px solid #e2e6ef',borderRadius:8,cursor:'pointer'}}
+                  onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
+                  onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                  <div style={{width:32,height:32,borderRadius:'50%',background:'#eef1fe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'#4f6ef7'}}>
                     {u.username.slice(0,2).toUpperCase()}
                   </div>
                   <span style={{fontSize:13,fontWeight:500}}>{u.username}</span>
@@ -405,6 +483,66 @@ export default function BloggerList({ currentUser }) {
           </div>
         </div>
       )}
+
+      {/* Модалка распределения */}
+      {showDistribute && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowDistribute(false)}>
+          <div className="modal" style={{maxWidth:440}}>
+            <div className="modal-header">
+              <div className="modal-title">Распределить {selected.size} блогеров</div>
+              <button className="modal-close" onClick={()=>setShowDistribute(false)}>×</button>
+            </div>
+            <p style={{color:'#5a6380',fontSize:13,marginBottom:16}}>
+              Выбери менеджеров — блогеры раздадутся поровну между ними и получат статус "В работе"
+            </p>
+            <DistributeForm users={users} count={selected.size} onDistribute={handleDistribute} onClose={()=>setShowDistribute(false)} />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function DistributeForm({ users, count, onDistribute, onClose }) {
+  const [selectedManagers, setSelectedManagers] = useState(new Set());
+
+  const toggle = (id) => {
+    setSelectedManagers(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const perManager = selectedManagers.size > 0 ? Math.ceil(count / selectedManagers.size) : 0;
+
+  return (
+    <>
+      <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+        {users.map(u=>(
+          <div key={u.id} onClick={()=>toggle(u.id)}
+            style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:`1px solid ${selectedManagers.has(u.id)?'#4f6ef7':'#e2e6ef'}`,borderRadius:8,cursor:'pointer',background:selectedManagers.has(u.id)?'#eef1fe':'transparent'}}>
+            <input type="checkbox" checked={selectedManagers.has(u.id)} onChange={()=>{}} style={{accentColor:'#4f6ef7'}} />
+            <div style={{width:32,height:32,borderRadius:'50%',background:'#eef1fe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'#4f6ef7'}}>
+              {u.username.slice(0,2).toUpperCase()}
+            </div>
+            <span style={{fontSize:13,fontWeight:500,flex:1}}>{u.username}</span>
+            {selectedManagers.has(u.id) && <span style={{fontSize:11,color:'#4f6ef7'}}>~{perManager} блогеров</span>}
+          </div>
+        ))}
+      </div>
+      {selectedManagers.size > 0 && (
+        <div style={{background:'#f8f9fb',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#5a6380'}}>
+          {count} блогеров → {selectedManagers.size} менеджера = ~{perManager} каждому
+        </div>
+      )}
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
+        <button className="btn btn-primary" disabled={selectedManagers.size===0}
+          onClick={()=>onDistribute(Array.from(selectedManagers))}>
+          Распределить
+        </button>
+      </div>
+    </>
   );
 }
