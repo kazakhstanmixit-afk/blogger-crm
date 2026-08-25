@@ -198,6 +198,8 @@ export default function BloggerList({ currentUser }) {
   const [platformFilter, setPlatformFilter] = useState('');
   const [cpvMax, setCpvMax] = useState('');
   const [reachMin, setReachMin] = useState('');
+  const [followersMin, setFollowersMin] = useState('');
+  const [followersMax, setFollowersMax] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
   const [inWorkOnly, setInWorkOnly] = useState(false);
   const [excludeDeclined, setExcludeDeclined] = useState(false);
