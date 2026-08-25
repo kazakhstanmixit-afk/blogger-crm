@@ -127,7 +127,7 @@ app.delete('/api/users/:id', auth, (req, res) => {
 
 // BLOGGERS
 app.get('/api/bloggers', auth, (req, res) => {
-  const { search, status, manager, in_work, sort, platform, cpv_max, reach_min, batch_id, exclude_declined, exclude_in_work } = req.query;
+  const { search, status, manager, in_work, sort, platform, cpv_max, reach_min, followers_min, followers_max, batch_id, exclude_declined, exclude_in_work } = req.query;
   const users = db.get('users').value();
   let list = db.get('bloggers').value();
 
@@ -141,6 +141,8 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (platform === 'both') list = list.filter(b => b.instagram_url && b.tiktok_url);
   if (cpv_max) { const m = parseFloat(cpv_max); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best <= m; }); }
   if (reach_min) { const m = parseInt(reach_min); list = list.filter(b => (b.instagram_avg_reach||0) >= m || (b.tiktok_avg_reach||0) >= m); }
+  if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
+  if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m || (b.tiktok_followers||0) <= m); }
   if (exclude_declined === '1') list = list.filter(b => b.status !== 'declined');
   if (exclude_in_work === '1') list = list.filter(b => !b.in_work);
 
@@ -231,7 +233,15 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
   const users = db.get('users').value();
   res.json({ ...updated, manager_name: (users.find(u => u.id === updated.assigned_manager_id)||{}).username || null });
 });
-
+app.post('/api/bloggers/distribute', auth, (req, res) => {
+  const { blogger_ids, manager_ids } = req.body;
+  if (!blogger_ids?.length || !manager_ids?.length) return res.status(400).json({ error: 'Нужны блогеры и менеджеры' });
+  blogger_ids.forEach((bid, i) => {
+    const mgr = manager_ids[i % manager_ids.length];
+    db.get('bloggers').find({ id: bid }).assign({ assigned_manager_id: mgr, in_work: true, status: 'in_work', updated_at: new Date().toISOString() }).write();
+  });
+  res.json({ ok: true, distributed: blogger_ids.length });
+});
 app.delete('/api/bloggers/all', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.set('bloggers', []).write();
