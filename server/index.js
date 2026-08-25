@@ -89,7 +89,7 @@ function makeBlogger(d) {
     status: d.status || 'new',
     decline_reason: d.decline_reason || null,
     assigned_manager_id: d.assigned_manager_id || null,
-    in_work: !!(d.in_work === true || d.in_work === 'true' || d.in_work === 1 || d.status === 'in_work'),
+    in_work: !!(d.in_work === true || d.in_work === 'true' || d.in_work === 1 || d.status === 'in_work' || d.status === 'transferred'),
     notes: d.notes || null,
     last_comment: d.last_comment || null,
     contacted_at: d.contacted_at || null,
@@ -141,10 +141,10 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (platform === 'both') list = list.filter(b => b.instagram_url && b.tiktok_url);
   if (cpv_max) { const m = parseFloat(cpv_max); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best <= m; }); }
   if (reach_min) { const m = parseInt(reach_min); list = list.filter(b => (b.instagram_avg_reach||0) >= m || (b.tiktok_avg_reach||0) >= m); }
-  if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
-  if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m || (b.tiktok_followers||0) <= m); }
   if (exclude_declined === '1') list = list.filter(b => b.status !== 'declined');
-  if (exclude_in_work === '1') list = list.filter(b => !b.in_work);
+  if (exclude_in_work === "1") list = list.filter(b => !b.in_work);
+  if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
+  if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m && (b.tiktok_followers||0) <= m); }
 
   if (sort === 'cpv_asc') list = list.sort((a,b) => Math.min(a.cpv_reels||9999,a.cpv_tiktok||9999,a.cpv_both||9999) - Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999));
   else if (sort === 'cpv_desc') list = list.sort((a,b) => Math.min(b.cpv_reels||0,b.cpv_tiktok||0,b.cpv_both||0) - Math.min(a.cpv_reels||0,a.cpv_tiktok||0,a.cpv_both||0));
@@ -233,15 +233,34 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
   const users = db.get('users').value();
   res.json({ ...updated, manager_name: (users.find(u => u.id === updated.assigned_manager_id)||{}).username || null });
 });
+
+app.post('/api/bloggers/bulk-status', auth, (req, res) => {
+  const { blogger_ids, status } = req.body;
+  if (!blogger_ids?.length || !status) return res.status(400).json({ error: 'Нужны блогеры и статус' });
+  const now = new Date().toISOString();
+  blogger_ids.forEach(bid => {
+    const updates = { status, updated_at: now };
+    if (status === 'in_work' || status === 'transferred') updates.in_work = true;
+    else if (status === 'new' || status === 'contacted' || status === 'replied' || status === 'declined' || status === 'declined_bad') updates.in_work = false;
+    if (status === 'contacted' || status === 'declined' || status === 'declined_bad') {
+      const existing = db.get('bloggers').find({ id: bid }).value();
+      if (!existing?.contacted_at) updates.contacted_at = now;
+    }
+    db.get('bloggers').find({ id: bid }).assign(updates).write();
+  });
+  res.json({ ok: true, updated: blogger_ids.length });
+});
+
 app.post('/api/bloggers/distribute', auth, (req, res) => {
   const { blogger_ids, manager_ids } = req.body;
   if (!blogger_ids?.length || !manager_ids?.length) return res.status(400).json({ error: 'Нужны блогеры и менеджеры' });
   blogger_ids.forEach((bid, i) => {
     const mgr = manager_ids[i % manager_ids.length];
-    db.get('bloggers').find({ id: bid }).assign({ assigned_manager_id: mgr, in_work: true, status: 'in_work', updated_at: new Date().toISOString() }).write();
+    db.get('bloggers').find({ id: bid }).assign({ assigned_manager_id: mgr, in_work: true, status: 'transferred', updated_at: new Date().toISOString() }).write();
   });
   res.json({ ok: true, distributed: blogger_ids.length });
 });
+
 app.delete('/api/bloggers/all', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.set('bloggers', []).write();
