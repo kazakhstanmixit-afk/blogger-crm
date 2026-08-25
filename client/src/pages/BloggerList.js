@@ -7,6 +7,7 @@ const STATUS_OPTIONS = [
   { value: 'new', label: 'Новый', color: '#64748b' },
   { value: 'contacted', label: 'Написали', color: '#92400e' },
   { value: 'replied', label: 'Ответили', color: '#5b21b6' },
+  { value: 'transferred', label: 'Передано в работу', color: '#0369a1' },
   { value: 'in_work', label: 'В работе', color: '#15803d' },
   { value: 'declined', label: 'Отказ (контент)', color: '#991b1b' },
   { value: 'declined_bad', label: 'Отказ (чёрный список)', color: '#7f1d1d' },
@@ -212,6 +213,7 @@ export default function BloggerList({ currentUser }) {
   const [pendingBlogger, setPendingBlogger] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [showDistribute, setShowDistribute] = useState(false);
+  const [showBulkStatus, setShowBulkStatus] = useState(false);
   const [visibleCols, setVisibleCols] = useState(new Set(ALL_COLUMNS.filter(c=>c.default).map(c=>c.key)));
   const timer = useRef(null);
 
@@ -310,6 +312,12 @@ export default function BloggerList({ currentUser }) {
     setSelected(new Set()); setShowDistribute(false); doFetch(page);
   };
 
+  const handleBulkStatus = async (status) => {
+    const ids = Array.from(selected);
+    await apiFetch('/api/bloggers/bulk-status', { method:'POST', body: JSON.stringify({ blogger_ids: ids, status }) });
+    setSelected(new Set()); setShowBulkStatus(false); doFetch(page);
+  };
+
   const resetFilters = () => {
     setStatusFilter(''); setManagerFilter(''); setPlatformFilter('');
     setCpvMax(''); setReachMin(''); setFollowersMin(''); setFollowersMax('');
@@ -400,6 +408,7 @@ export default function BloggerList({ currentUser }) {
         <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'10px 16px',marginBottom:10,display:'flex',alignItems:'center',gap:12}}>
           <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
           <button className="btn btn-primary btn-sm" onClick={()=>setShowDistribute(true)}>👥 Распределить по менеджерам</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setShowBulkStatus(true)}>🔄 Сменить статус</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
         </div>
       )}
@@ -500,6 +509,31 @@ export default function BloggerList({ currentUser }) {
               ))}
             </div>
             <div style={{display:'flex',justifyContent:'flex-end'}}><button className="btn btn-secondary" onClick={()=>setPendingBlogger(null)}>Отмена</button></div>
+          </div>
+        </div>
+      )}
+
+      {showBulkStatus && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowBulkStatus(false)}>
+          <div className="modal" style={{maxWidth:400}}>
+            <div className="modal-header">
+              <div className="modal-title">Сменить статус — {selected.size} блогеров</div>
+              <button className="modal-close" onClick={()=>setShowBulkStatus(false)}>×</button>
+            </div>
+            <p style={{color:'#5a6380',fontSize:13,marginBottom:16}}>Выбери новый статус для всех выбранных блогеров</p>
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+              {STATUS_OPTIONS.map(s=>(
+                <div key={s.value} onClick={()=>handleBulkStatus(s.value)}
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1px solid #e2e6ef',borderRadius:8,cursor:'pointer'}}
+                  onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
+                  onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                  <span className={`status-badge status-${s.value}`}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end'}}>
+              <button className="btn btn-secondary" onClick={()=>setShowBulkStatus(false)}>Отмена</button>
+            </div>
           </div>
         </div>
       )}
