@@ -197,6 +197,7 @@ export default function BloggerList({ currentUser }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [managerFilter, setManagerFilter] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
+  const [cpvMin, setCpvMin] = useState('');
   const [cpvMax, setCpvMax] = useState('');
   const [reachMin, setReachMin] = useState('');
   const [followersMin, setFollowersMin] = useState('');
@@ -205,6 +206,7 @@ export default function BloggerList({ currentUser }) {
   const [inWorkOnly, setInWorkOnly] = useState(false);
   const [excludeDeclined, setExcludeDeclined] = useState(false);
   const [excludeInWork, setExcludeInWork] = useState(false);
+  const [excludeTransferred, setExcludeTransferred] = useState(false);
   const [sort, setSort] = useState('default');
   const [showFilters, setShowFilters] = useState(false);
   const [editBlogger, setEditBlogger] = useState(null);
@@ -229,6 +231,7 @@ export default function BloggerList({ currentUser }) {
     if (inWorkOnly) params.set('in_work', '1');
     if (sort !== 'default') params.set('sort', sort);
     if (platformFilter) params.set('platform', platformFilter);
+    if (cpvMin) params.set('cpv_min', cpvMin);
     if (cpvMax) params.set('cpv_max', cpvMax);
     if (reachMin) params.set('reach_min', reachMin);
     if (followersMin) params.set('followers_min', followersMin);
@@ -236,6 +239,7 @@ export default function BloggerList({ currentUser }) {
     if (batchFilter) params.set('batch_id', batchFilter);
     if (excludeDeclined) params.set('exclude_declined', '1');
     if (excludeInWork) params.set('exclude_in_work', '1');
+    if (excludeTransferred) params.set('exclude_transferred', '1');
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
     const res = await apiFetch('/api/bloggers?' + params);
@@ -244,14 +248,14 @@ export default function BloggerList({ currentUser }) {
     setTotal(json.total || 0);
     setPages(json.pages || 1);
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred]);
 
   useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(setUsers); apiFetch('/api/batches').then(r=>r.json()).then(setBatches); }, []);
 
   useEffect(() => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { setPage(1); doFetch(1); }, 300);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred]);
 
   useEffect(() => { doFetch(page); }, [page]);
 
@@ -280,6 +284,7 @@ export default function BloggerList({ currentUser }) {
     if (managerFilter) p.set('manager', managerFilter);
     if (platformFilter) p.set('platform', platformFilter);
     if (batchFilter) p.set('batch_id', batchFilter);
+    if (cpvMin) p.set('cpv_min', cpvMin);
     if (cpvMax) p.set('cpv_max', cpvMax);
     if (reachMin) p.set('reach_min', reachMin);
     if (followersMin) p.set('followers_min', followersMin);
@@ -287,6 +292,7 @@ export default function BloggerList({ currentUser }) {
     if (inWorkOnly) p.set('in_work', '1');
     if (excludeDeclined) p.set('exclude_declined', '1');
     if (excludeInWork) p.set('exclude_in_work', '1');
+    if (excludeTransferred) p.set('exclude_transferred', '1');
     const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/export?' + p, { headers:{ Authorization:`Bearer ${token}` } });
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bloggers_export.xlsx'; a.click();
@@ -320,7 +326,7 @@ export default function BloggerList({ currentUser }) {
 
   const resetFilters = () => {
     setStatusFilter(''); setManagerFilter(''); setPlatformFilter('');
-    setCpvMax(''); setReachMin(''); setFollowersMin(''); setFollowersMax('');
+    setCpvMin(''); setCpvMax(''); setReachMin(''); setFollowersMin(''); setFollowersMax('');
     setBatchFilter(''); setInWorkOnly(false); setExcludeDeclined(false); setExcludeInWork(false);
     setPage(1);
   };
@@ -382,7 +388,11 @@ export default function BloggerList({ currentUser }) {
             </select>
           </div>
           <div className="filter-row">
-            <label>CPV не более (₸)</label>
+            <label>CPV от (₸)</label>
+            <input className="filter-input" type="number" placeholder="напр. 5" value={cpvMin} onChange={e=>{setCpvMin(e.target.value);setPage(1);}} />
+          </div>
+          <div className="filter-row">
+            <label>CPV до (₸)</label>
             <input className="filter-input" type="number" placeholder="напр. 30" value={cpvMax} onChange={e=>{setCpvMax(e.target.value);setPage(1);}} />
           </div>
           <div className="filter-row">
@@ -399,6 +409,7 @@ export default function BloggerList({ currentUser }) {
           </div>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>{setInWorkOnly(e.target.checked);setPage(1);}} /> Только в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>{setExcludeInWork(e.target.checked);setPage(1);}} /> Исключить в работе</label>
+          <label className="filter-check"><input type="checkbox" checked={excludeTransferred} onChange={e=>{setExcludeTransferred(e.target.checked);setPage(1);}} /> Исключить "Передано в работу"</label>
           <label className="filter-check"><input type="checkbox" checked={excludeDeclined} onChange={e=>{setExcludeDeclined(e.target.checked);setPage(1);}} /> Исключить отказы</label>
           <button className="btn btn-secondary btn-sm" onClick={resetFilters}>Сбросить</button>
         </div>
