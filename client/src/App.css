@@ -210,3 +210,5 @@ tbody tr:hover td.sticky { background:var(--surface-2); }
 tbody tr.in-work-row td.sticky { background:#f0fdf4; }
 tbody tr.in-work-row:hover td.sticky { background:#dcfce7; }
 tbody tr.warning-row td.sticky { background:#fffbeb; }
+
+.status-transferred { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
