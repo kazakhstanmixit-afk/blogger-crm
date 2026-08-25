@@ -166,9 +166,9 @@ function Pagination({ page, pages, total, limit, onChange }) {
         <button className="btn btn-secondary btn-sm" disabled={page<=1} onClick={()=>onChange(page-1)}>‹</button>
         {Array.from({length:Math.min(7,pages)},(_,i)=>{
           let p;
-          if (pages<=7) p=i+1;
-          else if (page<=4) p=i+1;
-          else if (page>=pages-3) p=pages-6+i;
+          if(pages<=7) p=i+1;
+          else if(page<=4) p=i+1;
+          else if(page>=pages-3) p=pages-6+i;
           else p=page-3+i;
           return (
             <button key={p} className="btn btn-sm" onClick={()=>onChange(p)}
@@ -218,7 +218,7 @@ export default function BloggerList({ currentUser }) {
   const show = (key) => visibleCols.has(key);
   const toggleCol = (key) => setVisibleCols(prev => { const n=new Set(prev); n.has(key)?n.delete(key):n.add(key); return n; });
 
-  const fetchBloggers = useCallback(async (p = page) => {
+  const doFetch = useCallback(async (p) => {
     setLoading(true);
     const params = new URLSearchParams();
     if (search) params.set('search', search);
@@ -229,6 +229,8 @@ export default function BloggerList({ currentUser }) {
     if (platformFilter) params.set('platform', platformFilter);
     if (cpvMax) params.set('cpv_max', cpvMax);
     if (reachMin) params.set('reach_min', reachMin);
+    if (followersMin) params.set('followers_min', followersMin);
+    if (followersMax) params.set('followers_max', followersMax);
     if (batchFilter) params.set('batch_id', batchFilter);
     if (excludeDeclined) params.set('exclude_declined', '1');
     if (excludeInWork) params.set('exclude_in_work', '1');
@@ -240,20 +242,16 @@ export default function BloggerList({ currentUser }) {
     setTotal(json.total || 0);
     setPages(json.pages || 1);
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, batchFilter, excludeDeclined, excludeInWork, page]);
-
-  const resetPage = useCallback(() => {
-    setPage(1);
-  }, []);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork]);
 
   useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(setUsers); apiFetch('/api/batches').then(r=>r.json()).then(setBatches); }, []);
-  
+
   useEffect(() => {
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { setPage(1); }, 300);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, batchFilter, excludeDeclined, excludeInWork]);
+    timer.current = setTimeout(() => { setPage(1); doFetch(1); }, 300);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork]);
 
-  useEffect(() => { fetchBloggers(page); }, [page, search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMax, reachMin, batchFilter, excludeDeclined, excludeInWork]);
+  useEffect(() => { doFetch(page); }, [page]);
 
   const patch = async (id, fields) => {
     const res = await apiFetch(`/api/bloggers/${id}`, { method: 'PATCH', body: JSON.stringify(fields) });
@@ -265,12 +263,12 @@ export default function BloggerList({ currentUser }) {
   const handleSave = async (data) => {
     const isEdit = !!data.id;
     await apiFetch(isEdit ? `/api/bloggers/${data.id}` : '/api/bloggers', { method: isEdit?'PUT':'POST', body: JSON.stringify(data) });
-    setEditBlogger(null); setShowAdd(false); fetchBloggers(page);
+    setEditBlogger(null); setShowAdd(false); doFetch(page);
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Удалить?')) return;
-    await apiFetch(`/api/bloggers/${id}`, { method:'DELETE' }); fetchBloggers(page);
+    await apiFetch(`/api/bloggers/${id}`, { method:'DELETE' }); doFetch(page);
   };
 
   const handleExport = async () => {
@@ -282,7 +280,11 @@ export default function BloggerList({ currentUser }) {
     if (batchFilter) p.set('batch_id', batchFilter);
     if (cpvMax) p.set('cpv_max', cpvMax);
     if (reachMin) p.set('reach_min', reachMin);
+    if (followersMin) p.set('followers_min', followersMin);
+    if (followersMax) p.set('followers_max', followersMax);
     if (inWorkOnly) p.set('in_work', '1');
+    if (excludeDeclined) p.set('exclude_declined', '1');
+    if (excludeInWork) p.set('exclude_in_work', '1');
     const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/export?' + p, { headers:{ Authorization:`Bearer ${token}` } });
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bloggers_export.xlsx'; a.click();
@@ -299,26 +301,31 @@ export default function BloggerList({ currentUser }) {
     if (!window.confirm('Удалить ВСЕХ блогеров? Это нельзя отменить!')) return;
     const token = localStorage.getItem('token');
     await fetch((process.env.REACT_APP_API_URL||'')+'/api/bloggers/all',{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
-    setPage(1); fetchBloggers(1); apiFetch('/api/batches').then(r=>r.json()).then(setBatches);
+    setPage(1); doFetch(1); apiFetch('/api/batches').then(r=>r.json()).then(setBatches);
   };
 
   const handleDistribute = async (managerIds) => {
     const ids = Array.from(selected);
     await apiFetch('/api/bloggers/distribute', { method:'POST', body: JSON.stringify({ blogger_ids: ids, manager_ids: managerIds }) });
-    setSelected(new Set()); setShowDistribute(false); fetchBloggers(page);
+    setSelected(new Set()); setShowDistribute(false); doFetch(page);
+  };
+
+  const resetFilters = () => {
+    setStatusFilter(''); setManagerFilter(''); setPlatformFilter('');
+    setCpvMax(''); setReachMin(''); setFollowersMin(''); setFollowersMax('');
+    setBatchFilter(''); setInWorkOnly(false); setExcludeDeclined(false); setExcludeInWork(false);
+    setPage(1);
   };
 
   const toggleSelect = (id) => setSelected(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleSelectAll = () => { if(selected.size===bloggers.length) setSelected(new Set()); else setSelected(new Set(bloggers.map(b=>b.id))); };
-
-  const inWorkCount = bloggers.filter(b=>b.in_work===true).length;
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <div className="page-title">Блогеры</div>
-          <div className="page-subtitle">{total} в базе · {inWorkCount} в работе на этой странице</div>
+          <div className="page-subtitle">{total} в базе</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <ColumnToggle columns={visibleCols} onChange={toggleCol} />
@@ -360,8 +367,10 @@ export default function BloggerList({ currentUser }) {
           <div className="filter-row">
             <label>Платформа</label>
             <select className="select-filter" value={platformFilter} onChange={e=>{setPlatformFilter(e.target.value);setPage(1);}}>
-              <option value="">Любая</option><option value="instagram">Только Инст</option>
-              <option value="tiktok">Только ТТ</option><option value="both">Инст + ТТ</option>
+              <option value="">Любая</option>
+              <option value="instagram">Только Инст</option>
+              <option value="tiktok">Только ТТ</option>
+              <option value="both">Инст + ТТ</option>
             </select>
           </div>
           <div className="filter-row">
@@ -372,10 +381,18 @@ export default function BloggerList({ currentUser }) {
             <label>Охват от</label>
             <input className="filter-input" type="number" placeholder="напр. 20000" value={reachMin} onChange={e=>{setReachMin(e.target.value);setPage(1);}} />
           </div>
+          <div className="filter-row">
+            <label>Подписчики от</label>
+            <input className="filter-input" type="number" placeholder="напр. 10000" value={followersMin} onChange={e=>{setFollowersMin(e.target.value);setPage(1);}} />
+          </div>
+          <div className="filter-row">
+            <label>Подписчики до</label>
+            <input className="filter-input" type="number" placeholder="напр. 100000" value={followersMax} onChange={e=>{setFollowersMax(e.target.value);setPage(1);}} />
+          </div>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>{setInWorkOnly(e.target.checked);setPage(1);}} /> Только в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>{setExcludeInWork(e.target.checked);setPage(1);}} /> Исключить в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeDeclined} onChange={e=>{setExcludeDeclined(e.target.checked);setPage(1);}} /> Исключить отказы</label>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{setStatusFilter('');setManagerFilter('');setPlatformFilter('');setCpvMax('');setReachMin('');setBatchFilter('');setInWorkOnly(false);setExcludeDeclined(false);setExcludeInWork(false);setPage(1);}}>Сбросить</button>
+          <button className="btn btn-secondary btn-sm" onClick={resetFilters}>Сбросить</button>
         </div>
       )}
 
@@ -464,7 +481,7 @@ export default function BloggerList({ currentUser }) {
       <Pagination page={page} pages={pages} total={total} limit={PAGE_SIZE} onChange={p=>{setPage(p);window.scrollTo(0,0);}} />
 
       {(showAdd||editBlogger) && <BloggerModal blogger={editBlogger} users={users} currentUser={currentUser} onSave={handleSave} onClose={()=>{setShowAdd(false);setEditBlogger(null);}} />}
-      {showImport && <ImportModal onClose={()=>{setShowImport(false);fetchBloggers(1);apiFetch('/api/batches').then(r=>r.json()).then(setBatches);}} />}
+      {showImport && <ImportModal onClose={()=>{setShowImport(false);doFetch(1);apiFetch('/api/batches').then(r=>r.json()).then(setBatches);}} />}
 
       {pendingBlogger && (
         <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setPendingBlogger(null)}>
