@@ -127,7 +127,7 @@ app.delete('/api/users/:id', auth, (req, res) => {
 
 // BLOGGERS
 app.get('/api/bloggers', auth, (req, res) => {
-  const { search, status, manager, in_work, sort, platform, cpv_max, reach_min, followers_min, followers_max, batch_id, exclude_declined, exclude_in_work } = req.query;
+  const { search, status, manager, in_work, sort, platform, cpv_min, cpv_max, reach_min, followers_min, followers_max, batch_id, exclude_declined, exclude_in_work, exclude_transferred } = req.query;
   const users = db.get('users').value();
   let list = db.get('bloggers').value();
 
@@ -139,10 +139,12 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (platform === 'instagram') list = list.filter(b => b.instagram_url);
   if (platform === 'tiktok') list = list.filter(b => b.tiktok_url);
   if (platform === 'both') list = list.filter(b => b.instagram_url && b.tiktok_url);
+  if (cpv_min) { const m = parseFloat(cpv_min); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best >= m; }); }
   if (cpv_max) { const m = parseFloat(cpv_max); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best <= m; }); }
   if (reach_min) { const m = parseInt(reach_min); list = list.filter(b => (b.instagram_avg_reach||0) >= m || (b.tiktok_avg_reach||0) >= m); }
   if (exclude_declined === '1') list = list.filter(b => b.status !== 'declined');
   if (exclude_in_work === "1") list = list.filter(b => !b.in_work);
+  if (exclude_transferred === "1") list = list.filter(b => b.status !== "transferred");
   if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
   if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m && (b.tiktok_followers||0) <= m); }
 
