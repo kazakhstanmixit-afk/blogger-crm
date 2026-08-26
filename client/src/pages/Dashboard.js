@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import BloggerList from './BloggerList';
+import PaymentsPage from './PaymentsPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -8,6 +9,7 @@ export default function Dashboard({ user, onLogout }) {
   const navItems = [
     { id:'bloggers', icon:'👥', label:'Блогеры' },
     { id:'stats', icon:'📊', label:'Аналитика' },
+    { id:'payments', icon:'💳', label:'Оплаты' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -32,6 +34,7 @@ export default function Dashboard({ user, onLogout }) {
       <main className="main-content">
         {page==='bloggers' && <BloggerList currentUser={user} />}
         {page==='stats' && <StatsPage />}
+        {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>
