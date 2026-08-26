@@ -6,9 +6,15 @@ const STATUS_OPTIONS = [
   { value:'new', label:'Новый' },
   { value:'contacted', label:'Написали' },
   { value:'replied', label:'Ответили' },
+  { value:'transferred', label:'Передано в работу' },
   { value:'in_work', label:'В работе' },
   { value:'declined', label:'Отказ (контент)' },
   { value:'declined_bad', label:'Отказ (чёрный список)' },
+  { value:'declined_reach', label:'Отказ (низкие просмотры)' },
+  { value:'declined_shop', label:'Отказ (магазин)' },
+  { value:'payment_pending', label:'К оплате' },
+  { value:'payment_submitted', label:'Оплата подана' },
+  { value:'paid', label:'Оплачено' },
 ];
 
 function cpv(price, reach) {
