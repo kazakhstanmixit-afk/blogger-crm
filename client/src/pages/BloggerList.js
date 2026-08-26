@@ -11,6 +11,9 @@ const STATUS_OPTIONS = [
   { value: 'in_work', label: 'В работе', color: '#15803d' },
   { value: 'declined', label: 'Отказ (контент)', color: '#991b1b' },
   { value: 'declined_bad', label: 'Отказ (чёрный список)', color: '#7f1d1d' },
+  { value: 'payment_pending', label: 'К оплате', color: '#92400e' },
+  { value: 'payment_submitted', label: 'Оплата подана', color: '#1e40af' },
+  { value: 'paid', label: 'Оплачено', color: '#15803d' },
 ];
 
 const ALL_COLUMNS = [
@@ -469,7 +472,7 @@ export default function BloggerList({ currentUser }) {
                   )}
                   <td style={{fontWeight:500,whiteSpace:'nowrap'}}>{b.name}{isFresh && <span className="badge-new">new</span>}</td>
                   {show('status') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
-                    <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
+                    <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work'||v==='transferred',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
                   </td>}
                   {show('comment') && <td onClick={e=>e.stopPropagation()}><CommentCell value={b.last_comment} onSave={v=>patch(b.id,{last_comment:v})} /></td>}
                   {show('manager') && <td>{b.manager_name?<span className="tag">{b.manager_name}</span>:<span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>}
