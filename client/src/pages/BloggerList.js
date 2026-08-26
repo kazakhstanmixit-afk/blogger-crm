@@ -48,7 +48,6 @@ function isNew(iso) { return iso && daysSince(iso) <= 3; }
 
 function StatusDropdown({ value, onChange }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({top:0,left:0});
   const ref = useRef();
   const current = STATUS_OPTIONS.find(s => s.value === value) || STATUS_OPTIONS[0];
   useEffect(() => {
@@ -56,27 +55,14 @@ function StatusDropdown({ value, onChange }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-  const handleClick = (e) => {
-    e.stopPropagation();
-    const rect = ref.current.getBoundingClientRect();
-    const dropdownHeight = STATUS_OPTIONS.length * 36;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUpward = spaceBelow < dropdownHeight + 10;
-    if (openUpward) {
-      setPos({ bottom: window.innerHeight - rect.top + window.scrollY, top: 'auto', left: rect.left + window.scrollX });
-    } else {
-      setPos({ top: rect.bottom + window.scrollY, bottom: 'auto', left: rect.left + window.scrollX });
-    }
-    setOpen(!open);
-  };
   return (
     <div ref={ref} style={{position:'relative',display:'inline-block'}}>
-      <span className={`status-badge status-${value}`} onClick={handleClick} style={{cursor:'pointer',userSelect:'none'}}>{current.label} ▾</span>
+      <span className={`status-badge status-${value}`} onClick={e=>{e.stopPropagation();setOpen(!open);}} style={{cursor:'pointer',userSelect:'none'}}>{current.label} ▾</span>
       {open && (
-        <div style={{position:'fixed',top:pos.top!=='auto'?pos.top:undefined,bottom:pos.bottom!=='auto'?pos.bottom:undefined,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.12)',minWidth:200,maxHeight:320,overflowY:'auto',marginTop:pos.top!=='auto'?4:0,marginBottom:pos.bottom!=='auto'?4:0}}>
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:9999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.15)',minWidth:180,maxHeight:280,overflowY:'auto'}}>
           {STATUS_OPTIONS.map(s => (
             <div key={s.value} onClick={e=>{e.stopPropagation();onChange(s.value);setOpen(false);}}
-              style={{padding:'8px 14px',cursor:'pointer',fontSize:12,color:s.color,fontWeight:500,borderBottom:'1px solid #f0f2f7'}}
+              style={{padding:'7px 12px',cursor:'pointer',fontSize:11,color:s.color,fontWeight:500,borderBottom:'1px solid #f0f2f7',whiteSpace:'nowrap'}}
               onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}>
               {s.label}
