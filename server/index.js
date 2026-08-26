@@ -498,8 +498,6 @@ app.get('/api/bloggers/:id/activity', auth, (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
-app.listen(PORT, () => console.log(`Server on port ${PORT}`));
-
 // ── PAYMENTS ──────────────────────────────────────────
 // Init payments collection
 if (!db.get('payments').value()) db.set('payments', []).write();
@@ -628,3 +626,5 @@ app.get('/api/payments/export', auth, (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);
 });
+
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));
