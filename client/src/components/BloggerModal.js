@@ -60,6 +60,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   };
 
   return (
+    <>
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-header">
@@ -161,5 +162,6 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
       {showPayment && blogger && (
         <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={()=>setShowPayment(false)} />
       )}
+    </>
   );
 }
