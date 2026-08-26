@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../App';
+import PaymentModal from './PaymentModal';
 
 const STATUS_OPTIONS = [
   { value:'new', label:'Новый' },
@@ -28,6 +29,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   });
   const [activity, setActivity] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   useEffect(() => {
     if (isEdit) apiFetch(`/api/bloggers/${blogger.id}/activity`).then(r=>r.json()).then(setActivity);
@@ -142,12 +144,22 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             </>
           )}
 
-          <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'flex-end'}}>
+          <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              {isEdit && (
+                <button type="button" className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>setShowPayment(true)}>💳 Подать на оплату</button>
+              )}
+            </div>
+            <div style={{display:'flex',gap:8}}>
             <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Сохраняем...':isEdit?'Сохранить':'Добавить'}</button>
+            </div>
           </div>
         </form>
       </div>
     </div>
+      {showPayment && blogger && (
+        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={()=>setShowPayment(false)} />
+      )}
   );
 }
