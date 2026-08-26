@@ -525,7 +525,6 @@ app.get('/api/payments', auth, (req, res) => {
 });
 
 app.post('/api/payments', auth, (req, res) => {
-    console.log('PAYMENT POST:', req.body);
   const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
   if (!blogger_id || !recipient_name || !iin || !amount) {
     return res.status(400).json({ error: 'Заполните все обязательные поля' });
@@ -535,7 +534,7 @@ app.post('/api/payments', auth, (req, res) => {
   }
   
   const payment = {
-    id: require('uuid').v4(),
+    id: uuidv4(),
     blogger_id,
     manager_id: req.user.id,
     recipient_name,
