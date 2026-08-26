@@ -8,6 +8,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
     payment_name: '',
     amount: blogger.price_reels || blogger.price_tiktok || blogger.price_both || '',
     notes: '',
+    kaspi: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +35,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
     setSaving(true);
     const res = await apiFetch('/api/payments', {
       method: 'POST',
-      body: JSON.stringify({ ...form, blogger_id: blogger.id, amount: Number(form.amount) }),
+      body: JSON.stringify({ ...form, blogger_id: blogger.id, amount: Number(form.amount), kaspi: form.kaspi || null }),
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error); setSaving(false); return; }
@@ -93,6 +94,10 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
                 {blogger.price_both && <span onClick={()=>set('amount',blogger.price_both)} style={{cursor:'pointer',fontSize:11,padding:'2px 7px',background:'#eef1fe',color:'#4f6ef7',borderRadius:4}}>Рилс+ТТ: {blogger.price_both.toLocaleString('ru')} ₸</span>}
               </div>
             )}
+          </div>
+          <div className="field">
+            <label>Номер Каспи <span style={{color:'#9ba3be',fontSize:10}}>(необязательно)</span></label>
+            <input value={form.kaspi} onChange={e=>set('kaspi', e.target.value.replace(/\D/g,'').slice(0,11))} placeholder="+7 __ ___ __ __" maxLength={11} style={{letterSpacing:1}} />
           </div>
           <div className="field">
             <label>Заметки</label>
