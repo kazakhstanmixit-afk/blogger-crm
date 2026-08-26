@@ -73,7 +73,7 @@ function StatusDropdown({ value, onChange }) {
     <div ref={ref} style={{position:'relative',display:'inline-block'}}>
       <span className={`status-badge status-${value}`} onClick={handleClick} style={{cursor:'pointer',userSelect:'none'}}>{current.label} ▾</span>
       {open && (
-        <div style={{position:'fixed',top:pos.top!=='auto'?pos.top:undefined,bottom:pos.bottom!=='auto'?pos.bottom:undefined,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.12)',minWidth:200,marginTop:pos.top!=='auto'?4:0,marginBottom:pos.bottom!=='auto'?4:0}}>
+        <div style={{position:'fixed',top:pos.top!=='auto'?pos.top:undefined,bottom:pos.bottom!=='auto'?pos.bottom:undefined,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.12)',minWidth:200,maxHeight:320,overflowY:'auto',marginTop:pos.top!=='auto'?4:0,marginBottom:pos.bottom!=='auto'?4:0}}>
           {STATUS_OPTIONS.map(s => (
             <div key={s.value} onClick={e=>{e.stopPropagation();onChange(s.value);setOpen(false);}}
               style={{padding:'8px 14px',cursor:'pointer',fontSize:12,color:s.color,fontWeight:500,borderBottom:'1px solid #f0f2f7'}}
