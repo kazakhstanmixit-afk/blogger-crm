@@ -217,3 +217,5 @@ tbody tr.warning-row td.sticky { background:#fffbeb; }
 .status-paid { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
 .status-declined_reach { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 .status-declined_shop { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+.table-wrap table tbody td { overflow: visible; }
+.table-wrap table tbody tr { overflow: visible; }
