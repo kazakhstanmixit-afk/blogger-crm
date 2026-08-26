@@ -24,7 +24,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -227,7 +227,8 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
     if (updates.status === 'contacted' || updates.status === 'declined') {
       if (!existing.contacted_at) updates.contacted_at = new Date().toISOString();
     }
-    if (updates.status === 'in_work') updates.in_work = true;
+    if (updates.status === 'in_work' || updates.status === 'transferred') updates.in_work = true;
+    if (['new','contacted','replied','declined','declined_bad'].includes(updates.status)) updates.in_work = false;
     logActivity(req.params.id, req.user.id, 'status_changed', `Статус → ${updates.status}`);
   }
   db.get('bloggers').find({ id: req.params.id }).assign(updates).write();
@@ -498,3 +499,130 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+
+// ── PAYMENTS ──────────────────────────────────────────
+// Init payments collection
+if (!db.get('payments').value()) db.set('payments', []).write();
+
+app.get('/api/payments', auth, (req, res) => {
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value();
+  let list = db.get('payments').value();
+  
+  if (req.user.role !== 'admin') {
+    list = list.filter(p => p.manager_id === req.user.id);
+  }
+  
+  const { status } = req.query;
+  if (status) list = list.filter(p => p.status === status);
+  
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  
+  res.json(list.map(p => ({
+    ...p,
+    manager_name: (users.find(u => u.id === p.manager_id)||{}).username || null,
+    blogger_name: (bloggers.find(b => b.id === p.blogger_id)||{}).name || null,
+    blogger_instagram: (bloggers.find(b => b.id === p.blogger_id)||{}).instagram_url || null,
+  })));
+});
+
+app.post('/api/payments', auth, (req, res) => {
+  const { blogger_id, recipient_name, iin, payment_name, amount, notes } = req.body;
+  if (!blogger_id || !recipient_name || !iin || !amount) {
+    return res.status(400).json({ error: 'Заполните все обязательные поля' });
+  }
+  if (!/^\d{12}$/.test(iin)) {
+    return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+  }
+  
+  const payment = {
+    id: require('uuid').v4(),
+    blogger_id,
+    manager_id: req.user.id,
+    recipient_name,
+    iin,
+    payment_name: payment_name || recipient_name,
+    amount: Number(amount),
+    notes: notes || null,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  
+  db.get('payments').push(payment).write();
+  // Update blogger status
+  db.get('bloggers').find({ id: blogger_id }).assign({ status: 'payment_pending', updated_at: new Date().toISOString() }).write();
+  
+  res.json({ id: payment.id });
+});
+
+app.put('/api/payments/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const existing = db.get('payments').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  
+  const { status, recipient_name, iin, payment_name, amount, notes } = req.body;
+  const updates = { updated_at: new Date().toISOString() };
+  
+  if (status) {
+    updates.status = status;
+    // Sync blogger status
+    const bloggerStatus = status === 'paid' ? 'paid' : status === 'submitted' ? 'payment_submitted' : 'payment_pending';
+    db.get('bloggers').find({ id: existing.blogger_id }).assign({ status: bloggerStatus, updated_at: new Date().toISOString() }).write();
+  }
+  if (recipient_name) updates.recipient_name = recipient_name;
+  if (iin) {
+    if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+    updates.iin = iin;
+  }
+  if (payment_name) updates.payment_name = payment_name;
+  if (amount) updates.amount = Number(amount);
+  if (notes !== undefined) updates.notes = notes;
+  
+  db.get('payments').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/payments/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('payments').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+// Export payments
+app.get('/api/payments/export', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value();
+  const { status } = req.query;
+  
+  let list = db.get('payments').value();
+  if (status) list = list.filter(p => p.status === status);
+  
+  const PAYMENT_STATUS = { pending: 'К оплате', submitted: 'Подано', paid: 'Оплачено', rejected: 'Отклонено' };
+  
+  const rows = list.map(p => {
+    const mgr = users.find(u => u.id === p.manager_id);
+    const blogger = bloggers.find(b => b.id === p.blogger_id);
+    return {
+      'Дата заявки': new Date(p.created_at).toLocaleDateString('ru'),
+      'Менеджер': mgr?.username || '',
+      'Блогер': blogger?.name || '',
+      'ФИО получателя': p.recipient_name,
+      'ИИН': p.iin,
+      'ФИО при пополнении': p.payment_name || '',
+      'Сумма (₸)': p.amount,
+      'Статус': PAYMENT_STATUS[p.status] || p.status,
+      'Заметки': p.notes || '',
+    };
+  });
+  
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
+  ws['!cols'] = Array(9).fill({ wch: 22 });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Оплаты');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename="payments.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
