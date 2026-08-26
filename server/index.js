@@ -525,6 +525,7 @@ app.get('/api/payments', auth, (req, res) => {
 });
 
 app.post('/api/payments', auth, (req, res) => {
+    console.log('PAYMENT POST:', req.body);
   const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
   if (!blogger_id || !recipient_name || !iin || !amount) {
     return res.status(400).json({ error: 'Заполните все обязательные поля' });
