@@ -527,7 +527,7 @@ app.get('/api/payments', auth, (req, res) => {
 });
 
 app.post('/api/payments', auth, (req, res) => {
-  const { blogger_id, recipient_name, iin, payment_name, amount, notes } = req.body;
+  const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
   if (!blogger_id || !recipient_name || !iin || !amount) {
     return res.status(400).json({ error: 'Заполните все обязательные поля' });
   }
@@ -544,6 +544,7 @@ app.post('/api/payments', auth, (req, res) => {
     payment_name: payment_name || recipient_name,
     amount: Number(amount),
     notes: notes || null,
+    kaspi: kaspi || null,
     status: 'pending',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -613,6 +614,7 @@ app.get('/api/payments/export', auth, (req, res) => {
       'ФИО при пополнении': p.payment_name || '',
       'Сумма (₸)': p.amount,
       'Статус': PAYMENT_STATUS[p.status] || p.status,
+      'Номер Каспи': p.kaspi || '',
       'Заметки': p.notes || '',
     };
   });
