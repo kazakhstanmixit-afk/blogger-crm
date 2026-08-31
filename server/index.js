@@ -41,6 +41,7 @@ if (needsMigration) {
     if (b.cpv_stories === undefined) b.cpv_stories = null;
     if (b.decline_reason === undefined) b.decline_reason = null;
     if (b.last_comment === undefined) b.last_comment = null;
+    if (b.category === undefined) b.category = null;
     const ir = b.instagram_avg_reach || 0;
     const tr = b.tiktok_avg_reach || 0;
     if (b.price_reels && ir) b.cpv_reels = parseFloat((b.price_reels / ir).toFixed(2));
@@ -86,6 +87,7 @@ function makeBlogger(d) {
     cpv_tiktok: cpv(d.price_tiktok, tr),
     cpv_both: cpv(d.price_both, ir + tr),
     cpv_stories: cpv(d.price_stories, ir),
+    category: d.category || null,
     status: d.status || 'new',
     decline_reason: d.decline_reason || null,
     assigned_manager_id: d.assigned_manager_id || null,
@@ -145,6 +147,8 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (exclude_declined === '1') list = list.filter(b => !b.status.startsWith('declined'));
   if (exclude_in_work === "1") list = list.filter(b => !b.in_work);
   if (exclude_transferred === "1") list = list.filter(b => b.status !== "transferred");
+  if (req.query.category) list = list.filter(b => b.category === req.query.category);
+  if (req.query.exclude_category) { const excl = req.query.exclude_category.split(','); list = list.filter(b => !excl.includes(b.category)); }
   if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
   if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m && (b.tiktok_followers||0) <= m); }
 
@@ -483,6 +487,7 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
         cpv_tiktok: cpv(pTT ?? existing?.price_tiktok, tr),
         cpv_both: cpv(pBoth ?? existing?.price_both, ir+tr),
         cpv_stories: cpv(pStories ?? existing?.price_stories, ir),
+        category: category || null,
         last_comment: row[findCol(row, aliases.last_comment)] || existing?.last_comment || null,
         updated_at: batchDate,
       };
@@ -583,6 +588,7 @@ app.get('/api/export', auth, (req, res) => {
     return {
       'ID': b.id,
       'Ник': b.name,
+      'Категория': b.category || '',
       'Ссылка Instagram': b.instagram_url||'',
       'Подп. Инст': b.instagram_followers||'',
       'Охват Инст': b.instagram_avg_reach||'',
