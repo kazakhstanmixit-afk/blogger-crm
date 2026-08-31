@@ -11,7 +11,7 @@ const PAYMENT_STATUS = {
 function StatusBadge({ status }) {
   const s = PAYMENT_STATUS[status] || { label: status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   return (
-    <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:`1px solid ${s.border}`}}>
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, color: s.color, background: s.bg, border: `1px solid ${s.border}` }}>
       {s.label}
     </span>
   );
@@ -21,23 +21,33 @@ export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-  const [editPayment, setEditPayment] = useState(null);
-  const [showStats, setShowStats] = useState(true);
+  const [error, setError] = useState('');
 
   const fetchPayments = async () => {
     setLoading(true);
-    const p = new URLSearchParams();
-    if (statusFilter) p.set('status', statusFilter);
-    const res = await apiFetch('/api/payments?' + p);
-    setPayments(await res.json());
+    setError('');
+    try {
+      const p = new URLSearchParams();
+      if (statusFilter) p.set('status', statusFilter);
+      const res = await apiFetch('/api/payments?' + p);
+      if (!res.ok) {
+        setError('Ошибка загрузки: ' + res.status);
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setPayments(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError('Ошибка соединения');
+    }
     setLoading(false);
   };
 
   useEffect(() => { fetchPayments(); }, [statusFilter]);
 
   const handleStatusChange = async (id, status) => {
-    await apiFetch(`/api/payments/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
-    fetchPayments();
+    const res = await apiFetch(`/api/payments/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (res.ok) fetchPayments();
   };
 
   const handleDelete = async (id) => {
@@ -50,17 +60,20 @@ export default function PaymentsPage({ currentUser }) {
     const token = localStorage.getItem('token');
     const p = new URLSearchParams();
     if (statusFilter) p.set('status', statusFilter);
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/payments/export?' + p, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch((process.env.REACT_APP_API_URL || '') + '/api/payments/export?' + p, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
     const blob = await res.blob();
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'payments.xlsx'; a.click();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'payments.xlsx';
+    a.click();
   };
 
   const stats = {
-    total: payments.length,
     pending: payments.filter(p => p.status === 'pending').length,
     submitted: payments.filter(p => p.status === 'submitted').length,
     paid: payments.filter(p => p.status === 'paid').length,
-    totalAmount: payments.filter(p => p.status !== 'rejected').reduce((s, p) => s + (p.amount || 0), 0),
     paidAmount: payments.filter(p => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0),
   };
 
@@ -71,89 +84,79 @@ export default function PaymentsPage({ currentUser }) {
           <div className="page-title">Заявки на оплату</div>
           <div className="page-subtitle">{payments.length} заявок</div>
         </div>
-        <div style={{display:'flex',gap:8}}>
+        <div style={{ display: 'flex', gap: 8 }}>
           {currentUser.role === 'admin' && (
             <button className="btn btn-secondary btn-sm" onClick={handleExport}>📊 Excel</button>
           )}
         </div>
       </div>
 
+      {error && <div className="error-msg" style={{ marginBottom: 12 }}>{error}</div>}
+
       {currentUser.role === 'admin' && (
-        <div className="stats-grid" style={{marginBottom:16}}>
-          <div className="stat-card">
-            <div className="stat-value stat-yellow">{stats.pending}</div>
-            <div className="stat-label">К оплате</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value" style={{color:'#1e40af'}}>{stats.submitted}</div>
-            <div className="stat-label">Подано</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value stat-green">{stats.paid}</div>
-            <div className="stat-label">Оплачено</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value" style={{fontSize:18}}>{stats.paidAmount.toLocaleString('ru')} ₸</div>
-            <div className="stat-label">Выплачено</div>
-          </div>
+        <div className="stats-grid" style={{ marginBottom: 16 }}>
+          <div className="stat-card"><div className="stat-value stat-yellow">{stats.pending}</div><div className="stat-label">К оплате</div></div>
+          <div className="stat-card"><div className="stat-value" style={{ color: '#1e40af' }}>{stats.submitted}</div><div className="stat-label">Подано</div></div>
+          <div className="stat-card"><div className="stat-value stat-green">{stats.paid}</div><div className="stat-label">Оплачено</div></div>
+          <div className="stat-card"><div className="stat-value" style={{ fontSize: 18 }}>{stats.paidAmount.toLocaleString('ru')} ₸</div><div className="stat-label">Выплачено</div></div>
         </div>
       )}
 
       <div className="toolbar">
-        <select className="select-filter" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+        <select className="select-filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">Все статусы</option>
-          {Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
+          {Object.entries(PAYMENT_STATUS).map(([v, s]) => <option key={v} value={v}>{s.label}</option>)}
         </select>
       </div>
 
-      <div className="table-wrap" style={{overflowX:'auto'}}>
-        <table style={{minWidth:900}}>
+      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+        <table style={{ minWidth: 900 }}>
           <thead>
             <tr>
               <th>Дата</th>
-              {currentUser.role==='admin' && <th>Менеджер</th>}
+              {currentUser.role === 'admin' && <th>Менеджер</th>}
               <th>Блогер</th>
               <th>ФИО получателя</th>
               <th>ИИН</th>
               <th>ФИО при пополнении</th>
+              <th>Каспи</th>
               <th>Сумма</th>
               <th>Статус</th>
               <th>Заметки</th>
-              {currentUser.role==='admin' && <th>Действия</th>}
+              {currentUser.role === 'admin' && <th>Действия</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} style={{textAlign:'center',padding:40,color:'#9ba3be'}}>Загрузка...</td></tr>
+              <tr><td colSpan={11} style={{ textAlign: 'center', padding: 40, color: '#9ba3be' }}>Загрузка...</td></tr>
             ) : payments.length === 0 ? (
-              <tr><td colSpan={10}><div className="empty-state"><div style={{fontSize:36}}>💳</div><p>Заявок пока нет</p></div></td></tr>
+              <tr><td colSpan={11}><div className="empty-state"><div style={{ fontSize: 36 }}>💳</div><p>Заявок пока нет</p></div></td></tr>
             ) : payments.map(p => (
-              <tr key={p.id} style={{background: p.status==='paid'?'#f0fdf4': p.status==='rejected'?'#fff5f5':undefined}}>
-                <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
-                {currentUser.role==='admin' && <td><span className="tag">{p.manager_name}</span></td>}
-                <td style={{fontWeight:500}}>{p.blogger_name}</td>
+              <tr key={p.id} style={{ background: p.status === 'paid' ? '#f0fdf4' : p.status === 'rejected' ? '#fff5f5' : undefined }}>
+                <td style={{ fontSize: 11, color: '#9ba3be', whiteSpace: 'nowrap' }}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
+                {currentUser.role === 'admin' && <td><span className="tag">{p.manager_name || '—'}</span></td>}
+                <td style={{ fontWeight: 500 }}>{p.blogger_name || '—'}</td>
                 <td>{p.recipient_name}</td>
-                <td style={{fontFamily:'monospace',letterSpacing:1}}>{p.iin}</td>
-                <td>{p.payment_name}</td>
-                <td style={{fontWeight:600,whiteSpace:'nowrap'}}>{(p.amount||0).toLocaleString('ru')} ₸</td>
+                <td style={{ fontFamily: 'monospace', letterSpacing: 1, fontSize: 12 }}>{p.iin}</td>
+                <td>{p.payment_name || '—'}</td>
+                <td style={{ fontSize: 12 }}>{p.kaspi || '—'}</td>
+                <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{(p.amount || 0).toLocaleString('ru')} ₸</td>
                 <td><StatusBadge status={p.status} /></td>
-                <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
-                {currentUser.role==='admin' && (
+                <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#9ba3be' }} title={p.notes || ''}>{p.notes || '—'}</td>
+                {currentUser.role === 'admin' && (
                   <td>
-                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {p.status==='pending' && (
-                        <>
-                          <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1e40af',border:'1px solid #bfdbfe'}} onClick={()=>handleStatusChange(p.id,'submitted')}>Подано</button>
-                          <button className="btn btn-sm" style={{background:'#fee2e2',color:'#991b1b',border:'1px solid #fecaca'}} onClick={()=>handleStatusChange(p.id,'rejected')}>Отклонить</button>
-                        </>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {p.status === 'pending' && <>
+                        <button className="btn btn-sm" style={{ background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe' }} onClick={() => handleStatusChange(p.id, 'submitted')}>Подано</button>
+                        <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' }} onClick={() => handleStatusChange(p.id, 'rejected')}>Отклонить</button>
+                      </>}
+                      {p.status === 'submitted' && (
+                        <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }} onClick={() => handleStatusChange(p.id, 'paid')}>Оплачено</button>
                       )}
-                      {p.status==='submitted' && (
-                        <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleStatusChange(p.id,'paid')}>Оплачено</button>
+                      {p.status === 'rejected' && (
+                        <button className="btn btn-sm" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }} onClick={() => handleStatusChange(p.id, 'pending')}>Вернуть</button>
                       )}
-                      {p.status==='rejected' && (
-                        <button className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>handleStatusChange(p.id,'pending')}>Вернуть</button>
-                      )}
-                      <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(p.id)}>🗑</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p.id)}>🗑</button>
                     </div>
                   </td>
                 )}
@@ -161,47 +164,6 @@ export default function PaymentsPage({ currentUser }) {
             ))}
           </tbody>
         </table>
-      </div>
-
-      {editPayment && (
-        <PaymentEditModal payment={editPayment} onClose={()=>setEditPayment(null)} onSave={()=>{setEditPayment(null);fetchPayments();}} />
-      )}
-    </div>
-  );
-}
-
-function PaymentEditModal({ payment, onClose, onSave }) {
-  const [form, setForm] = useState({ ...payment });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
-
-  const handleSave = async () => {
-    if (!/^\d{12}$/.test(form.iin)) { setError('ИИН должен содержать ровно 12 цифр'); return; }
-    setSaving(true);
-    const res = await apiFetch(`/api/payments/${payment.id}`, { method:'PUT', body: JSON.stringify(form) });
-    if (!res.ok) { const d = await res.json(); setError(d.error); setSaving(false); return; }
-    onSave();
-  };
-
-  return (
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" style={{maxWidth:480}}>
-        <div className="modal-header">
-          <div className="modal-title">Редактировать заявку</div>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="field"><label>ФИО получателя</label><input value={form.recipient_name||''} onChange={e=>set('recipient_name',e.target.value)} /></div>
-        <div className="field"><label>ИИН (12 цифр)</label><input value={form.iin||''} onChange={e=>set('iin',e.target.value.replace(/\D/g,'').slice(0,12))} maxLength={12} /></div>
-        <div className="field"><label>ФИО при пополнении</label><input value={form.payment_name||''} onChange={e=>set('payment_name',e.target.value)} /></div>
-        <div className="field"><label>Сумма (₸)</label><input type="number" value={form.amount||''} onChange={e=>set('amount',e.target.value)} /></div>
-        <div className="field"><label>Заметки</label><textarea value={form.notes||''} onChange={e=>set('notes',e.target.value)} /></div>
-        {error && <div className="error-msg">{error}</div>}
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
-          <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving?'Сохраняем...':'Сохранить'}</button>
-        </div>
       </div>
     </div>
   );
