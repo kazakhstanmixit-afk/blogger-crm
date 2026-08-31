@@ -241,6 +241,12 @@ export default function BloggerList({ currentUser }) {
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
     const res = await apiFetch('/api/bloggers?' + params);
+        if (res.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.reload();
+      return;
+    }
     const json = await res.json();
     setBloggers(json.data || []);
     setTotal(json.total || 0);
