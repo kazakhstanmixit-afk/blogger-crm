@@ -35,6 +35,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   });
   const [activity, setActivity] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [showPayment, setShowPayment] = useState(false);
 
   useEffect(() => {
@@ -151,6 +152,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             </>
           )}
 
+          {error && <div className="error-msg" style={{marginBottom:12}}>{error}</div>}
           <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'space-between',alignItems:'center'}}>
             <div>
               {isEdit && (
