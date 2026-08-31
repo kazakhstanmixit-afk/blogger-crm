@@ -27,18 +27,25 @@ export default function PaymentsPage({ currentUser }) {
     setLoading(true);
     setError('');
     try {
+      const token = localStorage.getItem('token');
       const p = new URLSearchParams();
       if (statusFilter) p.set('status', statusFilter);
-      const res = await apiFetch('/api/payments?' + p);
+      const res = await fetch((process.env.REACT_APP_API_URL || '') + '/api/payments?' + p, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+        }
+      });
       if (!res.ok) {
-        setError('Ошибка загрузки: ' + res.status);
+        const errData = await res.json().catch(() => ({}));
+        setError('Ошибка загрузки: ' + res.status + ' ' + (errData.error || ''));
         setLoading(false);
         return;
       }
       const data = await res.json();
       setPayments(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError('Ошибка соединения');
+      setError('Ошибка соединения: ' + e.message);
     }
     setLoading(false);
   };
