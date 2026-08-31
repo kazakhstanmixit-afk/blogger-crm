@@ -434,6 +434,7 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
     };
 
     function findCol(row, keys) {
+      if (!keys || !Array.isArray(keys)) return null;
       const rowKeys = Object.keys(row);
       const norm = k => k.toLowerCase().replace(/[\s_\-\.+\(\)₸]+/g,'');
       for (const alias of keys) {
