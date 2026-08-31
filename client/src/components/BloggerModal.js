@@ -30,7 +30,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
     instagram_followers:'', tiktok_followers:'',
     instagram_avg_reach:'', tiktok_avg_reach:'',
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
-    status:'new', decline_reason:'', assigned_manager_id:'', in_work:false, notes:'', last_comment:'',
+    status:'new', decline_reason:'', assigned_manager_id:'', in_work:false, notes:'', last_comment:'', category:'',
     ...(blogger||{}),
   });
   const [activity, setActivity] = useState([]);
@@ -113,6 +113,16 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             </div>
           )}
 
+          <div className="section-divider">Категория</div>
+          <div className="field">
+            <label>Категория</label>
+            <select value={form.category||''} onChange={e=>set('category',e.target.value)}>
+              <option value="">— Не выбрано —</option>
+              <option value="blogger">Блогер</option>
+              <option value="visazhist">Визажист</option>
+              <option value="expert">Эксперт</option>
+            </select>
+          </div>
           <div className="section-divider">Работа</div>
           <div className="form-row">
             <div className="field">
