@@ -48,7 +48,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
         return;
       }
 
-      onSave();
+      onSave('Заявка подана! Статус блогера изменён на «К оплате»');
     } catch (err) {
       setError('Ошибка соединения с сервером');
       setSaving(false);
