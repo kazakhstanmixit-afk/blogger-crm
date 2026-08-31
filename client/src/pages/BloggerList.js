@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../App';
 import BloggerModal from '../components/BloggerModal';
 import ImportModal from '../components/ImportModal';
+import DuplicatesModal from '../components/DuplicatesModal';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'Новый', color: '#64748b' },
@@ -210,6 +211,7 @@ export default function BloggerList({ currentUser }) {
   const [editBlogger, setEditBlogger] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [pendingBlogger, setPendingBlogger] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [showDistribute, setShowDistribute] = useState(false);
@@ -241,12 +243,6 @@ export default function BloggerList({ currentUser }) {
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
     const res = await apiFetch('/api/bloggers?' + params);
-        if (res.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.reload();
-      return;
-    }
     const json = await res.json();
     setBloggers(json.data || []);
     setTotal(json.total || 0);
@@ -350,6 +346,7 @@ export default function BloggerList({ currentUser }) {
           {currentUser.role==='admin' && <button className="btn btn-danger btn-sm" onClick={handleClearAll}>🗑 Очистить</button>}
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleTemplate}>📋 Шаблон</button>}
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExport}>📊 Excel</button>}
+          <button className="btn btn-secondary btn-sm" onClick={()=>setShowDuplicates(true)}>🔍 Дубли</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>setShowImport(true)}>📥 Импорт</button>
           <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ Добавить</button>
         </div>
@@ -505,6 +502,7 @@ export default function BloggerList({ currentUser }) {
       <Pagination page={page} pages={pages} total={total} limit={PAGE_SIZE} onChange={p=>{setPage(p);window.scrollTo(0,0);}} />
 
       {(showAdd||editBlogger) && <BloggerModal blogger={editBlogger} users={users} currentUser={currentUser} onSave={handleSave} onClose={()=>{setShowAdd(false);setEditBlogger(null);}} />}
+      {showDuplicates && <DuplicatesModal onClose={()=>setShowDuplicates(false)} onDeleted={()=>doFetch(page)} />}
       {showImport && <ImportModal onClose={()=>{setShowImport(false);doFetch(1);apiFetch('/api/batches').then(r=>r.json()).then(setBatches);}} />}
 
       {pendingBlogger && (
