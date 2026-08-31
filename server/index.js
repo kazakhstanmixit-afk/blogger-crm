@@ -655,10 +655,6 @@ app.get('/api/bloggers/:id/activity', auth, (req, res) => {
   res.json(logs);
 });
 
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
-}
-
 // ── PAYMENTS ──────────────────────────────────────────
 
 app.get('/api/payments', auth, (req, res) => {
@@ -812,5 +808,9 @@ app.get('/api/payments/export', auth, (req, res) => {
   }
 });
 
+
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
+}
 
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
