@@ -167,6 +167,66 @@ app.get('/api/bloggers', auth, (req, res) => {
   res.json({ data: paged.map(b => ({ ...b, manager_name: (users.find(u => u.id === b.assigned_manager_id)||{}).username || null })), total, page, limit, pages: Math.ceil(total / limit) });
 });
 
+
+// find duplicates
+app.get('/api/bloggers/duplicates', auth, (req, res) => {
+  const all = db.get('bloggers').value();
+  const users = db.get('users').value();
+
+  function extractNick(url) {
+    if (!url) return null;
+    return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+  }
+
+  const groups = [];
+  const seen = new Set();
+
+  for (let i = 0; i < all.length; i++) {
+    if (seen.has(all[i].id)) continue;
+    const group = [all[i]];
+    const a = all[i];
+    const aName = (a.name||'').toLowerCase().replace('@','').trim();
+    const aInstNick = extractNick(a.instagram_url);
+    const aTTNick = extractNick(a.tiktok_url);
+    const aInstUrl = (a.instagram_url||'').toLowerCase().trim();
+    const aTTUrl = (a.tiktok_url||'').toLowerCase().trim();
+
+    for (let j = i + 1; j < all.length; j++) {
+      if (seen.has(all[j].id)) continue;
+      const b = all[j];
+      const bName = (b.name||'').toLowerCase().replace('@','').trim();
+      const bInstNick = extractNick(b.instagram_url);
+      const bTTNick = extractNick(b.tiktok_url);
+      const bInstUrl = (b.instagram_url||'').toLowerCase().trim();
+      const bTTUrl = (b.tiktok_url||'').toLowerCase().trim();
+
+      const isDupe =
+        (aName && bName && aName === bName) ||
+        (aInstUrl && bInstUrl && aInstUrl === bInstUrl) ||
+        (aTTUrl && bTTUrl && aTTUrl === bTTUrl) ||
+        (aInstNick && bInstNick && aInstNick === bInstNick) ||
+        (aTTNick && bTTNick && aTTNick === bTTNick) ||
+        (aInstNick && bName && aInstNick === bName) ||
+        (aName && bInstNick && aName === bInstNick);
+
+      if (isDupe) {
+        group.push(b);
+        seen.add(b.id);
+      }
+    }
+
+    if (group.length > 1) {
+      seen.add(a.id);
+      groups.push(group.map(b => ({
+        ...b,
+        manager_name: (users.find(u => u.id === b.assigned_manager_id)||{}).username || null
+      })));
+    }
+  }
+
+  res.json({ groups, total_duplicates: groups.reduce((s,g) => s + g.length, 0) });
+});
+
 // check duplicate
 app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
   const { instagram_url, tiktok_url, name } = req.body;
