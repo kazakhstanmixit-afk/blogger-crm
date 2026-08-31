@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../App';
+const API = process.env.REACT_APP_API_URL || '';
 
 const PAYMENT_STATUS = {
   pending: { label: 'К оплате', color: '#92400e', bg: '#fef3c7', border: '#fde68a' },
@@ -27,15 +28,9 @@ export default function PaymentsPage({ currentUser }) {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
       const p = new URLSearchParams();
       if (statusFilter) p.set('status', statusFilter);
-      const res = await fetch((process.env.REACT_APP_API_URL || '') + '/api/payments?' + p, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token,
-        }
-      });
+      const res = await apiFetch('/api/payments?' + p);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         setError('Ошибка загрузки: ' + res.status + ' ' + (errData.error || ''));
