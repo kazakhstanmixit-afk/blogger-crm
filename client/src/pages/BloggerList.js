@@ -1,3 +1,5 @@
+const CATEGORY_LABELS = { blogger: 'Блогер', visazhist: 'Визажист', expert: 'Эксперт' };
+const CATEGORY_COLORS = { blogger: '#4f6ef7', visazhist: '#db2777', expert: '#059669' };
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../App';
 import BloggerModal from '../components/BloggerModal';
@@ -20,6 +22,7 @@ const STATUS_OPTIONS = [
 ];
 
 const ALL_COLUMNS = [
+  { key: 'category', label: 'Категория', default: true },
   { key: 'status', label: 'Статус', default: true },
   { key: 'comment', label: 'Комментарий', default: true },
   { key: 'manager', label: 'Менеджер', default: true },
@@ -205,6 +208,8 @@ export default function BloggerList({ currentUser }) {
   const [inWorkOnly, setInWorkOnly] = useState(false);
   const [excludeDeclined, setExcludeDeclined] = useState(false);
   const [excludeInWork, setExcludeInWork] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [excludeCategories, setExcludeCategories] = useState([]);
   const [excludeTransferred, setExcludeTransferred] = useState(false);
   const [sort, setSort] = useState('default');
   const [colSort, setColSort] = useState({ col: null, dir: 'asc' });
@@ -283,6 +288,8 @@ export default function BloggerList({ currentUser }) {
     if (excludeDeclined) params.set('exclude_declined', '1');
     if (excludeInWork) params.set('exclude_in_work', '1');
     if (excludeTransferred) params.set('exclude_transferred', '1');
+    if (categoryFilter) params.set('category', categoryFilter);
+    if (excludeCategories.length) params.set('exclude_category', excludeCategories.join(','));
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
     const res = await apiFetch('/api/bloggers?' + params);
@@ -291,14 +298,14 @@ export default function BloggerList({ currentUser }) {
     setTotal(json.total || 0);
     setPages(json.pages || 1);
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories]);
 
   useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(setUsers); apiFetch('/api/batches').then(r=>r.json()).then(setBatches); }, []);
 
   useEffect(() => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { setPage(1); doFetch(1); }, 300);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories]);
 
   useEffect(() => { doFetch(page); }, [page]);
 
@@ -451,6 +458,31 @@ export default function BloggerList({ currentUser }) {
             <label>Подписчики до</label>
             <input className="filter-input" type="number" placeholder="напр. 100000" value={followersMax} onChange={e=>{setFollowersMax(e.target.value);setPage(1);}} />
           </div>
+          <div className="filter-row">
+            <label>Категория</label>
+            <select className="select-filter" value={categoryFilter} onChange={e=>{setCategoryFilter(e.target.value);setPage(1);}}>
+              <option value="">Все</option>
+              <option value="blogger">Блогер</option>
+              <option value="visazhist">Визажист</option>
+              <option value="expert">Эксперт</option>
+            </select>
+          </div>
+          <div className="filter-row">
+            <label>Исключить категории</label>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {[['visazhist','Визажисты'],['expert','Эксперты']].map(([val,label])=>(
+                <label key={val} className="filter-check">
+                  <input type="checkbox"
+                    checked={excludeCategories.includes(val)}
+                    onChange={e=>{
+                      setExcludeCategories(prev => e.target.checked ? [...prev,val] : prev.filter(x=>x!==val));
+                      setPage(1);
+                    }}
+                  /> {label}
+                </label>
+              ))}
+            </div>
+          </div>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>{setInWorkOnly(e.target.checked);setPage(1);}} /> Только в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>{setExcludeInWork(e.target.checked);setPage(1);}} /> Исключить в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeTransferred} onChange={e=>{setExcludeTransferred(e.target.checked);setPage(1);}} /> Исключить "Передано в работу"</label>
@@ -474,6 +506,7 @@ export default function BloggerList({ currentUser }) {
             <tr>
               {currentUser.role==='admin' && <th style={{width:32}}><input type="checkbox" className="in-work-check" checked={selected.size===bloggers.length&&bloggers.length>0} onChange={toggleSelectAll} /></th>}
               <th>Ник</th>
+              {show('category') && <th>Категория</th>}
               {show('status') && <th>Статус</th>}
               {show('comment') && <th>Комментарий</th>}
               {show('manager') && <th>Менеджер</th>}
@@ -512,6 +545,13 @@ export default function BloggerList({ currentUser }) {
                     <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={isSelected} onChange={()=>toggleSelect(b.id)} /></td>
                   )}
                   <td style={{fontWeight:500,whiteSpace:'nowrap'}}>{b.name}{isFresh && <span className="badge-new">new</span>}</td>
+                  {show('category') && <td>
+                    {b.category ? (
+                      <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,background: b.category==='visazhist'?'#fce7f3':b.category==='expert'?'#d1fae5':'#eef1fe',color:CATEGORY_COLORS[b.category]||'#64748b'}}>
+                        {CATEGORY_LABELS[b.category]||b.category}
+                      </span>
+                    ) : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}
+                  </td>}
                   {show('status') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
                     <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work'||v==='transferred',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
                   </td>}
