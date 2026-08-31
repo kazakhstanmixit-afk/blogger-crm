@@ -142,7 +142,7 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (cpv_min) { const m = parseFloat(cpv_min); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best >= m; }); }
   if (cpv_max) { const m = parseFloat(cpv_max); list = list.filter(b => { const best = Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999); return best <= m; }); }
   if (reach_min) { const m = parseInt(reach_min); list = list.filter(b => (b.instagram_avg_reach||0) >= m || (b.tiktok_avg_reach||0) >= m); }
-  if (exclude_declined === '1') list = list.filter(b => b.status !== 'declined');
+  if (exclude_declined === '1') list = list.filter(b => !b.status.startsWith('declined'));
   if (exclude_in_work === "1") list = list.filter(b => !b.in_work);
   if (exclude_transferred === "1") list = list.filter(b => b.status !== "transferred");
   if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
