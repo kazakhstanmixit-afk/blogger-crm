@@ -169,11 +169,37 @@ app.get('/api/bloggers', auth, (req, res) => {
 
 // check duplicate
 app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
-  const { instagram_url, tiktok_url } = req.body;
+  const { instagram_url, tiktok_url, name } = req.body;
   const users = db.get('users').value();
-  let found = null;
-  if (instagram_url) found = db.get('bloggers').find(b => b.instagram_url === instagram_url).value();
-  if (!found && tiktok_url) found = db.get('bloggers').find(b => b.tiktok_url === tiktok_url).value();
+  const all = db.get('bloggers').value();
+
+  function extractNick(url) {
+    if (!url) return null;
+    return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+  }
+
+  const newName = (name || '').toLowerCase().replace('@','').trim();
+  const newInstNick = extractNick(instagram_url);
+  const newTTNick = extractNick(tiktok_url);
+  const newInstUrl = (instagram_url || '').toLowerCase().trim();
+  const newTTUrl = (tiktok_url || '').toLowerCase().trim();
+
+  const found = all.find(b => {
+    const bName = (b.name || '').toLowerCase().replace('@','').trim();
+    const bInstUrl = (b.instagram_url || '').toLowerCase().trim();
+    const bTTUrl = (b.tiktok_url || '').toLowerCase().trim();
+    const bInstNick = extractNick(b.instagram_url);
+    const bTTNick = extractNick(b.tiktok_url);
+    if (newName && bName && newName === bName) return true;
+    if (newInstUrl && bInstUrl && newInstUrl === bInstUrl) return true;
+    if (newTTUrl && bTTUrl && newTTUrl === bTTUrl) return true;
+    if (newInstNick && bInstNick && newInstNick === bInstNick) return true;
+    if (newTTNick && bTTNick && newTTNick === bTTNick) return true;
+    if (newInstNick && bName && newInstNick === bName) return true;
+    if (newName && bInstNick && newName === bInstNick) return true;
+    return false;
+  });
+
   if (found) {
     const mgr = users.find(u => u.id === found.assigned_manager_id);
     return res.json({ duplicate: true, id: found.id, name: found.name, manager: mgr?.username || null });
@@ -182,8 +208,45 @@ app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
 });
 
 app.post('/api/bloggers', auth, (req, res) => {
+  const d = req.body;
+  const all = db.get('bloggers').value();
+
+  // Extract nickname from instagram URL
+  function extractNick(url) {
+    if (!url) return null;
+    const clean = url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','');
+    return clean || null;
+  }
+
+  const newName = (d.name || '').toLowerCase().replace('@','').trim();
+  const newInstNick = extractNick(d.instagram_url);
+  const newTTNick = extractNick(d.tiktok_url);
+  const newInstUrl = (d.instagram_url || '').toLowerCase().trim();
+  const newTTUrl = (d.tiktok_url || '').toLowerCase().trim();
+
+  const duplicate = all.find(b => {
+    const bName = (b.name || '').toLowerCase().replace('@','').trim();
+    const bInstUrl = (b.instagram_url || '').toLowerCase().trim();
+    const bTTUrl = (b.tiktok_url || '').toLowerCase().trim();
+    const bInstNick = extractNick(b.instagram_url);
+    const bTTNick = extractNick(b.tiktok_url);
+
+    if (newName && bName && newName === bName) return true;
+    if (newInstUrl && bInstUrl && newInstUrl === bInstUrl) return true;
+    if (newTTUrl && bTTUrl && newTTUrl === bTTUrl) return true;
+    if (newInstNick && bInstNick && newInstNick === bInstNick) return true;
+    if (newTTNick && bTTNick && newTTNick === bTTNick) return true;
+    if (newInstNick && bName && newInstNick === bName) return true;
+    if (newName && bInstNick && newName === bInstNick) return true;
+    return false;
+  });
+
+  if (duplicate) {
+    return res.status(409).json({ error: 'Блогер уже есть в базе', duplicate_id: duplicate.id, duplicate_name: duplicate.name });
+  }
+
   const now = new Date().toISOString();
-  const blogger = { id: uuidv4(), batch_id: null, created_at: now, updated_at: now, ...makeBlogger(req.body) };
+  const blogger = { id: uuidv4(), batch_id: null, created_at: now, updated_at: now, ...makeBlogger(d) };
   db.get('bloggers').push(blogger).write();
   logActivity(blogger.id, req.user.id, 'created', 'Блогер добавлен');
   res.json({ id: blogger.id });
@@ -323,7 +386,7 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
     const batchDate = new Date().toISOString();
     const parseNum = v => { const n = parseInt(String(v||'').replace(/[^\d]/g,'')); return isNaN(n) ? 0 : n; };
     const parsePrice = v => { const n = parseFloat(String(v||'').replace(/[^\d.]/g,'')); return isNaN(n) ? null : n; };
-    let updated = 0, added = 0;
+    let updated = 0, added = 0, skipped = 0;
 
     for (const row of rows) {
       const rawId = row['ID'] || row['id'] || '';
@@ -376,19 +439,50 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
         db.get('bloggers').find({ id: existingId }).assign(data).write();
         updated++;
       } else {
-        db.get('bloggers').push({
-          id: uuidv4(), batch_id: batchId, created_at: batchDate,
-          status: status || 'new', in_work: status === 'in_work',
-          decline_reason: null, assigned_manager_id: null,
-          notes: null, contacted_at: null, price_updated_at: null,
-          ...data,
-        }).write();
-        added++;
+        // Check for duplicates before adding
+        function extractNick(url) {
+          if (!url) return null;
+          return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+        }
+        const newName = (name || '').toLowerCase().replace('@','').trim();
+        const newInstNick = extractNick(data.instagram_url);
+        const newTTNick = extractNick(data.tiktok_url);
+        const newInstUrl = (data.instagram_url || '').toLowerCase().trim();
+        const newTTUrl = (data.tiktok_url || '').toLowerCase().trim();
+
+        const isDupe = db.get('bloggers').value().find(b => {
+          const bName = (b.name || '').toLowerCase().replace('@','').trim();
+          const bInstUrl = (b.instagram_url || '').toLowerCase().trim();
+          const bTTUrl = (b.tiktok_url || '').toLowerCase().trim();
+          const bInstNick = extractNick(b.instagram_url);
+          const bTTNick = extractNick(b.tiktok_url);
+          if (newName && bName && newName === bName) return true;
+          if (newInstUrl && bInstUrl && newInstUrl === bInstUrl) return true;
+          if (newTTUrl && bTTUrl && newTTUrl === bTTUrl) return true;
+          if (newInstNick && bInstNick && newInstNick === bInstNick) return true;
+          if (newTTNick && bTTNick && newTTNick === bTTNick) return true;
+          if (newInstNick && bName && newInstNick === bName) return true;
+          if (newName && bInstNick && newName === bInstNick) return true;
+          return false;
+        });
+
+        if (isDupe) {
+          skipped++;
+        } else {
+          db.get('bloggers').push({
+            id: uuidv4(), batch_id: batchId, created_at: batchDate,
+            status: status || 'new', in_work: status === 'in_work',
+            decline_reason: null, assigned_manager_id: null,
+            notes: null, contacted_at: null, price_updated_at: null,
+            ...data,
+          }).write();
+          added++;
+        }
       }
     }
 
     if (added > 0) db.get('batches').push({ id: batchId, count: added, created_at: batchDate, imported_by: req.user.username }).write();
-    res.json({ updated, added, total: updated + added });
+    res.json({ updated, added, skipped, total: updated + added });
   } catch(e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка импорта: ' + e.message });
@@ -498,133 +592,159 @@ app.get('/api/bloggers/:id/activity', auth, (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
+
 // ── PAYMENTS ──────────────────────────────────────────
-// Init payments collection
-if (!db.get('payments').value()) db.set('payments', []).write();
 
 app.get('/api/payments', auth, (req, res) => {
-  const users = db.get('users').value();
-  const bloggers = db.get('bloggers').value();
-  let list = db.get('payments').value();
-  
-  if (req.user.role !== 'admin') {
-    list = list.filter(p => p.manager_id === req.user.id);
+  try {
+    const users = db.get('users').value();
+    const bloggers = db.get('bloggers').value();
+    let list = db.get('payments').value() || [];
+
+    if (req.user.role !== 'admin') {
+      list = list.filter(p => p.manager_id === req.user.id);
+    }
+
+    const { status } = req.query;
+    if (status) list = list.filter(p => p.status === status);
+
+    list = list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    const result = list.map(p => ({
+      ...p,
+      manager_name: (users.find(u => u.id === p.manager_id) || {}).username || null,
+      blogger_name: (bloggers.find(b => b.id === p.blogger_id) || {}).name || null,
+      blogger_instagram: (bloggers.find(b => b.id === p.blogger_id) || {}).instagram_url || null,
+    }));
+
+    res.json(result);
+  } catch(e) {
+    console.error('GET payments error:', e);
+    res.status(500).json({ error: e.message });
   }
-  
-  const { status } = req.query;
-  if (status) list = list.filter(p => p.status === status);
-  
-  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-  
-  res.json(list.map(p => ({
-    ...p,
-    manager_name: (users.find(u => u.id === p.manager_id)||{}).username || null,
-    blogger_name: (bloggers.find(b => b.id === p.blogger_id)||{}).name || null,
-    blogger_instagram: (bloggers.find(b => b.id === p.blogger_id)||{}).instagram_url || null,
-  })));
 });
 
 app.post('/api/payments', auth, (req, res) => {
-  const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
-  if (!blogger_id || !recipient_name || !iin || !amount) {
-    return res.status(400).json({ error: 'Заполните все обязательные поля' });
+  try {
+    console.log('PAYMENT POST body:', JSON.stringify(req.body));
+    const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
+
+    if (!blogger_id) return res.status(400).json({ error: 'Не указан блогер' });
+    if (!recipient_name) return res.status(400).json({ error: 'Укажите ФИО получателя' });
+    if (!iin) return res.status(400).json({ error: 'Укажите ИИН' });
+    if (!amount) return res.status(400).json({ error: 'Укажите сумму' });
+    if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+
+    const payment = {
+      id: uuidv4(),
+      blogger_id,
+      manager_id: req.user.id,
+      recipient_name,
+      iin,
+      payment_name: payment_name || recipient_name,
+      amount: Number(amount),
+      notes: notes || null,
+      kaspi: kaspi || null,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    db.get('payments').push(payment).write();
+    db.get('bloggers').find({ id: blogger_id }).assign({ status: 'payment_pending', updated_at: new Date().toISOString() }).write();
+
+    console.log('Payment saved:', payment.id);
+    res.json({ id: payment.id, ok: true });
+  } catch(e) {
+    console.error('POST payments error:', e);
+    res.status(500).json({ error: e.message });
   }
-  if (!/^\d{12}$/.test(iin)) {
-    return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
-  }
-  
-  const payment = {
-    id: uuidv4(),
-    blogger_id,
-    manager_id: req.user.id,
-    recipient_name,
-    iin,
-    payment_name: payment_name || recipient_name,
-    amount: Number(amount),
-    notes: notes || null,
-    kaspi: kaspi || null,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  
-  db.get('payments').push(payment).write();
-  // Update blogger status
-  db.get('bloggers').find({ id: blogger_id }).assign({ status: 'payment_pending', updated_at: new Date().toISOString() }).write();
-  
-  res.json({ id: payment.id });
 });
 
 app.put('/api/payments/:id', auth, (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const existing = db.get('payments').find({ id: req.params.id }).value();
-  if (!existing) return res.status(404).json({ error: 'Not found' });
-  
-  const { status, recipient_name, iin, payment_name, amount, notes } = req.body;
-  const updates = { updated_at: new Date().toISOString() };
-  
-  if (status) {
-    updates.status = status;
-    // Sync blogger status
-    const bloggerStatus = status === 'paid' ? 'paid' : status === 'submitted' ? 'payment_submitted' : 'payment_pending';
-    db.get('bloggers').find({ id: existing.blogger_id }).assign({ status: bloggerStatus, updated_at: new Date().toISOString() }).write();
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+    const existing = db.get('payments').find({ id: req.params.id }).value();
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+
+    const { status, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
+    const updates = { updated_at: new Date().toISOString() };
+
+    if (status) {
+      updates.status = status;
+      const bloggerStatus = status === 'paid' ? 'paid' : status === 'submitted' ? 'payment_submitted' : status === 'rejected' ? 'payment_pending' : 'payment_pending';
+      db.get('bloggers').find({ id: existing.blogger_id }).assign({ status: bloggerStatus, updated_at: new Date().toISOString() }).write();
+    }
+    if (recipient_name !== undefined) updates.recipient_name = recipient_name;
+    if (iin !== undefined) {
+      if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+      updates.iin = iin;
+    }
+    if (payment_name !== undefined) updates.payment_name = payment_name;
+    if (amount !== undefined) updates.amount = Number(amount);
+    if (notes !== undefined) updates.notes = notes;
+    if (kaspi !== undefined) updates.kaspi = kaspi;
+
+    db.get('payments').find({ id: req.params.id }).assign(updates).write();
+    res.json({ ok: true });
+  } catch(e) {
+    console.error('PUT payments error:', e);
+    res.status(500).json({ error: e.message });
   }
-  if (recipient_name) updates.recipient_name = recipient_name;
-  if (iin) {
-    if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
-    updates.iin = iin;
-  }
-  if (payment_name) updates.payment_name = payment_name;
-  if (amount) updates.amount = Number(amount);
-  if (notes !== undefined) updates.notes = notes;
-  
-  db.get('payments').find({ id: req.params.id }).assign(updates).write();
-  res.json({ ok: true });
 });
 
 app.delete('/api/payments/:id', auth, (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  db.get('payments').remove({ id: req.params.id }).write();
-  res.json({ ok: true });
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+    db.get('payments').remove({ id: req.params.id }).write();
+    res.json({ ok: true });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Export payments
 app.get('/api/payments/export', auth, (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const users = db.get('users').value();
-  const bloggers = db.get('bloggers').value();
-  const { status } = req.query;
-  
-  let list = db.get('payments').value();
-  if (status) list = list.filter(p => p.status === status);
-  
-  const PAYMENT_STATUS = { pending: 'К оплате', submitted: 'Подано', paid: 'Оплачено', rejected: 'Отклонено' };
-  
-  const rows = list.map(p => {
-    const mgr = users.find(u => u.id === p.manager_id);
-    const blogger = bloggers.find(b => b.id === p.blogger_id);
-    return {
-      'Дата заявки': new Date(p.created_at).toLocaleDateString('ru'),
-      'Менеджер': mgr?.username || '',
-      'Блогер': blogger?.name || '',
-      'ФИО получателя': p.recipient_name,
-      'ИИН': p.iin,
-      'ФИО при пополнении': p.payment_name || '',
-      'Сумма (₸)': p.amount,
-      'Статус': PAYMENT_STATUS[p.status] || p.status,
-      'Номер Каспи': p.kaspi || '',
-      'Заметки': p.notes || '',
-    };
-  });
-  
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
-  ws['!cols'] = Array(9).fill({ wch: 22 });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Оплаты');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  res.setHeader('Content-Disposition', 'attachment; filename="payments.xlsx"');
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buf);
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+    const users = db.get('users').value();
+    const bloggers = db.get('bloggers').value();
+    const { status } = req.query;
+
+    let list = db.get('payments').value() || [];
+    if (status) list = list.filter(p => p.status === status);
+
+    const LABELS = { pending: 'К оплате', submitted: 'Подано', paid: 'Оплачено', rejected: 'Отклонено' };
+
+    const rows = list.map(p => {
+      const mgr = users.find(u => u.id === p.manager_id);
+      const blogger = bloggers.find(b => b.id === p.blogger_id);
+      return {
+        'Дата заявки': new Date(p.created_at).toLocaleDateString('ru'),
+        'Менеджер': mgr ? mgr.username : '',
+        'Блогер': blogger ? blogger.name : '',
+        'ФИО получателя': p.recipient_name,
+        'ИИН': p.iin,
+        'ФИО при пополнении': p.payment_name || '',
+        'Номер Каспи': p.kaspi || '',
+        'Сумма (₸)': p.amount,
+        'Статус': LABELS[p.status] || p.status,
+        'Заметки': p.notes || '',
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
+    ws['!cols'] = Array(10).fill({ wch: 22 });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Оплаты');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename="payments.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch(e) {
+    console.error('Export payments error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
+
 
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
