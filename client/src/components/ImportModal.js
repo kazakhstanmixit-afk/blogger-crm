@@ -54,14 +54,18 @@ export default function ImportModal({ onClose }) {
         </div>
 
         {result && (
-          <div style={{background:'var(--surface-1)',borderRadius:8,padding:'12px 16px',marginTop:14,display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div style={{background:'var(--surface-1)',borderRadius:8,padding:'12px 16px',marginTop:14,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
             <div style={{textAlign:'center'}}>
-              <div style={{fontSize:24,fontWeight:700,color:'#22c55e'}}>{result.updated}</div>
+              <div style={{fontSize:24,fontWeight:700,color:'#22c55e'}}>{result.added}</div>
+              <div style={{fontSize:12,color:'var(--text-muted)'}}>Добавлено новых</div>
+            </div>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:24,fontWeight:700,color:'#a78bfa'}}>{result.updated}</div>
               <div style={{fontSize:12,color:'var(--text-muted)'}}>Обновлено по ID</div>
             </div>
             <div style={{textAlign:'center'}}>
-              <div style={{fontSize:24,fontWeight:700,color:'#a78bfa'}}>{result.added}</div>
-              <div style={{fontSize:12,color:'var(--text-muted)'}}>Добавлено новых</div>
+              <div style={{fontSize:24,fontWeight:700,color:'#f59e0b'}}>{result.skipped || 0}</div>
+              <div style={{fontSize:12,color:'var(--text-muted)'}}>Дублей пропущено</div>
             </div>
           </div>
         )}
