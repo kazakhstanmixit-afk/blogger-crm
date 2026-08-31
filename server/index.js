@@ -470,6 +470,8 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
 
       const rawStatus = String(row[findCol(row, aliases.status)]||'').trim().toLowerCase().replace(/\s+/g,'');
       const status = STATUS_MAP[rawStatus] || null;
+      const catKey = findCol(row, aliases.category);
+      const category = catKey ? (row[catKey] || existing?.category || null) : (existing?.category || null);
 
       const data = {
         name,
