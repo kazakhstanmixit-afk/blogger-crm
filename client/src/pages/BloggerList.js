@@ -207,6 +207,7 @@ export default function BloggerList({ currentUser }) {
   const [excludeInWork, setExcludeInWork] = useState(false);
   const [excludeTransferred, setExcludeTransferred] = useState(false);
   const [sort, setSort] = useState('default');
+  const [colSort, setColSort] = useState({ col: null, dir: 'asc' });
   const [showFilters, setShowFilters] = useState(false);
   const [editBlogger, setEditBlogger] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -220,6 +221,48 @@ export default function BloggerList({ currentUser }) {
   const timer = useRef(null);
 
   const show = (key) => visibleCols.has(key);
+
+  const handleColSort = (col) => {
+    setColSort(prev => ({
+      col,
+      dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const sortedBloggers = React.useMemo(() => {
+    if (!colSort.col) return bloggers;
+    const { col, dir } = colSort;
+    const colMap = {
+      inst_followers: 'instagram_followers',
+      inst_reach: 'instagram_avg_reach',
+      tt_followers: 'tiktok_followers',
+      tt_reach: 'tiktok_avg_reach',
+      price_reels: 'price_reels',
+      cpv_reels: 'cpv_reels',
+      price_tt: 'price_tiktok',
+      cpv_tt: 'cpv_tiktok',
+      price_both: 'price_both',
+      cpv_both: 'cpv_both',
+      price_stories: 'price_stories',
+      cpv_stories: 'cpv_stories',
+    };
+    const field = colMap[col] || col;
+    return [...bloggers].sort((a, b) => {
+      const av = a[field] || 0;
+      const bv = b[field] || 0;
+      return dir === 'asc' ? av - bv : bv - av;
+    });
+  }, [bloggers, colSort]);
+
+  const SortTh = ({ col, children }) => {
+    const active = colSort.col === col;
+    return (
+      <th onClick={() => handleColSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+        {children} {active ? (colSort.dir === 'asc' ? '↑' : '↓') : <span style={{color:'#c8cfe0'}}>↕</span>}
+      </th>
+    );
+  };
+
   const toggleCol = (key) => setVisibleCols(prev => { const n=new Set(prev); n.has(key)?n.delete(key):n.add(key); return n; });
 
   const doFetch = useCallback(async (p) => {
@@ -435,18 +478,18 @@ export default function BloggerList({ currentUser }) {
               {show('comment') && <th>Комментарий</th>}
               {show('manager') && <th>Менеджер</th>}
               {show('links') && <th>Ссылки</th>}
-              {show('inst_followers') && <th>Подп. Инст</th>}
-              {show('inst_reach') && <th>Охват Инст</th>}
-              {show('tt_followers') && <th>Подп. ТТ</th>}
-              {show('tt_reach') && <th>Охват ТТ</th>}
-              {show('price_reels') && <th>Рилс</th>}
-              {show('cpv_reels') && <th>CPV Рилс</th>}
-              {show('price_tt') && <th>ТТ</th>}
-              {show('cpv_tt') && <th>CPV ТТ</th>}
-              {show('price_both') && <th>Рилс+ТТ</th>}
-              {show('cpv_both') && <th>CPV Р+ТТ</th>}
-              {show('price_stories') && <th>Сторис</th>}
-              {show('cpv_stories') && <th>CPV Сторис</th>}
+              {show('inst_followers') && <SortTh col='inst_followers'>Подп. Инст</SortTh>}
+              {show('inst_reach') && <SortTh col='inst_reach'>Охват Инст</SortTh>}
+              {show('tt_followers') && <SortTh col='tt_followers'>Подп. ТТ</SortTh>}
+              {show('tt_reach') && <SortTh col='tt_reach'>Охват ТТ</SortTh>}
+              {show('price_reels') && <SortTh col='price_reels'>Рилс</SortTh>}
+              {show('cpv_reels') && <SortTh col='cpv_reels'>CPV Рилс</SortTh>}
+              {show('price_tt') && <SortTh col='price_tt'>ТТ</SortTh>}
+              {show('cpv_tt') && <SortTh col='cpv_tt'>CPV ТТ</SortTh>}
+              {show('price_both') && <SortTh col='price_both'>Рилс+ТТ</SortTh>}
+              {show('cpv_both') && <SortTh col='cpv_both'>CPV Р+ТТ</SortTh>}
+              {show('price_stories') && <SortTh col='price_stories'>Сторис</SortTh>}
+              {show('cpv_stories') && <SortTh col='cpv_stories'>CPV Сторис</SortTh>}
               {show('added') && <th>Добавлен</th>}
               <th></th>
             </tr>
@@ -456,7 +499,7 @@ export default function BloggerList({ currentUser }) {
               <tr><td colSpan={20} style={{textAlign:'center',padding:40,color:'#9ba3be'}}>Загрузка...</td></tr>
             ) : bloggers.length === 0 ? (
               <tr><td colSpan={20}><div className="empty-state"><div style={{fontSize:36}}>👥</div><p>Пусто.</p></div></td></tr>
-            ) : bloggers.map(b => {
+            ) : sortedBloggers.map(b => {
               const isWaiting = b.status==='contacted' && b.contacted_at && daysSince(b.contacted_at) >= 3;
               const isFresh = isNew(b.created_at);
               const isSelected = selected.has(b.id);
