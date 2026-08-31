@@ -181,7 +181,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
     </div>
       {toast && <Toast message={toast} type='success' onClose={()=>setToast(null)} />}
       {showPayment && blogger && (
-        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={(msg)=>{setShowPayment(false);setToast(msg);}} />
+        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={(msg)=>{setShowPayment(false);setToast(msg);setTimeout(()=>onClose(),2000);}} />
       )}
     </>
   );
