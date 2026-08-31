@@ -78,6 +78,60 @@ function StatusDropdown({ value, onChange }) {
   );
 }
 
+
+function CategoryDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({top:0,left:0});
+  const ref = useRef();
+  const options = [
+    { value: '', label: '— Не выбрано —', color: '#9ba3be' },
+    { value: 'blogger', label: 'Блогер', color: '#4f6ef7' },
+    { value: 'visazhist', label: 'Визажист', color: '#db2777' },
+    { value: 'expert', label: 'Эксперт', color: '#059669' },
+  ];
+  const current = options.find(o => o.value === (value||'')) || options[0];
+  useEffect(() => {
+    const h = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  const handleClick = (e) => {
+    e.stopPropagation();
+    const rect = ref.current.getBoundingClientRect();
+    const dropdownHeight = options.length * 36;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < dropdownHeight + 10) {
+      setPos({ bottom: window.innerHeight - rect.top + window.scrollY, top: 'auto', left: rect.left + window.scrollX });
+    } else {
+      setPos({ top: rect.bottom + window.scrollY, bottom: 'auto', left: rect.left + window.scrollX });
+    }
+    setOpen(!open);
+  };
+  return (
+    <div ref={ref} style={{position:'relative',display:'inline-block'}}>
+      <span onClick={handleClick} style={{cursor:'pointer',userSelect:'none',display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,
+        background: value==='visazhist'?'#fce7f3':value==='expert'?'#d1fae5':value==='blogger'?'#eef1fe':'#f1f5f9',
+        color: value?CATEGORY_COLORS[value]:'#9ba3be',
+        border: '1px solid ' + (value==='visazhist'?'#fbcfe8':value==='expert'?'#a7f3d0':value==='blogger'?'#c7d2fe':'#e2e8f0')
+      }}>
+        {current.label} ▾
+      </span>
+      {open && (
+        <div style={{position:'fixed',top:pos.top!=='auto'?pos.top:undefined,bottom:pos.bottom!=='auto'?pos.bottom:undefined,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.12)',minWidth:160,maxHeight:200,overflowY:'auto',marginTop:pos.top!=='auto'?4:0}}>
+          {options.map(o => (
+            <div key={o.value} onClick={e=>{e.stopPropagation();onChange(o.value||null);setOpen(false);}}
+              style={{padding:'8px 12px',cursor:'pointer',fontSize:12,color:o.color,fontWeight:500,borderBottom:'1px solid #f0f2f7'}}
+              onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
+              onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditableCell({ value, onSave, type='text', suffix='' }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value||'');
@@ -545,12 +599,8 @@ export default function BloggerList({ currentUser }) {
                     <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={isSelected} onChange={()=>toggleSelect(b.id)} /></td>
                   )}
                   <td style={{fontWeight:500,whiteSpace:'nowrap'}}>{b.name}{isFresh && <span className="badge-new">new</span>}</td>
-                  {show('category') && <td>
-                    {b.category ? (
-                      <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,background: b.category==='visazhist'?'#fce7f3':b.category==='expert'?'#d1fae5':'#eef1fe',color:CATEGORY_COLORS[b.category]||'#64748b'}}>
-                        {CATEGORY_LABELS[b.category]||b.category}
-                      </span>
-                    ) : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}
+                  {show('category') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
+                    <CategoryDropdown value={b.category} onChange={v=>patch(b.id,{category:v})} />
                   </td>}
                   {show('status') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
                     <StatusDropdown value={b.status} onChange={v=>patch(b.id,{status:v,in_work:v==='in_work'||v==='transferred',decline_reason:v.startsWith('declined')?v.replace('declined_',''):null})} />
