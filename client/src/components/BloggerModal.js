@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../App';
 import PaymentModal from './PaymentModal';
+import Toast from './Toast';
 
 const STATUS_OPTIONS = [
   { value:'new', label:'Новый' },
@@ -37,6 +38,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showPayment, setShowPayment] = useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     if (isEdit) apiFetch(`/api/bloggers/${blogger.id}/activity`).then(r=>r.json()).then(setActivity);
@@ -177,8 +179,9 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
         </form>
       </div>
     </div>
+      {toast && <Toast message={toast} type='success' onClose={()=>setToast(null)} />}
       {showPayment && blogger && (
-        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={()=>setShowPayment(false)} />
+        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={(msg)=>{setShowPayment(false);setToast(msg);}} />
       )}
     </>
   );
