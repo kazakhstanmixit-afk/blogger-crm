@@ -22,7 +22,7 @@ function cpv(price, reach) {
   if (!price || !reach) return null;
   return parseFloat((price / reach).toFixed(2));
 }
-function cpvColor(v) { if(!v) return 'var(--text-muted)'; if(v<=10) return '#15803d'; if(v<=30) return '#6d28d9'; return '#b91c1c'; }
+function cpvColor(v) { if(!v) return '#9ba3be'; if(v<=10) return '#15803d'; if(v<=30) return '#6d28d9'; return '#b91c1c'; }
 
 export default function BloggerModal({ blogger, users, currentUser, onSave, onClose }) {
   const isEdit = !!blogger;
@@ -31,7 +31,8 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
     instagram_followers:'', tiktok_followers:'',
     instagram_avg_reach:'', tiktok_avg_reach:'',
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
-    status:'new', decline_reason:'', assigned_manager_id:'', in_work:false, notes:'', last_comment:'', category:'',
+    status:'new', decline_reason:'', assigned_manager_id:'', in_work:false,
+    notes:'', last_comment:'', category:'',
     ...(blogger||{}),
   });
   const [activity, setActivity] = useState([]);
@@ -53,23 +54,48 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   const cpvStories = cpv(form.price_stories, form.instagram_avg_reach);
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setSaving(true);
-    await onSave({...form,
-      instagram_followers: Number(form.instagram_followers)||0,
-      tiktok_followers: Number(form.tiktok_followers)||0,
-      instagram_avg_reach: Number(form.instagram_avg_reach)||0,
-      tiktok_avg_reach: Number(form.tiktok_avg_reach)||0,
-      price_reels: form.price_reels ? Number(form.price_reels) : null,
-      price_tiktok: form.price_tiktok ? Number(form.price_tiktok) : null,
-      price_both: form.price_both ? Number(form.price_both) : null,
-      price_stories: form.price_stories ? Number(form.price_stories) : null,
-      assigned_manager_id: form.assigned_manager_id || null,
-    });
+    e.preventDefault();
+    setError('');
+
+    if (!isEdit) {
+      try {
+        const res = await apiFetch('/api/bloggers/check-duplicate', {
+          method: 'POST',
+          body: JSON.stringify({ instagram_url: form.instagram_url, tiktok_url: form.tiktok_url, name: form.name }),
+        });
+        const data = await res.json();
+        if (data.duplicate) {
+          if (!window.confirm(`⚠️ Блогер уже есть в базе!\n\nНайден: ${data.duplicate_name}\n\nВсё равно добавить?`)) {
+            return;
+          }
+        }
+      } catch(e) {
+        // ignore duplicate check errors
+      }
+    }
+
+    setSaving(true);
+    try {
+      await onSave({...form,
+        instagram_followers: Number(form.instagram_followers)||0,
+        tiktok_followers: Number(form.tiktok_followers)||0,
+        instagram_avg_reach: Number(form.instagram_avg_reach)||0,
+        tiktok_avg_reach: Number(form.tiktok_avg_reach)||0,
+        price_reels: form.price_reels ? Number(form.price_reels) : null,
+        price_tiktok: form.price_tiktok ? Number(form.price_tiktok) : null,
+        price_both: form.price_both ? Number(form.price_both) : null,
+        price_stories: form.price_stories ? Number(form.price_stories) : null,
+        assigned_manager_id: form.assigned_manager_id || null,
+      });
+    } catch(err) {
+      setError('Ошибка при сохранении');
+    }
     setSaving(false);
   };
 
   return (
     <>
+    {toast && <Toast message={toast} type="success" onClose={()=>setToast(null)} />}
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-header">
@@ -85,7 +111,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
           </div>
 
           <div className="section-divider">Аудитория</div>
-          <div className="form-row-4">
+          <div className="form-row" style={{gridTemplateColumns:'1fr 1fr 1fr 1fr'}}>
             <div className="field"><label>Подп. Инст</label><input type="number" value={form.instagram_followers||''} onChange={e=>set('instagram_followers',e.target.value)} /></div>
             <div className="field"><label>Охват Инст</label><input type="number" value={form.instagram_avg_reach||''} onChange={e=>set('instagram_avg_reach',e.target.value)} /></div>
             <div className="field"><label>Подп. ТТ</label><input type="number" value={form.tiktok_followers||''} onChange={e=>set('tiktok_followers',e.target.value)} /></div>
@@ -93,7 +119,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
           </div>
 
           <div className="section-divider">Расценки (₸)</div>
-          <div className="form-row-4">
+          <div className="form-row" style={{gridTemplateColumns:'1fr 1fr 1fr 1fr'}}>
             <div className="field"><label>Рилс</label><input type="number" value={form.price_reels||''} onChange={e=>set('price_reels',e.target.value)} /></div>
             <div className="field"><label>TikTok</label><input type="number" value={form.price_tiktok||''} onChange={e=>set('price_tiktok',e.target.value)} /></div>
             <div className="field"><label>Рилс+ТТ</label><input type="number" value={form.price_both||''} onChange={e=>set('price_both',e.target.value)} /></div>
@@ -106,12 +132,12 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
               <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
                 {[['Рилс',cpvReels],['TikTok',cpvTT],['Рилс+ТТ',cpvBoth],['Сторис',cpvStories]].map(([label,val])=>val?(
                   <div key={label} style={{textAlign:'center',padding:'8px',background:'#fff',borderRadius:6,border:'1px solid #e2e6ef'}}>
-                    <div style={{fontSize:10,color:'var(--text-muted)',marginBottom:3}}>{label}</div>
+                    <div style={{fontSize:10,color:'#9ba3be',marginBottom:3}}>{label}</div>
                     <div style={{fontSize:15,fontWeight:600,color:cpvColor(val)}}>{val} ₸</div>
                   </div>
                 ):null)}
               </div>
-              <div style={{fontSize:10,color:'var(--text-muted)',marginTop:8}}>До 10 ₸ — отлично · 10–30 ₸ — нормально · выше 30 ₸ — дорого</div>
+              <div style={{fontSize:10,color:'#9ba3be',marginTop:8}}>До 10 ₸ — отлично · 10–30 ₸ — нормально · выше 30 ₸ — дорого</div>
             </div>
           )}
 
@@ -125,6 +151,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
               <option value="expert">Эксперт</option>
             </select>
           </div>
+
           <div className="section-divider">Работа</div>
           <div className="form-row">
             <div className="field">
@@ -143,7 +170,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
           </div>
           <div className="field">
             <label>Последний комментарий</label>
-            <input value={form.last_comment||''} onChange={e=>set('last_comment',e.target.value)} placeholder="Кратко о статусе переговоров..." />
+            <input value={form.last_comment||''} onChange={e=>set('last_comment',e.target.value)} placeholder="Кратко о статусе..." />
           </div>
           <div className="field">
             <label>Заметки</label>
@@ -165,24 +192,26 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
           )}
 
           {error && <div className="error-msg" style={{marginBottom:12}}>{error}</div>}
+
           <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'space-between',alignItems:'center'}}>
             <div>
               {isEdit && (
-                <button type="button" className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>setShowPayment(true)}>💳 Подать на оплату</button>
+                <button type="button" className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>setShowPayment(true)}>
+                  💳 Подать на оплату
+                </button>
               )}
             </div>
             <div style={{display:'flex',gap:8}}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Сохраняем...':isEdit?'Сохранить':'Добавить'}</button>
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Сохраняем...':isEdit?'Сохранить':'Добавить'}</button>
             </div>
           </div>
         </form>
       </div>
     </div>
-      {toast && <Toast message={toast} type='success' onClose={()=>setToast(null)} />}
-      {showPayment && blogger && (
-        <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={(msg)=>{setShowPayment(false);setToast(msg);setTimeout(()=>onClose(),2000);}} />
-      )}
+    {showPayment && blogger && (
+      <PaymentModal blogger={blogger} onClose={()=>setShowPayment(false)} onSave={(msg)=>{setShowPayment(false);setToast(msg);setTimeout(()=>onClose(),2000);}} />
+    )}
     </>
   );
 }
