@@ -373,7 +373,15 @@ export default function BloggerList({ currentUser }) {
   const handleSave = async (data) => {
     const isEdit = !!data.id;
     await apiFetch(isEdit ? `/api/bloggers/${data.id}` : '/api/bloggers', { method: isEdit?'PUT':'POST', body: JSON.stringify(data) });
-    setEditBlogger(null); setShowAdd(false); doFetch(page);
+    setEditBlogger(null); setShowAdd(false);
+    if (!isEdit) {
+      setSearch('');
+      setStatusFilter('');
+      setSort('created_desc');
+      setPage(1);
+    } else {
+      doFetch(page);
+    }
   };
 
   const handleDelete = async (id) => {
