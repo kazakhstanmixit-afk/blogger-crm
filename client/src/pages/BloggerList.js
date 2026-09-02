@@ -424,6 +424,14 @@ export default function BloggerList({ currentUser }) {
     setPage(1); doFetch(1); apiFetch('/api/batches').then(r=>r.json()).then(setBatches);
   };
 
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (!window.confirm(`Удалить ${ids.length} блогеров? Это нельзя отменить!`)) return;
+    await apiFetch('/api/bloggers/bulk-delete', { method:'POST', body: JSON.stringify({ ids }) });
+    setSelected(new Set());
+    doFetch(1);
+  };
+
   const handleDistribute = async (managerIds) => {
     const ids = Array.from(selected);
     await apiFetch('/api/bloggers/distribute', { method:'POST', body: JSON.stringify({ blogger_ids: ids, manager_ids: managerIds }) });
@@ -558,6 +566,7 @@ export default function BloggerList({ currentUser }) {
           <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
           <button className="btn btn-primary btn-sm" onClick={()=>setShowDistribute(true)}>👥 Распределить по менеджерам</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>setShowBulkStatus(true)}>🔄 Сменить статус</button>
+          <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить выбранных</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
         </div>
       )}

@@ -501,6 +501,14 @@ app.delete('/api/bloggers/all', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/bloggers/bulk-delete', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { ids } = req.body;
+  if (!ids?.length) return res.status(400).json({ error: 'Нет ID' });
+  ids.forEach(id => db.get('bloggers').remove({ id }).write());
+  res.json({ ok: true, deleted: ids.length });
+});
+
 app.delete('/api/bloggers/:id', auth, (req, res) => {
   db.get('bloggers').remove({ id: req.params.id }).write();
   res.json({ ok: true });
