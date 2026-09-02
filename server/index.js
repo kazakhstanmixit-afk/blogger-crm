@@ -119,6 +119,36 @@ app.get('/api/dashboard', auth, (req, res) => {
 });
 
 
+// ── PRODUCTS ──────────────────────────────────────────
+app.get('/api/products', auth, (req, res) => {
+  const list = db.get('products').value() || [];
+  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+});
+
+app.post('/api/products', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { article, name, tz_url, notes } = req.body;
+  if (!article || !name) return res.status(400).json({ error: 'Укажите артикул и название' });
+  if (db.get('products').find({ article }).value()) return res.status(409).json({ error: 'Артикул уже существует' });
+  const product = { id: uuidv4(), article, name, tz_url: tz_url||null, notes: notes||null, created_at: new Date().toISOString() };
+  db.get('products').push(product).write();
+  res.json({ id: product.id });
+});
+
+app.put('/api/products/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { article, name, tz_url, notes } = req.body;
+  db.get('products').find({ id: req.params.id }).assign({ article, name, tz_url: tz_url||null, notes: notes||null }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/products/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('products').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -126,7 +156,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1024,8 +1054,40 @@ app.get('/api/dashboard', auth, (req, res) => {
 });
 
 
+// ── PRODUCTS ──────────────────────────────────────────
+app.get('/api/products', auth, (req, res) => {
+  const list = db.get('products').value() || [];
+  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+});
+
+app.post('/api/products', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { article, name, tz_url, notes } = req.body;
+  if (!article || !name) return res.status(400).json({ error: 'Укажите артикул и название' });
+  if (db.get('products').find({ article }).value()) return res.status(409).json({ error: 'Артикул уже существует' });
+  const product = { id: uuidv4(), article, name, tz_url: tz_url||null, notes: notes||null, created_at: new Date().toISOString() };
+  db.get('products').push(product).write();
+  res.json({ id: product.id });
+});
+
+app.put('/api/products/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { article, name, tz_url, notes } = req.body;
+  db.get('products').find({ id: req.params.id }).assign({ article, name, tz_url: tz_url||null, notes: notes||null }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/products/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('products').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
 
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+
+// ── PRODUCTS ──────────────────────────────────────────

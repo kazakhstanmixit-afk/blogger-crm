@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import BloggerList from './BloggerList';
 import PaymentsPage from './PaymentsPage';
+import ProductsPage from './ProductsPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -10,6 +11,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'bloggers', icon:'👥', label:'Блогеры' },
     { id:'stats', icon:'📊', label:'Аналитика' },
     { id:'payments', icon:'💳', label:'Оплаты' },
+    { id:'products', icon:'📦', label:'Товары и ТЗ' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -35,6 +37,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='bloggers' && <BloggerList currentUser={user} />}
         {page==='stats' && <StatsPage currentUser={user} />}
         {page==='payments' && <PaymentsPage currentUser={user} />}
+        {page==='products' && <ProductsPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>
