@@ -25,6 +25,8 @@ export default function PaymentsPage({ currentUser }) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [selected, setSelected] = useState(new Set());
+  const [editingId, setEditingId] = useState(null);
+  const [editAmount, setEditAmount] = useState('');
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -148,6 +150,15 @@ export default function PaymentsPage({ currentUser }) {
     setTimeout(() => w.print(), 500);
   };
 
+  const handleSaveAmount = async (id) => {
+    if (!editAmount || Number(editAmount) <= 0) { setEditingId(null); return; }
+    await apiFetch(`/api/payments/${id}`, { method:'PUT', body: JSON.stringify({ amount: Number(editAmount) }) });
+    setEditingId(null);
+    setEditAmount('');
+    setToast('Сумма обновлена');
+    fetchPayments();
+  };
+
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = () => { if(selected.size===payments.length) setSelected(new Set()); else setSelected(new Set(payments.map(p=>p.id))); };
 
@@ -237,7 +248,22 @@ export default function PaymentsPage({ currentUser }) {
                 <td style={{fontFamily:'monospace',letterSpacing:1,fontSize:12}}>{p.iin}</td>
                 <td>{p.payment_name||'—'}</td>
                 <td style={{fontSize:12}}>{p.kaspi||'—'}</td>
-                <td style={{fontWeight:600,whiteSpace:'nowrap'}}>{(p.amount||0).toLocaleString('ru')} ₸</td>
+                <td style={{fontWeight:600,whiteSpace:'nowrap'}}>
+                  {editingId===p.id ? (
+                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                      <input type="number" value={editAmount} onChange={e=>setEditAmount(e.target.value)}
+                        autoFocus onKeyDown={e=>{if(e.key==='Enter')handleSaveAmount(p.id);if(e.key==='Escape')setEditingId(null);}}
+                        style={{width:100,padding:'2px 6px',fontSize:12,border:'1px solid #4f6ef7',borderRadius:4,outline:'none'}} />
+                      <button className="btn btn-primary btn-sm" onClick={()=>handleSaveAmount(p.id)}>✓</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setEditingId(null)}>×</button>
+                    </div>
+                  ) : (
+                    <span onClick={()=>{if(currentUser.role==='admin'){setEditingId(p.id);setEditAmount(p.amount);}}}
+                      style={{cursor:currentUser.role==='admin'?'pointer':'default',borderBottom:currentUser.role==='admin'?'1px dashed #c8cfe0':'none',paddingBottom:1}}>
+                      {(p.amount||0).toLocaleString('ru')} ₸
+                    </span>
+                  )}
+                </td>
                 <td><StatusBadge status={p.status} /></td>
                 <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
                 {currentUser.role==='admin' && (
