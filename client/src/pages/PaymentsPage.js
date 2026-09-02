@@ -84,6 +84,70 @@ export default function PaymentsPage({ currentUser }) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'payments.xlsx'; a.click();
   };
 
+  const handleExportPDF = () => {
+    const filtered = statusFilter ? payments.filter(p => p.status === statusFilter) : payments;
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const date = new Date().toLocaleDateString('ru');
+
+    const rows = filtered.map((p, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td>${p.blogger_name||'—'}</td>
+        <td>${p.manager_name||'—'}</td>
+        <td>${p.recipient_name}</td>
+        <td style="font-family:monospace">${p.iin}</td>
+        <td>${p.payment_name||'—'}</td>
+        <td>${p.kaspi||'—'}</td>
+        <td style="text-align:right;font-weight:600">${(p.amount||0).toLocaleString('ru')} ₸</td>
+        <td>${LABELS[p.status]||p.status}</td>
+        <td>${p.notes||'—'}</td>
+      </tr>
+    `).join('');
+
+    const totalAmount = filtered.filter(p=>p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0);
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Заявки на оплату</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
+  h2 { font-size: 16px; margin-bottom: 4px; }
+  .meta { color: #666; margin-bottom: 16px; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f0f2f7; padding: 7px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; border: 1px solid #ddd; }
+  td { padding: 6px 8px; border: 1px solid #e2e6ef; vertical-align: top; }
+  tr:nth-child(even) { background: #f8f9fb; }
+  .total { margin-top: 12px; text-align: right; font-size: 13px; }
+  .total strong { font-size: 16px; color: #4f6ef7; }
+  @media print { body { margin: 10px; } }
+</style>
+</head>
+<body>
+<h2>Заявки на оплату</h2>
+<div class="meta">Дата: ${date} · Записей: ${filtered.length}${statusFilter ? ' · Статус: ' + LABELS[statusFilter] : ''}</div>
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Блогер</th><th>Менеджер</th><th>ФИО получателя</th>
+      <th>ИИН</th><th>ФИО при пополнении</th><th>Каспи</th>
+      <th>Сумма</th><th>Статус</th><th>Заметки</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="total">Итого к выплате: <strong>${totalAmount.toLocaleString('ru')} ₸</strong></div>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 500);
+  };
+
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = () => { if(selected.size===payments.length) setSelected(new Set()); else setSelected(new Set(payments.map(p=>p.id))); };
 
@@ -106,6 +170,7 @@ export default function PaymentsPage({ currentUser }) {
         </div>
         <div style={{display:'flex',gap:8}}>
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExport}>📊 Excel</button>}
+          {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>📄 PDF</button>}
         </div>
       </div>
 
