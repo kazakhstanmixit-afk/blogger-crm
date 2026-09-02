@@ -46,9 +46,6 @@ function ManagerRow({ m }) {
         <span style={{ fontSize: 16, fontWeight: 700, color: '#dc2626' }}>{m.declined}</span>
       </td>
       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#059669' }}>{m.category_changed}</span>
-      </td>
-      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: '#15803d' }}>{m.payment_submitted}</span>
       </td>
     </tr>
@@ -139,8 +136,7 @@ export default function StatsPage({ currentUser }) {
             <StatCard value={data.totals.contacted} label="Написали" color="#f59e0b" bg="#fffbeb" />
             <StatCard value={data.totals.replied} label="Ответили" color="#6d28d9" bg="#f5f3ff" />
             <StatCard value={data.totals.declined} label="Отказов" color="#dc2626" bg="#fef2f2" />
-            <StatCard value={data.totals.category_changed} label="Отсмотрено (категория)" color="#059669" bg="#f0fdf4" />
-            <StatCard value={data.totals.payment_submitted} label="Подано на оплату" color="#15803d" bg="#f0fdf4" />
+<StatCard value={data.totals.payment_submitted} label="Подано на оплату" color="#15803d" bg="#f0fdf4" />
           </div>
 
           {/* Таблица по менеджерам */}
@@ -162,7 +158,6 @@ export default function StatsPage({ currentUser }) {
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>Написали</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#6d28d9', textTransform: 'uppercase' }}>Ответили</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#dc2626', textTransform: 'uppercase' }}>Отказов</th>
-                      <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#059669', textTransform: 'uppercase' }}>Отсмотрено</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#15803d', textTransform: 'uppercase' }}>На оплату</th>
                     </tr>
                   </thead>
@@ -188,7 +183,6 @@ export default function StatsPage({ currentUser }) {
                       <th style={{ padding: '8px 14px', textAlign: 'center', fontSize: 11, color: '#f59e0b', textTransform: 'uppercase' }}>Написали</th>
                       <th style={{ padding: '8px 14px', textAlign: 'center', fontSize: 11, color: '#6d28d9', textTransform: 'uppercase' }}>Ответили</th>
                       <th style={{ padding: '8px 14px', textAlign: 'center', fontSize: 11, color: '#dc2626', textTransform: 'uppercase' }}>Отказов</th>
-                      <th style={{ padding: '8px 14px', textAlign: 'center', fontSize: 11, color: '#059669', textTransform: 'uppercase' }}>Отсмотрено</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -198,7 +192,6 @@ export default function StatsPage({ currentUser }) {
                         <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: d.contacted > 0 ? 600 : 400, color: d.contacted > 0 ? '#f59e0b' : '#9ba3be' }}>{d.contacted || '—'}</td>
                         <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: d.replied > 0 ? 600 : 400, color: d.replied > 0 ? '#6d28d9' : '#9ba3be' }}>{d.replied || '—'}</td>
                         <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: d.declined > 0 ? 600 : 400, color: d.declined > 0 ? '#dc2626' : '#9ba3be' }}>{d.declined || '—'}</td>
-                        <td style={{ padding: '8px 14px', textAlign: 'center', fontWeight: d.category_changed > 0 ? 600 : 400, color: d.category_changed > 0 ? '#059669' : '#9ba3be' }}>{d.category_changed || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
