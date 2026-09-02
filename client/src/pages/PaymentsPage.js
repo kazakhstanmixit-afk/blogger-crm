@@ -92,6 +92,7 @@ export default function PaymentsPage({ currentUser }) {
     submitted: payments.filter(p=>p.status==='submitted').length,
     paid: payments.filter(p=>p.status==='paid').length,
     paidAmount: payments.filter(p=>p.status==='paid').reduce((s,p)=>s+(p.amount||0),0),
+    totalAmount: payments.filter(p=>p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0),
   };
 
   return (
@@ -116,6 +117,7 @@ export default function PaymentsPage({ currentUser }) {
           <div className="stat-card"><div className="stat-value" style={{color:'#1e40af'}}>{stats.submitted}</div><div className="stat-label">Подано</div></div>
           <div className="stat-card"><div className="stat-value stat-green">{stats.paid}</div><div className="stat-label">Оплачено</div></div>
           <div className="stat-card"><div className="stat-value" style={{fontSize:18}}>{stats.paidAmount.toLocaleString('ru')} ₸</div><div className="stat-label">Выплачено</div></div>
+          <div className="stat-card"><div className="stat-value" style={{fontSize:16,color:'#4f6ef7'}}>{stats.totalAmount.toLocaleString('ru')} ₸</div><div className="stat-label">Итого к выплате</div></div>
         </div>
       )}
 
