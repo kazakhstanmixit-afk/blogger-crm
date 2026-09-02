@@ -17,6 +17,108 @@ const JWT_SECRET = process.env.JWT_SECRET || 'blogger-crm-secret-key-2024';
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// ── DASHBOARD ──────────────────────────────────────────
+app.get('/api/dashboard', auth, (req, res) => {
+  try {
+    const { date_from, date_to, period } = req.query;
+    const users = db.get('users').value();
+    const bloggers = db.get('bloggers').value();
+    const activity = db.get('activity').value();
+    const payments = db.get('payments').value() || [];
+
+    // Calculate date range
+    const now = new Date();
+    let from, to;
+    if (period === 'today') {
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    } else if (period === 'week') {
+      from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      to = now;
+    } else if (period === 'month') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = now;
+    } else if (date_from && date_to) {
+      from = new Date(date_from);
+      to = new Date(date_to + 'T23:59:59');
+    } else {
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    }
+
+    const filteredActivity = activity.filter(a => {
+      const d = new Date(a.created_at);
+      return d >= from && d <= to;
+    });
+
+    const filteredPayments = payments.filter(p => {
+      const d = new Date(p.created_at);
+      return d >= from && d <= to;
+    });
+
+    // Per manager stats
+    const managerStats = users.map(u => {
+      const myActivity = filteredActivity.filter(a => a.user_id === u.id);
+      const myPayments = filteredPayments.filter(p => p.manager_id === u.id);
+
+      // Count by action/status
+      const contacted = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('contacted')).length;
+      const replied = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('replied')).length;
+      const declined = myActivity.filter(a => a.action === 'status_changed' && (
+        a.details.includes('declined')
+      )).length;
+      const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
+      const paymentSubmitted = myPayments.length;
+
+      // Assigned to this manager (transferred status)
+      const assignedTotal = bloggers.filter(b => b.assigned_manager_id === u.id && b.status === 'transferred').length;
+      const assignedAll = bloggers.filter(b => b.assigned_manager_id === u.id).length;
+
+      return {
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        assigned_transferred: assignedTotal,
+        assigned_total: assignedAll,
+        contacted,
+        replied,
+        declined,
+        category_changed: categoryChanged,
+        payment_submitted: paymentSubmitted,
+        total_actions: myActivity.length,
+      };
+    }).filter(m => m.assigned_total > 0 || m.total_actions > 0);
+
+    // Daily breakdown for chart
+    const days = {};
+    filteredActivity.forEach(a => {
+      const day = a.created_at.slice(0, 10);
+      if (!days[day]) days[day] = { date: day, contacted: 0, replied: 0, declined: 0, category_changed: 0 };
+      if (a.action === 'status_changed' && a.details.includes('contacted')) days[day].contacted++;
+      if (a.action === 'status_changed' && a.details.includes('replied')) days[day].replied++;
+      if (a.action === 'status_changed' && a.details.includes('declined')) days[day].declined++;
+      if (a.action === 'category_changed') days[day].category_changed++;
+    });
+
+    res.json({
+      period: { from: from.toISOString(), to: to.toISOString() },
+      managers: managerStats,
+      daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
+      totals: {
+        contacted: managerStats.reduce((s,m) => s + m.contacted, 0),
+        replied: managerStats.reduce((s,m) => s + m.replied, 0),
+        declined: managerStats.reduce((s,m) => s + m.declined, 0),
+        category_changed: managerStats.reduce((s,m) => s + m.category_changed, 0),
+        payment_submitted: managerStats.reduce((s,m) => s + m.payment_submitted, 0),
+      }
+    });
+  } catch(e) {
+    console.error('Dashboard error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -807,6 +909,108 @@ app.get('/api/payments/export', auth, (req, res) => {
     res.send(buf);
   } catch(e) {
     console.error('Export payments error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// ── DASHBOARD ──────────────────────────────────────────
+app.get('/api/dashboard', auth, (req, res) => {
+  try {
+    const { date_from, date_to, period } = req.query;
+    const users = db.get('users').value();
+    const bloggers = db.get('bloggers').value();
+    const activity = db.get('activity').value();
+    const payments = db.get('payments').value() || [];
+
+    // Calculate date range
+    const now = new Date();
+    let from, to;
+    if (period === 'today') {
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    } else if (period === 'week') {
+      from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      to = now;
+    } else if (period === 'month') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = now;
+    } else if (date_from && date_to) {
+      from = new Date(date_from);
+      to = new Date(date_to + 'T23:59:59');
+    } else {
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    }
+
+    const filteredActivity = activity.filter(a => {
+      const d = new Date(a.created_at);
+      return d >= from && d <= to;
+    });
+
+    const filteredPayments = payments.filter(p => {
+      const d = new Date(p.created_at);
+      return d >= from && d <= to;
+    });
+
+    // Per manager stats
+    const managerStats = users.map(u => {
+      const myActivity = filteredActivity.filter(a => a.user_id === u.id);
+      const myPayments = filteredPayments.filter(p => p.manager_id === u.id);
+
+      // Count by action/status
+      const contacted = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('contacted')).length;
+      const replied = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('replied')).length;
+      const declined = myActivity.filter(a => a.action === 'status_changed' && (
+        a.details.includes('declined')
+      )).length;
+      const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
+      const paymentSubmitted = myPayments.length;
+
+      // Assigned to this manager (transferred status)
+      const assignedTotal = bloggers.filter(b => b.assigned_manager_id === u.id && b.status === 'transferred').length;
+      const assignedAll = bloggers.filter(b => b.assigned_manager_id === u.id).length;
+
+      return {
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        assigned_transferred: assignedTotal,
+        assigned_total: assignedAll,
+        contacted,
+        replied,
+        declined,
+        category_changed: categoryChanged,
+        payment_submitted: paymentSubmitted,
+        total_actions: myActivity.length,
+      };
+    }).filter(m => m.assigned_total > 0 || m.total_actions > 0);
+
+    // Daily breakdown for chart
+    const days = {};
+    filteredActivity.forEach(a => {
+      const day = a.created_at.slice(0, 10);
+      if (!days[day]) days[day] = { date: day, contacted: 0, replied: 0, declined: 0, category_changed: 0 };
+      if (a.action === 'status_changed' && a.details.includes('contacted')) days[day].contacted++;
+      if (a.action === 'status_changed' && a.details.includes('replied')) days[day].replied++;
+      if (a.action === 'status_changed' && a.details.includes('declined')) days[day].declined++;
+      if (a.action === 'category_changed') days[day].category_changed++;
+    });
+
+    res.json({
+      period: { from: from.toISOString(), to: to.toISOString() },
+      managers: managerStats,
+      daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
+      totals: {
+        contacted: managerStats.reduce((s,m) => s + m.contacted, 0),
+        replied: managerStats.reduce((s,m) => s + m.replied, 0),
+        declined: managerStats.reduce((s,m) => s + m.declined, 0),
+        category_changed: managerStats.reduce((s,m) => s + m.category_changed, 0),
+        payment_submitted: managerStats.reduce((s,m) => s + m.payment_submitted, 0),
+      }
+    });
+  } catch(e) {
+    console.error('Dashboard error:', e);
     res.status(500).json({ error: e.message });
   }
 });

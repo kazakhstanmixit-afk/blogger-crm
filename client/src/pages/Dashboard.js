@@ -33,7 +33,7 @@ export default function Dashboard({ user, onLogout }) {
       </aside>
       <main className="main-content">
         {page==='bloggers' && <BloggerList currentUser={user} />}
-        {page==='stats' && <StatsPage />}
+        {page==='stats' && <StatsPage currentUser={user} />}
         {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
