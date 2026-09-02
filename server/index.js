@@ -281,7 +281,7 @@ app.get('/api/bloggers/duplicates', auth, (req, res) => {
 
   function extractNick(url) {
     if (!url) return null;
-    return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+    return url.replace(/#.*$/, '').replace(/[?].*$/, '').replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','').trim() || null;
   }
 
   const groups = [];
@@ -341,7 +341,7 @@ app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
 
   function extractNick(url) {
     if (!url) return null;
-    return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+    return url.replace(/#.*$/, '').replace(/[?].*$/, '').replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','').trim() || null;
   }
 
   const newName = (name || '').toLowerCase().replace('@','').trim();
@@ -380,7 +380,7 @@ app.post('/api/bloggers', auth, (req, res) => {
   // Extract nickname from instagram URL
   function extractNick(url) {
     if (!url) return null;
-    const clean = url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','');
+    const clean = url.replace(/#.*$/, '').replace(/[?].*$/, '').replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','').trim();
     return clean || null;
   }
 
@@ -612,7 +612,7 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
         // Check for duplicates before adding
         function extractNick(url) {
           if (!url) return null;
-          return url.replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','') || null;
+          return url.replace(/#.*$/, '').replace(/[?].*$/, '').replace(/\/$/, '').split('/').pop().toLowerCase().replace('@','').trim() || null;
         }
         const newName = (name || '').toLowerCase().replace('@','').trim();
         const newInstNick = extractNick(data.instagram_url);
