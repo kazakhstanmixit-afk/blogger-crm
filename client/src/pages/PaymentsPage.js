@@ -87,59 +87,78 @@ export default function PaymentsPage({ currentUser }) {
   };
 
   const handleExportPDF = () => {
-    const filtered = statusFilter ? payments.filter(p => p.status === statusFilter) : payments;
+    const pending = payments.filter(p => p.status === 'pending');
     const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
     const date = new Date().toLocaleDateString('ru');
 
-    const rows = filtered.map((p, i) => `
+    const pendingAmount = payments.filter(p=>p.status==='pending').reduce((s,p)=>s+(p.amount||0),0);
+    const submittedAmount = payments.filter(p=>p.status==='submitted').reduce((s,p)=>s+(p.amount||0),0);
+    const paidAmount = payments.filter(p=>p.status==='paid').reduce((s,p)=>s+(p.amount||0),0);
+
+    const rows = pending.map((p, i) => `
       <tr>
         <td>${i+1}</td>
         <td>${p.blogger_name||'—'}</td>
         <td>${p.manager_name||'—'}</td>
         <td>${p.recipient_name}</td>
-        <td style="font-family:monospace">${p.iin}</td>
+        <td style="font-family:monospace;letter-spacing:1px">${p.iin}</td>
         <td>${p.payment_name||'—'}</td>
         <td>${p.kaspi||'—'}</td>
         <td style="text-align:right;font-weight:600">${(p.amount||0).toLocaleString('ru')} ₸</td>
-        <td>${LABELS[p.status]||p.status}</td>
         <td>${p.notes||'—'}</td>
       </tr>
     `).join('');
-
-    const totalAmount = filtered.filter(p=>p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0);
 
     const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Заявки на оплату</title>
+<title>Счёт на оплату</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
   h2 { font-size: 16px; margin-bottom: 4px; }
   .meta { color: #666; margin-bottom: 16px; font-size: 11px; }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
   th { background: #f0f2f7; padding: 7px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; border: 1px solid #ddd; }
   td { padding: 6px 8px; border: 1px solid #e2e6ef; vertical-align: top; }
   tr:nth-child(even) { background: #f8f9fb; }
-  .total { margin-top: 12px; text-align: right; font-size: 13px; }
-  .total strong { font-size: 16px; color: #4f6ef7; }
+  .summary { display: flex; gap: 24px; margin-top: 16px; border-top: 2px solid #e2e6ef; padding-top: 12px; }
+  .summary-item { text-align: center; }
+  .summary-item .label { font-size: 10px; text-transform: uppercase; color: #999; margin-bottom: 4px; }
+  .summary-item .value { font-size: 15px; font-weight: 700; }
+  .pending { color: #d97706; }
+  .submitted { color: #1e40af; }
+  .paid { color: #15803d; }
   @media print { body { margin: 10px; } }
 </style>
 </head>
 <body>
-<h2>Заявки на оплату</h2>
-<div class="meta">Дата: ${date} · Записей: ${filtered.length}${statusFilter ? ' · Статус: ' + LABELS[statusFilter] : ''}</div>
+<h2>Счёт на оплату — К оплате</h2>
+<div class="meta">Дата: ${date} · Записей: ${pending.length}</div>
 <table>
   <thead>
     <tr>
       <th>#</th><th>Блогер</th><th>Менеджер</th><th>ФИО получателя</th>
       <th>ИИН</th><th>ФИО при пополнении</th><th>Каспи</th>
-      <th>Сумма</th><th>Статус</th><th>Заметки</th>
+      <th>Сумма</th><th>Заметки</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>
-<div class="total">Итого к выплате: <strong>${totalAmount.toLocaleString('ru')} ₸</strong></div>
+<div class="summary">
+  <div class="summary-item">
+    <div class="label">К оплате (${payments.filter(p=>p.status==='pending').length} заявок)</div>
+    <div class="value pending">${pendingAmount.toLocaleString('ru')} ₸</div>
+  </div>
+  <div class="summary-item">
+    <div class="label">Подано (${payments.filter(p=>p.status==='submitted').length} заявок)</div>
+    <div class="value submitted">${submittedAmount.toLocaleString('ru')} ₸</div>
+  </div>
+  <div class="summary-item">
+    <div class="label">Оплачено (${payments.filter(p=>p.status==='paid').length} заявок)</div>
+    <div class="value paid">${paidAmount.toLocaleString('ru')} ₸</div>
+  </div>
+</div>
 </body>
 </html>`;
 
