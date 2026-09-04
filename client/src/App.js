@@ -14,6 +14,13 @@ export function apiFetch(path, options = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/';
+    }
+    return res;
   });
 }
 
