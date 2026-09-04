@@ -347,7 +347,7 @@ export default function BloggerList({ currentUser }) {
     if (excludeCategories.length) params.set('exclude_category', excludeCategories.join(','));
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
-    const res = await apiFetch('/api/bloggers?' + params);
+    if (res.status === 401) { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.reload(); return; }
     const json = await res.json();
     setBloggers(json.data || []);
     setTotal(json.total || 0);
@@ -355,7 +355,7 @@ export default function BloggerList({ currentUser }) {
     setLoading(false);
   }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories]);
 
-  useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(setUsers); apiFetch('/api/batches').then(r=>r.json()).then(setBatches); }, []);
+  useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(d=>setUsers(Array.isArray(d)?d:[])); apiFetch('/api/batches').then(r=>r.json()).then(d=>setBatches(Array.isArray(d)?d:[])); }, []);
 
   useEffect(() => {
     clearTimeout(timer.current);
