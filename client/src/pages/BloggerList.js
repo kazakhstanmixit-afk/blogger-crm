@@ -347,6 +347,7 @@ export default function BloggerList({ currentUser }) {
     if (excludeCategories.length) params.set('exclude_category', excludeCategories.join(','));
     params.set('page', p);
     params.set('limit', PAGE_SIZE);
+    const res = await apiFetch('/api/bloggers?' + params);
     if (res.status === 401) { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.reload(); return; }
     const json = await res.json();
     setBloggers(json.data || []);
