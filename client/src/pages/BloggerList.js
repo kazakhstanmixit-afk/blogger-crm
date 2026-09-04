@@ -1,5 +1,3 @@
-const CATEGORY_LABELS = { blogger: 'Блогер', visazhist: 'Визажист', expert: 'Эксперт' };
-const CATEGORY_COLORS = { blogger: '#4f6ef7', visazhist: '#db2777', expert: '#059669' };
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../App';
 import BloggerModal from '../components/BloggerModal';
@@ -43,6 +41,9 @@ const ALL_COLUMNS = [
 ];
 
 const PAGE_SIZE = 50;
+
+const CATEGORY_LABELS = { blogger: 'Блогер', visazhist: 'Визажист', expert: 'Эксперт' };
+const CATEGORY_COLORS = { blogger: '#4f6ef7', visazhist: '#db2777', expert: '#059669' };
 
 function cpvClass(v) { if(!v) return 'cpv-none'; if(v<=10) return 'cpv-great'; if(v<=30) return 'cpv-good'; return 'cpv-bad'; }
 function daysSince(iso) { if(!iso) return null; return Math.floor((Date.now()-new Date(iso))/(86400000)); }
