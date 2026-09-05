@@ -253,6 +253,16 @@ app.post('/api/users', auth, (req, res) => {
   db.get('users').push(user).write();
   res.json({ id: user.id, username, role });
 });
+
+app.put('/api/users/:id/password', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { password } = req.body;
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Пароль минимум 4 символа' });
+  const hashed = require('bcryptjs').hashSync(password, 10);
+  db.get('users').find({ id: req.params.id }).assign({ password: hashed }).write();
+  res.json({ ok: true });
+});
+
 app.delete('/api/users/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.get('users').remove({ id: req.params.id }).write();

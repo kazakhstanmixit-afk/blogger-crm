@@ -26,6 +26,25 @@ export default function UsersPage({ currentUser }) {
     fetchUsers();
   };
 
+  const [changePwdId, setChangePwdId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwdSuccess, setPwdSuccess] = useState('');
+  const [pwdError, setPwdError] = useState('');
+
+  const handleChangePassword = async (id) => {
+    if (!newPassword) return setPwdError('Введите новый пароль');
+    setPwdError(''); setPwdSuccess('');
+    const res = await apiFetch(`/api/users/${id}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password: newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) return setPwdError(data.error);
+    setPwdSuccess('Пароль изменён!');
+    setNewPassword('');
+    setTimeout(() => { setChangePwdId(null); setPwdSuccess(''); }, 2000);
+  };
+
   const handleDelete = async (id) => {
     if (id === currentUser.id) return alert('Нельзя удалить себя');
     if (!window.confirm('Удалить пользователя?')) return;
@@ -69,8 +88,25 @@ export default function UsersPage({ currentUser }) {
                 <strong>{u.username}</strong>
                 <div style={{fontSize:12, color:'var(--text3)'}}>{u.role === 'admin' ? 'Администратор' : 'Менеджер'}</div>
               </div>
-              {u.id !== currentUser.id && (
-                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u.id)}>Удалить</button>
+              <div style={{display:'flex',gap:6}}>
+                {u.role === 'admin' && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setChangePwdId(u.id); setNewPassword(''); setPwdError(''); setPwdSuccess(''); }}>🔑 Пароль</button>
+                )}
+                {u.id !== currentUser.id && (
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u.id)}>Удалить</button>
+                )}
+              </div>
+              {changePwdId === u.id && (
+                <div style={{marginTop:8,padding:'10px 12px',background:'#f8f9fb',borderRadius:8,border:'1px solid #e2e6ef'}}>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)}
+                      placeholder="Новый пароль" style={{flex:1,padding:'5px 10px',fontSize:12,border:'1px solid #e2e6ef',borderRadius:6,outline:'none'}} />
+                    <button className="btn btn-primary btn-sm" onClick={()=>handleChangePassword(u.id)}>Сохранить</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setChangePwdId(null)}>×</button>
+                  </div>
+                  {pwdError && <div style={{color:'#dc2626',fontSize:11,marginTop:4}}>{pwdError}</div>}
+                  {pwdSuccess && <div style={{color:'#16a34a',fontSize:11,marginTop:4}}>{pwdSuccess}</div>}
+                </div>
               )}
             </div>
           ))}
