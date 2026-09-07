@@ -276,6 +276,7 @@ export default function BloggerList({ currentUser }) {
   const [pendingBlogger, setPendingBlogger] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [showDistribute, setShowDistribute] = useState(false);
+  const [priceType, setPriceType] = useState("price_reels");
   const [showBulkStatus, setShowBulkStatus] = useState(false);
   const [visibleCols, setVisibleCols] = useState(new Set(ALL_COLUMNS.filter(c=>c.default).map(c=>c.key)));
   const timer = useRef(null);
@@ -410,6 +411,19 @@ export default function BloggerList({ currentUser }) {
     const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/export?' + p, { headers:{ Authorization:`Bearer ${token}` } });
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bloggers_export.xlsx'; a.click();
+  };
+
+  const handleExportSelected = async () => {
+    const token = localStorage.getItem('token');
+    const ids = Array.from(selected);
+    const selectedBloggers = bloggers.filter(b => ids.includes(b.id));
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/export/selected', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, price_type: priceType }),
+    });
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'selected_bloggers.xlsx'; a.click();
   };
 
   const handleTemplate = async () => {
@@ -563,13 +577,28 @@ export default function BloggerList({ currentUser }) {
         </div>
       )}
 
-      {selected.size > 0 && currentUser.role === 'admin' && (
-        <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'10px 16px',marginBottom:10,display:'flex',alignItems:'center',gap:12}}>
-          <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
-          <button className="btn btn-primary btn-sm" onClick={()=>setShowDistribute(true)}>👥 Распределить по менеджерам</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>setShowBulkStatus(true)}>🔄 Сменить статус</button>
-          <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить выбранных</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
+      {selected.size > 0 && (
+        <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'12px 16px',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
+            <select value={priceType} onChange={e=>setPriceType(e.target.value)}
+              style={{padding:'4px 8px',fontSize:12,border:'1px solid #c7d2fe',borderRadius:6,background:'#fff',color:'#3730a3'}}>
+              <option value="price_reels">Рилс</option>
+              <option value="price_tiktok">TikTok</option>
+              <option value="price_both">Рилс+ТТ</option>
+              <option value="price_stories">Сторис</option>
+            </select>
+            <span style={{fontSize:14,fontWeight:700,color:'#3730a3'}}>
+              Σ {bloggers.filter(b=>selected.has(b.id)).reduce((s,b)=>s+(b[priceType]||0),0).toLocaleString('ru')} ₸
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={handleExportSelected}>📊 Excel выбранных</button>
+            {currentUser.role === 'admin' && <>
+              <button className="btn btn-primary btn-sm" onClick={()=>setShowDistribute(true)}>👥 Распределить</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setShowBulkStatus(true)}>🔄 Статус</button>
+              <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить</button>
+            </>}
+            <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
+          </div>
         </div>
       )}
 

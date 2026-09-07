@@ -149,6 +149,51 @@ app.delete('/api/products/:id', auth, (req, res) => {
 });
 
 
+app.post('/api/export/selected', auth, (req, res) => {
+  const { ids, price_type } = req.body;
+  if (!ids?.length) return res.status(400).json({ error: 'Нет ID' });
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value().filter(b => ids.includes(b.id));
+  
+  const PRICE_LABELS = { price_reels: 'Рилс', price_tiktok: 'TikTok', price_both: 'Рилс+ТТ', price_stories: 'Сторис' };
+  const CPV_KEYS = { price_reels: 'cpv_reels', price_tiktok: 'cpv_tiktok', price_both: 'cpv_both', price_stories: 'cpv_stories' };
+  const priceLabel = PRICE_LABELS[price_type] || 'Цена';
+  const cpvKey = CPV_KEYS[price_type] || 'cpv_reels';
+  
+  const rows = bloggers.map(b => {
+    const mgr = users.find(u => u.id === b.assigned_manager_id);
+    return {
+      'Ник': b.name,
+      'Instagram': b.instagram_url || '',
+      'TikTok': b.tiktok_url || '',
+      'Категория': b.category || '',
+      'Подп. Инст': b.instagram_followers || '',
+      'Охват Инст': b.instagram_avg_reach || '',
+      'Подп. ТТ': b.tiktok_followers || '',
+      'Охват ТТ': b.tiktok_avg_reach || '',
+      [priceLabel + ' (₸)']: b[price_type] || '',
+      ['CPV ' + priceLabel]: b[cpvKey] || '',
+      'Менеджер': mgr?.username || '',
+      'Статус': b.status || '',
+      'Комментарий': b.last_comment || '',
+    };
+  });
+  
+  const total = bloggers.reduce((s, b) => s + (b[price_type] || 0), 0);
+  rows.push({});
+  rows.push({ 'Ник': 'ИТОГО', [priceLabel + ' (₸)']: total });
+  
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Array(13).fill({ wch: 20 });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Выбранные блогеры');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename="selected_bloggers.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -1091,6 +1136,51 @@ app.delete('/api/products/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.get('products').remove({ id: req.params.id }).write();
   res.json({ ok: true });
+});
+
+
+app.post('/api/export/selected', auth, (req, res) => {
+  const { ids, price_type } = req.body;
+  if (!ids?.length) return res.status(400).json({ error: 'Нет ID' });
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value().filter(b => ids.includes(b.id));
+  
+  const PRICE_LABELS = { price_reels: 'Рилс', price_tiktok: 'TikTok', price_both: 'Рилс+ТТ', price_stories: 'Сторис' };
+  const CPV_KEYS = { price_reels: 'cpv_reels', price_tiktok: 'cpv_tiktok', price_both: 'cpv_both', price_stories: 'cpv_stories' };
+  const priceLabel = PRICE_LABELS[price_type] || 'Цена';
+  const cpvKey = CPV_KEYS[price_type] || 'cpv_reels';
+  
+  const rows = bloggers.map(b => {
+    const mgr = users.find(u => u.id === b.assigned_manager_id);
+    return {
+      'Ник': b.name,
+      'Instagram': b.instagram_url || '',
+      'TikTok': b.tiktok_url || '',
+      'Категория': b.category || '',
+      'Подп. Инст': b.instagram_followers || '',
+      'Охват Инст': b.instagram_avg_reach || '',
+      'Подп. ТТ': b.tiktok_followers || '',
+      'Охват ТТ': b.tiktok_avg_reach || '',
+      [priceLabel + ' (₸)']: b[price_type] || '',
+      ['CPV ' + priceLabel]: b[cpvKey] || '',
+      'Менеджер': mgr?.username || '',
+      'Статус': b.status || '',
+      'Комментарий': b.last_comment || '',
+    };
+  });
+  
+  const total = bloggers.reduce((s, b) => s + (b[price_type] || 0), 0);
+  rows.push({});
+  rows.push({ 'Ник': 'ИТОГО', [priceLabel + ' (₸)']: total });
+  
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Array(13).fill({ wch: 20 });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Выбранные блогеры');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename="selected_bloggers.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
 });
 
 
