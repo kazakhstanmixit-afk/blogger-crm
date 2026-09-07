@@ -953,6 +953,47 @@ app.put('/api/payments/:id', auth, (req, res) => {
   }
 });
 
+
+app.post('/api/payments/export-selected', auth, (req, res) => {
+  const { ids } = req.body;
+  if (!ids?.length) return res.status(400).json({ error: 'Нет ID' });
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value();
+  const payments = (db.get('payments').value() || []).filter(p => ids.includes(p.id));
+  const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+  
+  const rows = payments.map((p,i) => {
+    const mgr = users.find(u => u.id === p.manager_id);
+    const blogger = bloggers.find(b => b.id === p.blogger_id);
+    return {
+      '№': i+1,
+      'Дата': new Date(p.created_at).toLocaleDateString('ru'),
+      'Менеджер': mgr?.username||'',
+      'Блогер': blogger?.name||'',
+      'ФИО получателя': p.recipient_name,
+      'ИИН': p.iin,
+      'ФИО при пополнении': p.payment_name||'',
+      'Номер Каспи': p.kaspi||'',
+      'Сумма (₸)': p.amount||0,
+      'Статус': LABELS[p.status]||p.status,
+      'Заметки': p.notes||'',
+    };
+  });
+  
+  const total = payments.reduce((s,p) => s+(p.amount||0), 0);
+  rows.push({});
+  rows.push({'№':'ИТОГО', 'Сумма (₸)': total});
+  
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Array(11).fill({wch:22});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Выбранные заявки');
+  const buf = XLSX.write(wb, {type:'buffer', bookType:'xlsx'});
+  res.setHeader('Content-Disposition', 'attachment; filename="selected_payments.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
 app.delete('/api/payments/:id', auth, (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });

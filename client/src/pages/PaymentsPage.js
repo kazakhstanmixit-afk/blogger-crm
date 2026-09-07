@@ -77,6 +77,36 @@ export default function PaymentsPage({ currentUser }) {
     fetchPayments();
   };
 
+  const handleExportSelected = async () => {
+    const token = localStorage.getItem('token');
+    const selectedPayments = payments.filter(p => selected.has(p.id));
+    const total = selectedPayments.reduce((s,p) => s+(p.amount||0), 0);
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const rows = selectedPayments.map((p,i) => ({
+      '№': i+1,
+      'Дата': new Date(p.created_at).toLocaleDateString('ru'),
+      'Менеджер': p.manager_name||'',
+      'Блогер': p.blogger_name||'',
+      'ФИО получателя': p.recipient_name,
+      'ИИН': p.iin,
+      'ФИО при пополнении': p.payment_name||'',
+      'Номер Каспи': p.kaspi||'',
+      'Сумма (₸)': p.amount||0,
+      'Статус': LABELS[p.status]||p.status,
+      'Заметки': p.notes||'',
+    }));
+    rows.push({});
+    rows.push({'№':'ИТОГО', 'Сумма (₸)': total});
+
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/payments/export-selected', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selected) }),
+    });
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'selected_payments.xlsx'; a.click();
+  };
+
   const handleExport = async () => {
     const token = localStorage.getItem('token');
     const p = new URLSearchParams();
@@ -223,14 +253,22 @@ export default function PaymentsPage({ currentUser }) {
         </select>
       </div>
 
-      {selected.size > 0 && currentUser.role==='admin' && (
-        <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'10px 16px',marginBottom:10,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
-          <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1e40af',border:'1px solid #bfdbfe'}} onClick={()=>handleBulkStatus('submitted')}>Подано</button>
-          <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleBulkStatus('paid')}>Оплачено</button>
-          <button className="btn btn-sm" style={{background:'#fee2e2',color:'#991b1b',border:'1px solid #fecaca'}} onClick={()=>handleBulkStatus('rejected')}>Отклонить</button>
-          <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
+      {selected.size > 0 && (
+        <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'12px 16px',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <span style={{fontSize:13,fontWeight:500,color:'#3730a3'}}>Выбрано: {selected.size}</span>
+            <span style={{fontSize:14,fontWeight:700,color:'#3730a3'}}>
+              Σ {payments.filter(p=>selected.has(p.id)).reduce((s,p)=>s+(p.amount||0),0).toLocaleString('ru')} ₸
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={handleExportSelected}>📊 Excel выбранных</button>
+            {currentUser.role==='admin' && <>
+              <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1e40af',border:'1px solid #bfdbfe'}} onClick={()=>handleBulkStatus('submitted')}>Подано</button>
+              <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleBulkStatus('paid')}>Оплачено</button>
+              <button className="btn btn-sm" style={{background:'#fee2e2',color:'#991b1b',border:'1px solid #fecaca'}} onClick={()=>handleBulkStatus('rejected')}>Отклонить</button>
+              <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить</button>
+            </>}
+            <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
+          </div>
         </div>
       )}
 
