@@ -68,7 +68,7 @@ app.get('/api/dashboard', auth, (req, res) => {
         a.details.includes('declined')
       )).length;
       const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
-      const paymentSubmitted = myPayments.length;
+      const paymentSubmitted = myPayments.length + myActivity.filter(a => a.action === 'status_changed' && (a.details.includes('payment_pending') || a.details.includes('payment_submitted') || a.details.includes('paid'))).length;
 
       // Assigned to this manager (transferred status)
       const assignedTotal = bloggers.filter(b => b.assigned_manager_id === u.id && b.status === 'transferred').length;
@@ -542,7 +542,8 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
       if (!existing.contacted_at) updates.contacted_at = new Date().toISOString();
     }
     if (updates.status === 'in_work' || updates.status === 'transferred') updates.in_work = true;
-    if (['new','contacted','replied','declined','declined_bad'].includes(updates.status)) updates.in_work = false;
+    if (['new','contacted','replied','declined','declined_bad','declined_reach','declined_shop'].includes(updates.status)) updates.in_work = false;
+    if (['payment_pending','payment_submitted','paid'].includes(updates.status)) updates.in_work = true;
     logActivity(req.params.id, req.user.id, 'status_changed', `Статус → ${updates.status}`);
   }
   db.get('bloggers').find({ id: req.params.id }).assign(updates).write();
@@ -1099,7 +1100,7 @@ app.get('/api/dashboard', auth, (req, res) => {
         a.details.includes('declined')
       )).length;
       const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
-      const paymentSubmitted = myPayments.length;
+      const paymentSubmitted = myPayments.length + myActivity.filter(a => a.action === 'status_changed' && (a.details.includes('payment_pending') || a.details.includes('payment_submitted') || a.details.includes('paid'))).length;
 
       // Assigned to this manager (transferred status)
       const assignedTotal = bloggers.filter(b => b.assigned_manager_id === u.id && b.status === 'transferred').length;
