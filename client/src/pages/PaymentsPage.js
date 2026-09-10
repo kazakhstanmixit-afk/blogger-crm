@@ -18,6 +18,19 @@ function StatusBadge({ status }) {
   );
 }
 
+function ApprovalInput({ paymentId, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+  if (!editing) return <span onClick={()=>setEditing(true)} style={{color:'#9ba3be',fontSize:11,cursor:'pointer',borderBottom:'1px dashed #c8cfe0'}}>+ ссылка</span>;
+  return (
+    <div style={{display:'flex',gap:4}}>
+      <input value={val} onChange={e=>setVal(e.target.value)} placeholder="https://..." style={{width:120,fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none'}} />
+      <button className="btn btn-primary btn-sm" onClick={async()=>{await apiFetch(`/api/payments/${paymentId}`,{method:'PUT',body:JSON.stringify({approval_url:val})});setEditing(false);onSave();}}>✓</button>
+      <button className="btn btn-secondary btn-sm" onClick={()=>setEditing(false)}>×</button>
+    </div>
+  );
+}
+
 export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -284,7 +297,10 @@ export default function PaymentsPage({ currentUser }) {
               <th>ИИН</th>
               <th>ФИО при пополнении</th>
               <th>Каспи</th>
+              <th>Видео ₸</th>
+              <th>Товар ₸</th>
               <th>Сумма</th>
+              <th>Согласование</th>
               <th>Статус</th>
               <th>Заметки</th>
               {currentUser.role==='admin' && <th>Действия</th>}
@@ -305,6 +321,8 @@ export default function PaymentsPage({ currentUser }) {
                 <td style={{fontFamily:'monospace',letterSpacing:1,fontSize:12}}>{p.iin}</td>
                 <td>{p.payment_name||'—'}</td>
                 <td style={{fontSize:12}}>{p.kaspi||'—'}</td>
+                <td style={{fontSize:12}}>{p.amount_video ? (p.amount_video).toLocaleString('ru')+' ₸' : '—'}</td>
+                <td style={{fontSize:12}}>{p.amount_product ? (p.amount_product).toLocaleString('ru')+' ₸' : '—'}</td>
                 <td style={{fontWeight:600,whiteSpace:'nowrap'}}>
                   {editingId===p.id ? (
                     <div style={{display:'flex',gap:4,alignItems:'center'}}>
@@ -323,6 +341,7 @@ export default function PaymentsPage({ currentUser }) {
                 </td>
                 <td><StatusBadge status={p.status} /></td>
                 <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
+                <td onClick={e=>e.stopPropagation()}>{p.approval_url ? <a href={p.approval_url} target='_blank' rel='noreferrer' style={{color:'#4f6ef7',fontSize:11}}>🔗 Открыть</a> : currentUser.role==='admin' ? <ApprovalInput paymentId={p.id} onSave={fetchPayments}/> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
                 {currentUser.role==='admin' && (
                   <td>
                     <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>

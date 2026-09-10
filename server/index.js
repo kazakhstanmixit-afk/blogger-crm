@@ -888,7 +888,7 @@ app.get('/api/payments', auth, (req, res) => {
 app.post('/api/payments', auth, (req, res) => {
   try {
     console.log('PAYMENT POST body:', JSON.stringify(req.body));
-    const { blogger_id, recipient_name, iin, payment_name, amount, notes, kaspi } = req.body;
+    const { blogger_id, recipient_name, iin, payment_name, amount, amount_video, amount_product, notes, kaspi, approval_url } = req.body;
 
     if (!blogger_id) return res.status(400).json({ error: 'Не указан блогер' });
     if (!recipient_name) return res.status(400).json({ error: 'Укажите ФИО получателя' });
@@ -945,6 +945,10 @@ app.put('/api/payments/:id', auth, (req, res) => {
     if (amount !== undefined) updates.amount = Number(amount);
     if (notes !== undefined) updates.notes = notes;
     if (kaspi !== undefined) updates.kaspi = kaspi;
+  if (req.body.approval_url !== undefined) updates.approval_url = req.body.approval_url;
+  if (req.body.amount_video !== undefined) updates.amount_video = req.body.amount_video ? Number(req.body.amount_video) : null;
+  if (req.body.amount_product !== undefined) updates.amount_product = req.body.amount_product ? Number(req.body.amount_product) : null;
+  if (updates.amount_video !== undefined || updates.amount_product !== undefined) { const v = updates.amount_video ?? existing.amount_video ?? 0; const p = updates.amount_product ?? existing.amount_product ?? 0; updates.amount = Number(v) + Number(p) || existing.amount || 0; }
 
     db.get('payments').find({ id: req.params.id }).assign(updates).write();
     res.json({ ok: true });

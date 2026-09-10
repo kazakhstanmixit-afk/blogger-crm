@@ -219,3 +219,6 @@ tbody tr.warning-row td.sticky { background:#fffbeb; }
 .status-declined_shop { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
 .table-wrap table tbody td { overflow: visible; }
 .table-wrap table tbody tr { overflow: visible; }
+
+.status-product_assigned { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.status-declined_rf { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }

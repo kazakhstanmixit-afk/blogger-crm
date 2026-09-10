@@ -8,6 +8,9 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
     payment_name: '',
     amount: '',
     kaspi: '',
+    amount_video: '',
+    amount_product: '',
+    approval_url: '',
     notes: '',
   });
   const [saving, setSaving] = useState(false);
@@ -146,6 +149,14 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
             )}
           </div>
 
+          <div className="field">
+            <label>Стоимость видео (₸)</label>
+            <input type="number" value={form.amount_video} onChange={e=>{set('amount_video',e.target.value);set('amount', String(Number(e.target.value||0)+Number(form.amount_product||0)));}} placeholder="0" />
+          </div>
+          <div className="field">
+            <label>Стоимость товара (₸)</label>
+            <input type="number" value={form.amount_product} onChange={e=>{set('amount_product',e.target.value);set('amount', String(Number(form.amount_video||0)+Number(e.target.value||0)));}} placeholder="0" />
+          </div>
           <div className="field">
             <label>Номер Каспи <span style={{ color: '#9ba3be', fontSize: 10 }}>(необязательно)</span></label>
             <input
