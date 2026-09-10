@@ -436,7 +436,6 @@ export default function PaymentsPage({ currentUser }) {
               <th>Ссылка на согласование</th>
               <th>Чек видео</th>
               <th>Чек товара</th>
-              <th>Заметки</th>
               {currentUser.role==='admin' && <th>Действия</th>}
             </tr>
           </thead>
