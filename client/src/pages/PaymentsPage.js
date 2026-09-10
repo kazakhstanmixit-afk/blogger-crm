@@ -126,6 +126,78 @@ export default function PaymentsPage({ currentUser }) {
     fetchPayments();
   };
 
+  const handlePDFReport = () => {
+    const filtered = statusFilter ? payments.filter(p => p.status === statusFilter) : payments;
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const date = new Date().toLocaleDateString('ru');
+
+    const rows = filtered.map((p, i) => {
+      const receipts = p.receipts || [];
+      const receiptImgs = receipts.map(r => `<img src="${r.url}" style="width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid #ddd;margin:2px;" />`).join('');
+      return `<tr>
+        <td style="text-align:center">${i+1}</td>
+        <td><strong>${p.blogger_name||'—'}</strong><br/><span style="color:#666;font-size:10px">${p.manager_name||''}</span></td>
+        <td>${p.recipient_name}<br/><span style="font-family:monospace;font-size:10px">${p.iin}</span></td>
+        <td>${p.kaspi||'—'}</td>
+        <td style="text-align:right">${p.amount_video ? (p.amount_video).toLocaleString('ru')+' ₸' : '—'}</td>
+        <td style="text-align:right">${p.amount_product ? (p.amount_product).toLocaleString('ru')+' ₸' : '—'}</td>
+        <td style="text-align:right;font-weight:700">${(p.amount||0).toLocaleString('ru')} ₸</td>
+        <td>${p.approval_url ? `<a href="${p.approval_url}" style="color:#4f6ef7;font-size:10px">🔗 ссылка</a>` : '—'}</td>
+        <td>${receiptImgs || '—'}</td>
+        <td>${LABELS[p.status]||p.status}</td>
+      </tr>`;
+    }).join('');
+
+    const totalAmount = filtered.reduce((s,p) => s+(p.amount||0), 0);
+    const totalVideo = filtered.reduce((s,p) => s+(p.amount_video||0), 0);
+    const totalProduct = filtered.reduce((s,p) => s+(p.amount_product||0), 0);
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Отчёт по оплатам</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 15px; }
+  h2 { font-size: 15px; margin-bottom: 4px; }
+  .meta { color: #666; margin-bottom: 12px; font-size: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f0f2f7; padding: 6px 7px; text-align: left; font-size: 9px; text-transform: uppercase; border: 1px solid #ddd; }
+  td { padding: 6px 7px; border: 1px solid #e2e6ef; vertical-align: middle; }
+  tr:nth-child(even) { background: #f8f9fb; }
+  .totals { margin-top: 12px; display: flex; gap: 20px; border-top: 2px solid #e2e6ef; padding-top: 10px; }
+  .total-item .label { font-size: 9px; text-transform: uppercase; color: #999; }
+  .total-item .value { font-size: 14px; font-weight: 700; }
+  @media print { body { margin: 8px; } }
+</style>
+</head>
+<body>
+<h2>Отчёт по оплатам для бухгалтерии</h2>
+<div class="meta">Дата: ${date} · Записей: ${filtered.length}${statusFilter ? ' · ' + LABELS[statusFilter] : ''}</div>
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Блогер / Менеджер</th><th>ФИО / ИИН</th><th>Каспи</th>
+      <th>Видео ₸</th><th>Товар ₸</th><th>Итого ₸</th><th>Согласование</th><th>Чеки</th><th>Статус</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="totals">
+  <div class="total-item"><div class="label">Видео</div><div class="value" style="color:#1e40af">${totalVideo.toLocaleString('ru')} ₸</div></div>
+  <div class="total-item"><div class="label">Товары</div><div class="value" style="color:#6d28d9">${totalProduct.toLocaleString('ru')} ₸</div></div>
+  <div class="total-item"><div class="label">Итого</div><div class="value" style="color:#15803d">${totalAmount.toLocaleString('ru')} ₸</div></div>
+</div>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 800);
+  };
+
   const handleExportSelected = async () => {
     const token = localStorage.getItem('token');
     const selectedPayments = payments.filter(p => selected.has(p.id));
@@ -279,6 +351,7 @@ export default function PaymentsPage({ currentUser }) {
         </div>
         <div style={{display:'flex',gap:8}}>
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExport}>📊 Excel</button>}
+          {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handlePDFReport}>📄 Отчёт PDF</button>}
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>📄 PDF</button>}
         </div>
       </div>
