@@ -67,19 +67,20 @@ function StatusDropdown({ value, onChange }) {
     e.stopPropagation();
     const rect = ref.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const dropH = Math.min(STATUS_OPTIONS.length * 34, 320);
-    if (spaceBelow < dropH) {
-      setPos({ top: rect.top + window.scrollY - dropH - 4, left: rect.left + window.scrollX });
-    } else {
-      setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX });
-    }
+    const dropH = Math.min(STATUS_OPTIONS.length * 34, 360);
+    const openUp = spaceBelow < dropH + 10;
+    setPos({
+      top: openUp ? rect.top - dropH - 4 : rect.bottom + 4,
+      left: rect.left,
+      openUp
+    });
     setOpen(!open);
   };
   return (
     <div ref={ref} style={{position:'relative',display:'inline-block'}}>
       <span className={`status-badge status-${value}`} onClick={handleClick} style={{cursor:'pointer',userSelect:'none'}}>{current.label} ▾</span>
       {open && (
-        <div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.15)',minWidth:200,maxHeight:320,overflowY:'auto'}}>
+        <div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:99999,background:'#fff',border:'1px solid #e2e6ef',borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,0.15)',minWidth:200,maxHeight:360,overflowY:'auto'}}>
           {STATUS_OPTIONS.map(s => (
             <div key={s.value} onClick={e=>{e.stopPropagation();onChange(s.value);setOpen(false);}}
               style={{padding:'7px 12px',cursor:'pointer',fontSize:11,color:s.color,fontWeight:500,borderBottom:'1px solid #f0f2f7',whiteSpace:'nowrap'}}
