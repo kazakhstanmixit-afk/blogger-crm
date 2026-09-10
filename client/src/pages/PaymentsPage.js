@@ -21,7 +21,7 @@ function StatusBadge({ status }) {
 function ApprovalInput({ paymentId, onSave }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
-  if (!editing) return <span onClick={()=>setEditing(true)} style={{color:'#9ba3be',fontSize:11,cursor:'pointer',borderBottom:'1px dashed #c8cfe0'}}>+ ссылка</span>;
+  if (!editing) return <span onClick={()=>setEditing(true)} style={{color:'#9ba3be',fontSize:11,cursor:'pointer',borderBottom:'1px dashed #c8cfe0'}}>+ добавить</span>;
   return (
     <div style={{display:'flex',gap:4}}>
       <input value={val} onChange={e=>setVal(e.target.value)} placeholder="https://..." style={{width:120,fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none'}} />
@@ -33,6 +33,7 @@ function ApprovalInput({ paymentId, onSave }) {
 
 function ReceiptCell({ payment, type, onUpdate }) {
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(null);
   const fileRef = React.useRef();
   const key = type === 'video' ? 'receipts_video' : type === 'product' ? 'receipts_product' : 'receipts';
   const receipts = payment[key] || [];
@@ -55,12 +56,31 @@ function ReceiptCell({ payment, type, onUpdate }) {
     e.target.value = '';
   };
 
+  const handleDelete = async (public_id) => {
+    if (!window.confirm('Удалить чек?')) return;
+    setDeleting(public_id);
+    const token = localStorage.getItem('token');
+    await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_id, receipt_type: type }),
+    });
+    setDeleting(null);
+    onUpdate();
+  };
+
   return (
     <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
       {receipts.map((r,i) => (
-        <a key={i} href={r.url} target="_blank" rel="noreferrer">
-          <img src={r.url} alt="чек" style={{width:44,height:44,objectFit:'cover',borderRadius:4,border:'1px solid #e2e6ef',cursor:'pointer'}} />
-        </a>
+        <div key={i} style={{position:'relative',display:'inline-block'}}>
+          <a href={r.url} target="_blank" rel="noreferrer">
+            <img src={r.url} alt="чек" style={{width:44,height:44,objectFit:'cover',borderRadius:4,border:'1px solid #e2e6ef',cursor:'pointer',opacity:deleting===r.public_id?0.5:1}} />
+          </a>
+          <span onClick={()=>handleDelete(r.public_id)}
+            style={{position:'absolute',top:-4,right:-4,background:'#dc2626',color:'#fff',borderRadius:'50%',width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,cursor:'pointer',lineHeight:1}}>
+            ×
+          </span>
+        </div>
       ))}
       <label style={{cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',width:44,height:44,borderRadius:4,border:'2px dashed #c7d2fe',background:'#eef1fe',color:'#4f6ef7',fontSize:18,flexShrink:0}}>
         {uploading ? '⏳' : '+'}
@@ -412,10 +432,10 @@ export default function PaymentsPage({ currentUser }) {
               <th>Видео ₸</th>
               <th>Товар ₸</th>
               <th>Сумма</th>
-              <th>Согласование</th>
+              <th>Статус</th>
+              <th>Ссылка на согласование</th>
               <th>Чек видео</th>
               <th>Чек товара</th>
-              <th>Статус</th>
               <th>Заметки</th>
               {currentUser.role==='admin' && <th>Действия</th>}
             </tr>

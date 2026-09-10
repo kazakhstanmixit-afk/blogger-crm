@@ -1038,11 +1038,12 @@ app.post('/api/payments/:id/receipt', auth, (req, res) => {
 });
 
 app.delete('/api/payments/:id/receipt', auth, (req, res) => {
-  const { public_id } = req.body;
+  const { public_id, receipt_type } = req.body;
   const existing = db.get('payments').find({ id: req.params.id }).value();
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  const receipts = (existing.receipts || []).filter(r => r.public_id !== public_id);
-  db.get('payments').find({ id: req.params.id }).assign({ receipts }).write();
+  const key = receipt_type === 'video' ? 'receipts_video' : receipt_type === 'product' ? 'receipts_product' : 'receipts';
+  const receipts = (existing[key] || []).filter(r => r.public_id !== public_id);
+  db.get('payments').find({ id: req.params.id }).assign({ [key]: receipts }).write();
   res.json({ ok: true });
 });
 
