@@ -320,7 +320,7 @@ app.get('/api/bloggers', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('bloggers').value();
 
-  if (search) { const s = search.toLowerCase(); list = list.filter(b => (b.name||'').toLowerCase().includes(s) || (b.instagram_url||'').toLowerCase().includes(s) || (b.tiktok_url||'').toLowerCase().includes(s)); }
+  if (search) { const s = search.toLowerCase().replace('@',''); list = list.filter(b => { const instNick = (b.instagram_url||'').replace(/#.*$/,'').replace(/[?].*$/,'').split('/').pop().toLowerCase(); const ttNick = (b.tiktok_url||'').replace(/#.*$/,'').replace(/[?].*$/,'').split('/').pop().toLowerCase().replace('@',''); return (b.name||'').toLowerCase().replace('@','').includes(s) || (b.instagram_url||'').toLowerCase().includes(s) || (b.tiktok_url||'').toLowerCase().includes(s) || instNick.includes(s) || ttNick.includes(s) || (b.last_comment||'').toLowerCase().includes(s); }); }
   if (status) list = list.filter(b => b.status === status);
   if (manager) list = list.filter(b => b.assigned_manager_id === manager);
   if (in_work === '1') list = list.filter(b => b.in_work === true);
