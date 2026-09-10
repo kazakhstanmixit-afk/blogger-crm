@@ -3,6 +3,14 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+cloudinary.config({
+  cloud_name: 'rpedxzyp',
+  api_key: '327183645456621',
+  api_secret: '1N8bOnHoWWWYaq6VSgRLzlNOLQg',
+});
+
+
 const { parse } = require('csv-parse/sync');
 const XLSX = require('xlsx');
 const path = require('path');
@@ -997,6 +1005,42 @@ app.post('/api/payments/export-selected', auth, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="selected_payments.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);
+});
+
+
+// Upload receipt photo
+app.post('/api/payments/:id/receipt', auth, (req, res) => {
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/receipts', resource_type: 'image' },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('payments').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const receipts = existing.receipts || [];
+      receipts.push({ url: result.secure_url, public_id: result.public_id, uploaded_at: new Date().toISOString() });
+      db.get('payments').find({ id: req.params.id }).assign({ receipts }).write();
+      res.json({ url: result.secure_url });
+    } catch(e) {
+      console.error('Cloudinary error:', e);
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/payments/:id/receipt', auth, (req, res) => {
+  const { public_id } = req.body;
+  const existing = db.get('payments').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const receipts = (existing.receipts || []).filter(r => r.public_id !== public_id);
+  db.get('payments').find({ id: req.params.id }).assign({ receipts }).write();
+  res.json({ ok: true });
 });
 
 app.delete('/api/payments/:id', auth, (req, res) => {

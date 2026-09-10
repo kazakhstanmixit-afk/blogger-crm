@@ -31,6 +31,42 @@ function ApprovalInput({ paymentId, onSave }) {
   );
 }
 
+function ReceiptCell({ payment, onUpdate }) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = React.useRef();
+  const receipts = payment.receipts || [];
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: fd,
+    });
+    setUploading(false);
+    if (res.ok) onUpdate();
+  };
+
+  return (
+    <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
+      {receipts.map((r,i) => (
+        <a key={i} href={r.url} target="_blank" rel="noreferrer">
+          <img src={r.url} alt="чек" style={{width:40,height:40,objectFit:'cover',borderRadius:4,border:'1px solid #e2e6ef',cursor:'pointer'}} />
+        </a>
+      ))}
+      <label style={{cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',width:40,height:40,borderRadius:4,border:'2px dashed #c7d2fe',background:'#eef1fe',color:'#4f6ef7',fontSize:18}}>
+        {uploading ? '...' : '+'}
+        <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleUpload} />
+      </label>
+    </div>
+  );
+}
+
 export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -301,6 +337,7 @@ export default function PaymentsPage({ currentUser }) {
               <th>Товар ₸</th>
               <th>Сумма</th>
               <th>Согласование</th>
+              <th>Чеки</th>
               <th>Статус</th>
               <th>Заметки</th>
               {currentUser.role==='admin' && <th>Действия</th>}
@@ -342,6 +379,7 @@ export default function PaymentsPage({ currentUser }) {
                 <td><StatusBadge status={p.status} /></td>
                 <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
                 <td onClick={e=>e.stopPropagation()}>{p.approval_url ? <a href={p.approval_url} target='_blank' rel='noreferrer' style={{color:'#4f6ef7',fontSize:11}}>🔗 Открыть</a> : currentUser.role==='admin' ? <ApprovalInput paymentId={p.id} onSave={fetchPayments}/> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
+                <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} onUpdate={fetchPayments} /></td>
                 {currentUser.role==='admin' && (
                   <td>
                     <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
