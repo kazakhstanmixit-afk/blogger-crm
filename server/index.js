@@ -1015,17 +1015,20 @@ app.post('/api/payments/:id/receipt', auth, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Нет файла' });
     try {
+      const receipt_type = req.body.receipt_type || 'general';
+      const folder = receipt_type === 'video' ? 'blogger-crm/receipts-video' : receipt_type === 'product' ? 'blogger-crm/receipts-product' : 'blogger-crm/receipts';
       const result = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_stream(
-          { folder: 'blogger-crm/receipts', resource_type: 'image' },
+          { folder, resource_type: 'image' },
           (error, result) => error ? reject(error) : resolve(result)
         ).end(req.file.buffer);
       });
       const existing = db.get('payments').find({ id: req.params.id }).value();
       if (!existing) return res.status(404).json({ error: 'Not found' });
-      const receipts = existing.receipts || [];
+      const key = receipt_type === 'video' ? 'receipts_video' : receipt_type === 'product' ? 'receipts_product' : 'receipts';
+      const receipts = existing[key] || [];
       receipts.push({ url: result.secure_url, public_id: result.public_id, uploaded_at: new Date().toISOString() });
-      db.get('payments').find({ id: req.params.id }).assign({ receipts }).write();
+      db.get('payments').find({ id: req.params.id }).assign({ [key]: receipts }).write();
       res.json({ url: result.secure_url });
     } catch(e) {
       console.error('Cloudinary error:', e);
