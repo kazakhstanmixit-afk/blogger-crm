@@ -105,6 +105,8 @@ function CategoryDropdown({ value, onChange }) {
     { value: 'blogger', label: 'Блогер', color: '#4f6ef7' },
     { value: 'visazhist', label: 'Визажист', color: '#db2777' },
     { value: 'expert', label: 'Эксперт', color: '#059669' },
+    { value: 'millionik', label: 'Миллионик', color: '#7c3aed' },
+    { value: 'barter', label: 'Бартер', color: '#d97706' },
   ];
   const current = options.find(o => o.value === (value||'')) || options[0];
   useEffect(() => {
