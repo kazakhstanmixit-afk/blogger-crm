@@ -346,6 +346,11 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (req.query.exclude_category) { const excl = req.query.exclude_category.split(','); list = list.filter(b => !excl.includes(b.category)); }
   if (followers_min) { const m = parseInt(followers_min); list = list.filter(b => (b.instagram_followers||0) >= m || (b.tiktok_followers||0) >= m); }
   if (followers_max) { const m = parseInt(followers_max); list = list.filter(b => (b.instagram_followers||0) <= m && (b.tiktok_followers||0) <= m); }
+  if (reels_min) list = list.filter(b => b.price_reels && b.price_reels >= parseInt(reels_min));
+  if (reels_max) list = list.filter(b => b.price_reels && b.price_reels <= parseInt(reels_max));
+  if (tt_min) list = list.filter(b => b.price_tiktok && b.price_tiktok >= parseInt(tt_min));
+  if (tt_max) list = list.filter(b => b.price_tiktok && b.price_tiktok <= parseInt(tt_max));
+  if (req.query.no_price === "1") list = list.filter(b => !b.price_reels && !b.price_tiktok && !b.price_both);
 
   if (sort === 'cpv_asc') list = list.sort((a,b) => Math.min(a.cpv_reels||9999,a.cpv_tiktok||9999,a.cpv_both||9999) - Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999));
   else if (sort === 'cpv_desc') list = list.sort((a,b) => Math.min(b.cpv_reels||0,b.cpv_tiktok||0,b.cpv_both||0) - Math.min(a.cpv_reels||0,a.cpv_tiktok||0,a.cpv_both||0));
