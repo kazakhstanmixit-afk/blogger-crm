@@ -149,6 +149,8 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
               <option value="blogger">Блогер</option>
               <option value="visazhist">Визажист</option>
               <option value="expert">Эксперт</option>
+              <option value="millionik">Миллионик</option>
+              <option value="barter">Бартер</option>
             </select>
           </div>
 
