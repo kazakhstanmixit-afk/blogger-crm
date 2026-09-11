@@ -324,7 +324,7 @@ app.delete('/api/users/:id', auth, (req, res) => {
 
 // BLOGGERS
 app.get('/api/bloggers', auth, (req, res) => {
-  const { search, status, manager, in_work, sort, platform, cpv_min, cpv_max, reach_min, followers_min, followers_max, batch_id, exclude_declined, exclude_in_work, exclude_transferred } = req.query;
+  const { search, status, manager, in_work, sort, platform, cpv_min, cpv_max, reach_min, followers_min, followers_max, batch_id, exclude_declined, exclude_in_work, exclude_transferred, reels_min, reels_max, tt_min, tt_max } = req.query;
   const users = db.get('users').value();
   let list = db.get('bloggers').value();
 

@@ -274,6 +274,10 @@ export default function BloggerList({ currentUser }) {
   const [cpvMax, setCpvMax] = useState('');
   const [reachMin, setReachMin] = useState('');
   const [followersMin, setFollowersMin] = useState('');
+  const [reelsMin, setReelsMin] = useState('');
+  const [reelsMax, setReelsMax] = useState('');
+  const [ttMin, setTtMin] = useState('');
+  const [ttMax, setTtMax] = useState('');
   const [followersMax, setFollowersMax] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
   const [inWorkOnly, setInWorkOnly] = useState(false);
@@ -355,6 +359,10 @@ export default function BloggerList({ currentUser }) {
     if (cpvMax) params.set('cpv_max', cpvMax);
     if (reachMin) params.set('reach_min', reachMin);
     if (followersMin) params.set('followers_min', followersMin);
+    if (reelsMin) params.set('reels_min', reelsMin);
+    if (reelsMax) params.set('reels_max', reelsMax);
+    if (ttMin) params.set('tt_min', ttMin);
+    if (ttMax) params.set('tt_max', ttMax);
     if (followersMax) params.set('followers_max', followersMax);
     if (batchFilter) params.set('batch_id', batchFilter);
     if (excludeDeclined) params.set('exclude_declined', '1');
@@ -371,14 +379,14 @@ export default function BloggerList({ currentUser }) {
     setTotal(json.total || 0);
     setPages(json.pages || 1);
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax]);
 
   useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(d=>setUsers(Array.isArray(d)?d:[])); apiFetch('/api/batches').then(r=>r.json()).then(d=>setBatches(Array.isArray(d)?d:[])); }, []);
 
   useEffect(() => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { setPage(1); doFetch(1); }, 300);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax]);
 
   useEffect(() => { doFetch(page); }, [page]);
 
@@ -584,6 +592,22 @@ export default function BloggerList({ currentUser }) {
                 </label>
               ))}
             </div>
+          </div>
+          <div className="filter-row">
+            <label>Рилс от (₸)</label>
+            <input className="filter-input" type="number" placeholder="напр. 30000" value={reelsMin} onChange={e=>{setReelsMin(e.target.value);setPage(1);}} />
+          </div>
+          <div className="filter-row">
+            <label>Рилс до (₸)</label>
+            <input className="filter-input" type="number" placeholder="напр. 200000" value={reelsMax} onChange={e=>{setReelsMax(e.target.value);setPage(1);}} />
+          </div>
+          <div className="filter-row">
+            <label>TikTok от (₸)</label>
+            <input className="filter-input" type="number" placeholder="напр. 30000" value={ttMin} onChange={e=>{setTtMin(e.target.value);setPage(1);}} />
+          </div>
+          <div className="filter-row">
+            <label>TikTok до (₸)</label>
+            <input className="filter-input" type="number" placeholder="напр. 200000" value={ttMax} onChange={e=>{setTtMax(e.target.value);setPage(1);}} />
           </div>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>{setInWorkOnly(e.target.checked);setPage(1);}} /> Только в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>{setExcludeInWork(e.target.checked);setPage(1);}} /> Исключить в работе</label>
