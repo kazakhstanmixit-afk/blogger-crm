@@ -351,6 +351,7 @@ app.get('/api/bloggers', auth, (req, res) => {
   if (tt_min) list = list.filter(b => b.price_tiktok && b.price_tiktok >= parseInt(tt_min));
   if (tt_max) list = list.filter(b => b.price_tiktok && b.price_tiktok <= parseInt(tt_max));
   if (req.query.no_price === "1") list = list.filter(b => !b.price_reels && !b.price_tiktok && !b.price_both);
+  if (req.query.no_manager === "1") list = list.filter(b => !b.assigned_manager_id);
 
   if (sort === 'cpv_asc') list = list.sort((a,b) => Math.min(a.cpv_reels||9999,a.cpv_tiktok||9999,a.cpv_both||9999) - Math.min(b.cpv_reels||9999,b.cpv_tiktok||9999,b.cpv_both||9999));
   else if (sort === 'cpv_desc') list = list.sort((a,b) => Math.min(b.cpv_reels||0,b.cpv_tiktok||0,b.cpv_both||0) - Math.min(a.cpv_reels||0,a.cpv_tiktok||0,a.cpv_both||0));

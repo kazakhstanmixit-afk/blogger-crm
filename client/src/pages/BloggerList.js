@@ -286,6 +286,7 @@ export default function BloggerList({ currentUser }) {
   const [excludeDeclined, setExcludeDeclined] = useState(false);
   const [excludeInWork, setExcludeInWork] = useState(false);
   const [noPrice, setNoPrice] = useState(false);
+  const [noManager, setNoManager] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [excludeCategories, setExcludeCategories] = useState([]);
   const [excludeTransferred, setExcludeTransferred] = useState(false);
@@ -364,6 +365,7 @@ export default function BloggerList({ currentUser }) {
     if (followersMin) params.set('followers_min', followersMin);
     if (reelsMin) params.set('reels_min', reelsMin);
     if (noPrice) params.set('no_price', '1');
+    if (noManager) params.set('no_manager', '1');
     if (reelsMax) params.set('reels_max', reelsMax);
     if (ttMin) params.set('tt_min', ttMin);
     if (ttMax) params.set('tt_max', ttMax);
@@ -383,14 +385,14 @@ export default function BloggerList({ currentUser }) {
     setTotal(json.total || 0);
     setPages(json.pages || 1);
     setLoading(false);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax, noPrice]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax, noPrice, noManager]);
 
   useEffect(() => { apiFetch('/api/users').then(r=>r.json()).then(d=>setUsers(Array.isArray(d)?d:[])); apiFetch('/api/batches').then(r=>r.json()).then(d=>setBatches(Array.isArray(d)?d:[])); }, []);
 
   useEffect(() => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { setPage(1); doFetch(1); }, 300);
-  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax, noPrice]);
+  }, [search, statusFilter, managerFilter, inWorkOnly, sort, platformFilter, cpvMin, cpvMax, reachMin, followersMin, followersMax, batchFilter, excludeDeclined, excludeInWork, excludeTransferred, categoryFilter, excludeCategories, reelsMin, reelsMax, ttMin, ttMax, noPrice, noManager]);
 
   useEffect(() => { doFetch(page); }, [page]);
 
@@ -614,6 +616,7 @@ export default function BloggerList({ currentUser }) {
             <input className="filter-input" type="number" placeholder="напр. 200000" value={ttMax} onChange={e=>{setTtMax(e.target.value);setPage(1);}} />
           </div>
           <label className="filter-check"><input type="checkbox" checked={noPrice} onChange={e=>{setNoPrice(e.target.checked);setPage(1);}} /> Без цены</label>
+          <label className="filter-check"><input type="checkbox" checked={noManager} onChange={e=>{setNoManager(e.target.checked);setPage(1);}} /> Без менеджера</label>
           <label className="filter-check"><input type="checkbox" checked={inWorkOnly} onChange={e=>{setInWorkOnly(e.target.checked);setPage(1);}} /> Только в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeInWork} onChange={e=>{setExcludeInWork(e.target.checked);setPage(1);}} /> Исключить в работе</label>
           <label className="filter-check"><input type="checkbox" checked={excludeTransferred} onChange={e=>{setExcludeTransferred(e.target.checked);setPage(1);}} /> Исключить "Передано в работу"</label>
