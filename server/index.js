@@ -3,6 +3,132 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+// ── SUPABASE SYNC ──────────────────────────────────────────
+const { Pool } = require('pg');
+const pgPool = new Pool({
+  connectionString: 'postgresql://crm_nina.zwaynpogmedeqcyzriwi:TMxdRmisrSq6vs2tgmA82GDq@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require',
+  ssl: { rejectUnauthorized: false },
+  max: 3,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+
+// Create tables in crm_blogers schema if not exist
+async function initSupabase() {
+  try {
+    const client = await pgPool.connect();
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_blogers.bloggers (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        instagram_url TEXT,
+        tiktok_url TEXT,
+        instagram_followers INTEGER,
+        tiktok_followers INTEGER,
+        instagram_avg_reach INTEGER,
+        tiktok_avg_reach INTEGER,
+        price_reels NUMERIC,
+        price_tiktok NUMERIC,
+        price_both NUMERIC,
+        price_stories NUMERIC,
+        cpv_reels NUMERIC,
+        cpv_tiktok NUMERIC,
+        cpv_both NUMERIC,
+        status TEXT,
+        category TEXT,
+        manager_name TEXT,
+        last_comment TEXT,
+        notes TEXT,
+        in_work BOOLEAN,
+        created_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_blogers.payments (
+        id TEXT PRIMARY KEY,
+        blogger_id TEXT,
+        blogger_name TEXT,
+        manager_name TEXT,
+        recipient_name TEXT,
+        iin TEXT,
+        payment_name TEXT,
+        kaspi TEXT,
+        amount NUMERIC,
+        amount_video NUMERIC,
+        amount_product NUMERIC,
+        status TEXT,
+        approval_url TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ
+      );
+    `);
+    client.release();
+    console.log('Supabase tables ready');
+  } catch(e) {
+    console.error('Supabase init error:', e.message);
+  }
+}
+initSupabase();
+
+async function syncBloggerToSupabase(blogger, managerName) {
+  try {
+    const client = await pgPool.connect();
+    await client.query(`
+      INSERT INTO crm_blogers.bloggers (id,name,instagram_url,tiktok_url,instagram_followers,tiktok_followers,instagram_avg_reach,tiktok_avg_reach,price_reels,price_tiktok,price_both,price_stories,cpv_reels,cpv_tiktok,cpv_both,status,category,manager_name,last_comment,notes,in_work,created_at,updated_at)
+      VALUES (,,,,,,,,,0,1,2,3,4,5,6,7,8,9,0,1,2,3)
+      ON CONFLICT (id) DO UPDATE SET
+        name=EXCLUDED.name, instagram_url=EXCLUDED.instagram_url, tiktok_url=EXCLUDED.tiktok_url,
+        instagram_followers=EXCLUDED.instagram_followers, tiktok_followers=EXCLUDED.tiktok_followers,
+        instagram_avg_reach=EXCLUDED.instagram_avg_reach, tiktok_avg_reach=EXCLUDED.tiktok_avg_reach,
+        price_reels=EXCLUDED.price_reels, price_tiktok=EXCLUDED.price_tiktok,
+        price_both=EXCLUDED.price_both, price_stories=EXCLUDED.price_stories,
+        cpv_reels=EXCLUDED.cpv_reels, cpv_tiktok=EXCLUDED.cpv_tiktok, cpv_both=EXCLUDED.cpv_both,
+        status=EXCLUDED.status, category=EXCLUDED.category, manager_name=EXCLUDED.manager_name,
+        last_comment=EXCLUDED.last_comment, notes=EXCLUDED.notes, in_work=EXCLUDED.in_work,
+        updated_at=EXCLUDED.updated_at
+    `, [
+      blogger.id, blogger.name, blogger.instagram_url, blogger.tiktok_url,
+      blogger.instagram_followers, blogger.tiktok_followers,
+      blogger.instagram_avg_reach, blogger.tiktok_avg_reach,
+      blogger.price_reels, blogger.price_tiktok, blogger.price_both, blogger.price_stories,
+      blogger.cpv_reels, blogger.cpv_tiktok, blogger.cpv_both,
+      blogger.status, blogger.category, managerName || null,
+      blogger.last_comment, blogger.notes, blogger.in_work,
+      blogger.created_at, blogger.updated_at
+    ]);
+    client.release();
+  } catch(e) {
+    console.error('Supabase sync error:', e.message);
+  }
+}
+
+async function syncPaymentToSupabase(payment, bloggerName, managerName) {
+  try {
+    const client = await pgPool.connect();
+    await client.query(`
+      INSERT INTO crm_blogers.payments (id,blogger_id,blogger_name,manager_name,recipient_name,iin,payment_name,kaspi,amount,amount_video,amount_product,status,approval_url,notes,created_at,updated_at)
+      VALUES (,,,,,,,,,0,1,2,3,4,5,6)
+      ON CONFLICT (id) DO UPDATE SET
+        blogger_name=EXCLUDED.blogger_name, manager_name=EXCLUDED.manager_name,
+        status=EXCLUDED.status, amount=EXCLUDED.amount, amount_video=EXCLUDED.amount_video,
+        amount_product=EXCLUDED.amount_product, approval_url=EXCLUDED.approval_url,
+        notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at
+    `, [
+      payment.id, payment.blogger_id, bloggerName, managerName,
+      payment.recipient_name, payment.iin, payment.payment_name, payment.kaspi,
+      payment.amount, payment.amount_video, payment.amount_product,
+      payment.status, payment.approval_url, payment.notes,
+      payment.created_at, payment.updated_at
+    ]);
+    client.release();
+  } catch(e) {
+    console.error('Supabase payment sync error:', e.message);
+  }
+}
+
+
 const cloudinary = require('cloudinary').v2;
 cloudinary.config({
   cloud_name: 'rpedxzyp',
@@ -514,6 +640,7 @@ app.post('/api/bloggers', auth, (req, res) => {
   const blogger = { id: uuidv4(), batch_id: null, created_at: now, updated_at: now, ...makeBlogger(d) };
   db.get('bloggers').push(blogger).write();
   logActivity(blogger.id, req.user.id, 'created', 'Блогер добавлен');
+  syncBloggerToSupabase(blogger, null).catch(()=>{});
   res.json({ id: blogger.id });
 });
 
