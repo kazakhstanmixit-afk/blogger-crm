@@ -70,7 +70,57 @@ async function initSupabase() {
     console.error('Supabase init error:', e.message);
   }
 }
-initSupabase();
+async function fullSyncToSupabase() {
+  const client = await pgPool.connect();
+  try {
+    const users = db.get('users').value();
+    const bloggers = db.get('bloggers').value();
+    const payments = db.get('payments').value() || [];
+    const mgrName = id => (users.find(u => u.id === id) || {}).username || null;
+    const bloggerName = id => (bloggers.find(b => b.id === id) || {}).name || null;
+
+    await client.query('BEGIN');
+    await client.query('TRUNCATE crm_blogers.bloggers');
+    for (const b of bloggers) {
+      await client.query(
+        `INSERT INTO crm_blogers.bloggers
+         (id,name,instagram_url,tiktok_url,instagram_followers,tiktok_followers,
+          instagram_avg_reach,tiktok_avg_reach,price_reels,price_tiktok,price_both,price_stories,
+          cpv_reels,cpv_tiktok,cpv_both,status,category,manager_name,last_comment,notes,
+          in_work,created_at,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+        [b.id, b.name, b.instagram_url, b.tiktok_url, b.instagram_followers, b.tiktok_followers,
+         b.instagram_avg_reach, b.tiktok_avg_reach, b.price_reels, b.price_tiktok, b.price_both, b.price_stories,
+         b.cpv_reels, b.cpv_tiktok, b.cpv_both, b.status, b.category, mgrName(b.assigned_manager_id),
+         b.last_comment, b.notes, b.in_work, b.created_at, b.updated_at]
+      );
+    }
+    await client.query('TRUNCATE crm_blogers.payments');
+    for (const p of payments) {
+      await client.query(
+        `INSERT INTO crm_blogers.payments
+         (id,blogger_id,blogger_name,manager_name,recipient_name,iin,payment_name,kaspi,
+          amount,amount_video,amount_product,status,approval_url,notes,created_at,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [p.id, p.blogger_id, bloggerName(p.blogger_id), mgrName(p.manager_id), p.recipient_name, p.iin,
+         p.payment_name, p.kaspi, p.amount, p.amount_video, p.amount_product, p.status, p.approval_url,
+         p.notes, p.created_at, p.updated_at]
+      );
+    }
+    await client.query('COMMIT');
+    console.log(`Supabase mirror OK: ${bloggers.length} bloggers, ${payments.length} payments`);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(()=>{});
+    console.error('Supabase full sync error:', e.message);
+  } finally {
+    client.release();
+  }
+}
+
+initSupabase().then(() => {
+  fullSyncToSupabase();
+  setInterval(fullSyncToSupabase, 5 * 60 * 1000); // раз в 5 минут
+});
 
 async function syncBloggerToSupabase(blogger, managerName) {
   try {
