@@ -6,7 +6,7 @@ const multer = require('multer');
 // ── SUPABASE SYNC ──────────────────────────────────────────
 const { Pool } = require('pg');
 const pgPool = new Pool({
-  connectionString: 'postgresql://crm_nina.zwaynpogmedeqcyzriwi:TMxdRmisrSq6vs2tgmA82GDq@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require',
+  connectionString: 'postgresql://crm_nina.zwaynpogmedeqcyzriwi:TMxdRmisrSq6vs2tgmA82GDq@aws-0-eu-central-1.pooler.supabase.com:5432/postgres',
   ssl: { rejectUnauthorized: false },
   max: 3,
   idleTimeoutMillis: 30000,
@@ -71,8 +71,9 @@ async function initSupabase() {
   }
 }
 async function fullSyncToSupabase() {
-  const client = await pgPool.connect();
+  let client;
   try {
+    client = await pgPool.connect();
     const users = db.get('users').value();
     const bloggers = db.get('bloggers').value();
     const payments = db.get('payments').value() || [];
@@ -110,17 +111,21 @@ async function fullSyncToSupabase() {
     await client.query('COMMIT');
     console.log(`Supabase mirror OK: ${bloggers.length} bloggers, ${payments.length} payments`);
   } catch (e) {
-    await client.query('ROLLBACK').catch(()=>{});
+    if (client) await client.query('ROLLBACK').catch(()=>{});
     console.error('Supabase full sync error:', e.message);
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 
-initSupabase().then(() => {
-  fullSyncToSupabase();
-  setInterval(fullSyncToSupabase, 5 * 60 * 1000); // раз в 5 минут
-});
+initSupabase()
+  .then(() => {
+    fullSyncToSupabase().catch(e => console.error('Supabase sync error:', e.message));
+    setInterval(() => {
+      fullSyncToSupabase().catch(e => console.error('Supabase sync error:', e.message));
+    }, 5 * 60 * 1000);
+  })
+  .catch(e => console.error('initSupabase failed:', e.message));
 
 async function syncBloggerToSupabase(blogger, managerName) {
   try {
