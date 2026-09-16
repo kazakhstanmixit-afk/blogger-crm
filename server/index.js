@@ -71,50 +71,72 @@ async function initSupabase() {
   }
 }
 async function fullSyncToSupabase() {
+  let syncing = false;
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function upsertBatch(client, table, cols, rows) {
+  if (!rows.length) return;
+  const values = [];
+  const placeholders = rows.map((r, i) => {
+    const base = i * cols.length;
+    values.push(...cols.map(c => r[c]));
+    return '(' + cols.map((_, j) => `$${base + j + 1}`).join(',') + ')';
+  }).join(',');
+  const updateSet = cols.filter(c => c !== 'id').map(c => `${c}=EXCLUDED.${c}`).join(',');
+  await client.query(
+    `INSERT INTO ${table} (${cols.join(',')}) VALUES ${placeholders}
+     ON CONFLICT (id) DO UPDATE SET ${updateSet}`,
+    values
+  );
+}
+
+async function fullSyncToSupabase() {
+  if (syncing) { console.log('Supabase sync: предыдущий запуск ещё идёт, пропускаю'); return; }
+  syncing = true;
   let client;
   try {
     client = await pgPool.connect();
     const users = db.get('users').value();
-    const bloggers = db.get('bloggers').value();
-    const payments = db.get('payments').value() || [];
+    const bloggersRaw = db.get('bloggers').value();
+    const paymentsRaw = db.get('payments').value() || [];
     const mgrName = id => (users.find(u => u.id === id) || {}).username || null;
-    const bloggerName = id => (bloggers.find(b => b.id === id) || {}).name || null;
+    const bloggerName = id => (bloggersRaw.find(b => b.id === id) || {}).name || null;
+
+    const bloggerCols = ['id','name','instagram_url','tiktok_url','instagram_followers','tiktok_followers',
+      'instagram_avg_reach','tiktok_avg_reach','price_reels','price_tiktok','price_both','price_stories',
+      'cpv_reels','cpv_tiktok','cpv_both','status','category','manager_name','last_comment','notes',
+      'in_work','created_at','updated_at'];
+    const bloggerRows = bloggersRaw.map(b => ({
+      ...b, manager_name: mgrName(b.assigned_manager_id),
+    }));
+
+    const paymentCols = ['id','blogger_id','blogger_name','manager_name','recipient_name','iin','payment_name','kaspi',
+      'amount','amount_video','amount_product','status','approval_url','notes','created_at','updated_at'];
+    const paymentRows = paymentsRaw.map(p => ({
+      ...p, blogger_name: bloggerName(p.blogger_id), manager_name: mgrName(p.manager_id),
+    }));
 
     await client.query('BEGIN');
-    await client.query('TRUNCATE crm_blogers.bloggers');
-    for (const b of bloggers) {
-      await client.query(
-        `INSERT INTO crm_blogers.bloggers
-         (id,name,instagram_url,tiktok_url,instagram_followers,tiktok_followers,
-          instagram_avg_reach,tiktok_avg_reach,price_reels,price_tiktok,price_both,price_stories,
-          cpv_reels,cpv_tiktok,cpv_both,status,category,manager_name,last_comment,notes,
-          in_work,created_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
-        [b.id, b.name, b.instagram_url, b.tiktok_url, b.instagram_followers, b.tiktok_followers,
-         b.instagram_avg_reach, b.tiktok_avg_reach, b.price_reels, b.price_tiktok, b.price_both, b.price_stories,
-         b.cpv_reels, b.cpv_tiktok, b.cpv_both, b.status, b.category, mgrName(b.assigned_manager_id),
-         b.last_comment, b.notes, b.in_work, b.created_at, b.updated_at]
-      );
-    }
-    await client.query('TRUNCATE crm_blogers.payments');
-    for (const p of payments) {
-      await client.query(
-        `INSERT INTO crm_blogers.payments
-         (id,blogger_id,blogger_name,manager_name,recipient_name,iin,payment_name,kaspi,
-          amount,amount_video,amount_product,status,approval_url,notes,created_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-        [p.id, p.blogger_id, bloggerName(p.blogger_id), mgrName(p.manager_id), p.recipient_name, p.iin,
-         p.payment_name, p.kaspi, p.amount, p.amount_video, p.amount_product, p.status, p.approval_url,
-         p.notes, p.created_at, p.updated_at]
-      );
-    }
+    for (const part of chunk(bloggerRows, 500)) await upsertBatch(client, 'crm_blogers.bloggers', bloggerCols, part);
+    for (const part of chunk(paymentRows, 500)) await upsertBatch(client, 'crm_blogers.payments', paymentCols, part);
+
+    const bIds = bloggerRows.map(b => b.id);
+    const pIds = paymentRows.map(p => p.id);
+    await client.query(`DELETE FROM crm_blogers.bloggers WHERE NOT (id = ANY($1::text[]))`, [bIds.length ? bIds : ['__none__']]);
+    await client.query(`DELETE FROM crm_blogers.payments WHERE NOT (id = ANY($1::text[]))`, [pIds.length ? pIds : ['__none__']]);
     await client.query('COMMIT');
-    console.log(`Supabase mirror OK: ${bloggers.length} bloggers, ${payments.length} payments`);
+    console.log(`Supabase mirror OK: ${bloggerRows.length} bloggers, ${paymentRows.length} payments`);
   } catch (e) {
     if (client) await client.query('ROLLBACK').catch(()=>{});
     console.error('Supabase full sync error:', e.message);
   } finally {
     if (client) client.release();
+    syncing = false;
   }
 }
 
