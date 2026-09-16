@@ -70,7 +70,6 @@ async function initSupabase() {
     console.error('Supabase init error:', e.message);
   }
 }
-async function fullSyncToSupabase() {
   let syncing = false;
 
 function chunk(arr, size) {
