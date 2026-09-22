@@ -322,8 +322,11 @@ app.get('/api/dashboard', auth, (req, res) => {
       if (a.action === 'category_changed') days[day].category_changed++;
     });
 
+    const totalActivity = activity.length;
+    const recentActivity = filteredActivity.length;
     res.json({
       period: { from: from.toISOString(), to: to.toISOString() },
+      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length },
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
@@ -1417,8 +1420,11 @@ app.get('/api/dashboard', auth, (req, res) => {
       if (a.action === 'category_changed') days[day].category_changed++;
     });
 
+    const totalActivity = activity.length;
+    const recentActivity = filteredActivity.length;
     res.json({
       period: { from: from.toISOString(), to: to.toISOString() },
+      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length },
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
