@@ -28,12 +28,13 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   const isEdit = !!blogger;
   const [form, setForm] = useState({
     name:'', instagram_url:'', tiktok_url:'',
-    instagram_followers:'', tiktok_followers:'',
+    instagram_followers:'', tiktok_followers:'', er:'',
     instagram_avg_reach:'', tiktok_avg_reach:'',
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
     status:'new', decline_reason:'', assigned_manager_id:'', in_work:false,
     notes:'', last_comment:'', category:'',
     ...(blogger||{}),
+    er: blogger?.er || '',
   });
   const [activity, setActivity] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -86,6 +87,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
         price_both: form.price_both ? Number(form.price_both) : null,
         price_stories: form.price_stories ? Number(form.price_stories) : null,
         assigned_manager_id: form.assigned_manager_id || null,
+        er: form.er ? parseFloat(form.er) : null,
       });
     } catch(err) {
       setError('Ошибка при сохранении');
@@ -118,6 +120,10 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             <div className="field"><label>Охват ТТ</label><input type="number" value={form.tiktok_avg_reach||''} onChange={e=>set('tiktok_avg_reach',e.target.value)} /></div>
           </div>
 
+          <div className="field">
+            <label>ER % (Engagement Rate)</label>
+            <input type="number" step="0.01" value={form.er||''} onChange={e=>set('er',e.target.value)} placeholder="напр. 3.5" />
+          </div>
           <div className="section-divider">Расценки (₸)</div>
           <div className="form-row" style={{gridTemplateColumns:'1fr 1fr 1fr 1fr'}}>
             <div className="field"><label>Рилс</label><input type="number" value={form.price_reels||''} onChange={e=>set('price_reels',e.target.value)} /></div>

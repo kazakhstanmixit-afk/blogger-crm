@@ -494,6 +494,7 @@ function makeBlogger(d) {
     cpv_both: cpv(d.price_both, ir + tr),
     cpv_stories: cpv(d.price_stories, ir),
     category: d.category || null,
+    er: d.er || null,
     status: d.status || 'new',
     decline_reason: d.decline_reason || null,
     assigned_manager_id: d.assigned_manager_id || null,

@@ -39,6 +39,7 @@ const ALL_COLUMNS = [
   { key: 'cpv_both', label: 'CPV Р+ТТ', default: true },
   { key: 'price_stories', label: 'Сторис', default: false },
   { key: 'cpv_stories', label: 'CPV Сторис', default: false },
+  { key: 'er', label: 'ER %', default: false },
   { key: 'added', label: 'Добавлен', default: true },
 ];
 
@@ -717,6 +718,7 @@ export default function BloggerList({ currentUser }) {
                   {show('cpv_tt') && <td><span className={`cpv-badge ${cpvClass(b.cpv_tiktok)}`}>{b.cpv_tiktok?b.cpv_tiktok+'₸':'—'}</span></td>}
                   {show('price_both') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_both} type="number" suffix="₸" onSave={v=>patch(b.id,{price_both:Number(v)})} /></td>}
                   {show('cpv_both') && <td><span className={`cpv-badge ${cpvClass(b.cpv_both)}`}>{b.cpv_both?b.cpv_both+'₸':'—'}</span></td>}
+                  {show('er') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.er} type="number" suffix="%" onSave={v=>patch(b.id,{er:parseFloat(v)||null})} /></td>}
                   {show('price_stories') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_stories} type="number" suffix="₸" onSave={v=>patch(b.id,{price_stories:Number(v)})} /></td>}
                   {show('cpv_stories') && <td><span className={`cpv-badge ${cpvClass(b.cpv_stories)}`}>{b.cpv_stories?b.cpv_stories+'₸':'—'}</span></td>}
                   {show('added') && <td style={{fontSize:11,color:isFresh?'#4f6ef7':'#9ba3be',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>}
