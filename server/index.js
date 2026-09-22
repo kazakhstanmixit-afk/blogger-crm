@@ -297,7 +297,7 @@ app.get('/api/dashboard', auth, (req, res) => {
         payment_submitted: paymentSubmitted,
         total_actions: myActivity.length,
       };
-    }).filter(m => m.assigned_total > 0 || m.total_actions > 0);
+    }).filter(m => m.role !== "admin");
 
     // Daily breakdown for chart
     const days = {};
@@ -532,7 +532,7 @@ app.get('/api/bloggers', auth, (req, res) => {
 
   if (search) { const s = search.toLowerCase().replace('@',''); list = list.filter(b => { const instNick = (b.instagram_url||'').replace(/#.*$/,'').replace(/[?].*$/,'').split('/').pop().toLowerCase(); const ttNick = (b.tiktok_url||'').replace(/#.*$/,'').replace(/[?].*$/,'').split('/').pop().toLowerCase().replace('@',''); return (b.name||'').toLowerCase().replace('@','').includes(s) || (b.instagram_url||'').toLowerCase().includes(s) || (b.tiktok_url||'').toLowerCase().includes(s) || instNick.includes(s) || ttNick.includes(s) || (b.last_comment||'').toLowerCase().includes(s); }); }
   if (status) list = list.filter(b => b.status === status);
-  if (manager) list = list.filter(b => b.assigned_manager_id === manager);
+  if (manager) { const mUser = db.get("users").find({ id: manager }).value(); list = list.filter(b => b.assigned_manager_id === manager || (mUser && b.assigned_manager_id === mUser.id)); }
   if (in_work === '1') list = list.filter(b => b.in_work === true);
   if (batch_id) list = list.filter(b => b.batch_id === batch_id);
   if (platform === 'instagram') list = list.filter(b => b.instagram_url);
@@ -669,7 +669,7 @@ app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
 
   if (found) {
     const mgr = users.find(u => u.id === found.assigned_manager_id);
-    return res.json({ duplicate: true, id: found.id, name: found.name, manager: mgr?.username || null });
+    return res.json({ duplicate: true, id: found.id, name: found.name || found.instagram_url || '(без имени)', duplicate_name: found.name || found.instagram_url || '(без имени)', manager: mgr?.username || null });
   }
   res.json({ duplicate: false });
 });
@@ -709,7 +709,7 @@ app.post('/api/bloggers', auth, (req, res) => {
   });
 
   if (duplicate) {
-    return res.status(409).json({ error: 'Блогер уже есть в базе', duplicate_id: duplicate.id, duplicate_name: duplicate.name });
+    return res.status(409).json({ error: 'Блогер уже есть в базе', duplicate_id: duplicate.id, duplicate_name: duplicate.name || duplicate.instagram_url || '(без имени)' });
   }
 
   const now = new Date().toISOString();
@@ -1380,7 +1380,7 @@ app.get('/api/dashboard', auth, (req, res) => {
         payment_submitted: paymentSubmitted,
         total_actions: myActivity.length,
       };
-    }).filter(m => m.assigned_total > 0 || m.total_actions > 0);
+    }).filter(m => m.role !== "admin");
 
     // Daily breakdown for chart
     const days = {};
