@@ -61,6 +61,75 @@ function RegulationModal({ regulation, onClose, onSave }) {
   );
 }
 
+
+function FileAttachments({ regulation, isAdmin, onUpdate }) {
+  const [uploading, setUploading] = useState(false);
+  const files = regulation.files || [];
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    fd.append('file', file);
+    await fetch((process.env.REACT_APP_API_URL||'') + `/api/regulations/${regulation.id}/file`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: fd,
+    });
+    setUploading(false);
+    onUpdate();
+    e.target.value = '';
+  };
+
+  const handleDelete = async (public_id) => {
+    if (!window.confirm('Удалить файл?')) return;
+    const token = localStorage.getItem('token');
+    await fetch((process.env.REACT_APP_API_URL||'') + `/api/regulations/${regulation.id}/file`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_id }),
+    });
+    onUpdate();
+  };
+
+  const getIcon = (type) => {
+    if (!type) return '📄';
+    if (type.includes('pdf')) return '📕';
+    if (type.includes('image')) return '🖼';
+    if (type.includes('word') || type.includes('doc')) return '📝';
+    if (type.includes('sheet') || type.includes('excel')) return '📊';
+    return '📄';
+  };
+
+  return (
+    <div style={{marginTop:10}}>
+      {files.length > 0 && (
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+          {files.map((f,i) => (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 8px',background:'#f8f9fb',border:'1px solid #e2e6ef',borderRadius:6,fontSize:11}}>
+              <span>{getIcon(f.type)}</span>
+              <a href={f.url} target="_blank" rel="noreferrer" style={{color:'#4f6ef7',textDecoration:'none',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {f.name}
+              </a>
+              {isAdmin && (
+                <span onClick={()=>handleDelete(f.public_id)} style={{cursor:'pointer',color:'#dc2626',marginLeft:2}}>×</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {isAdmin && (
+        <label style={{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,padding:'5px 10px',background:'#f8f9fb',border:'1px dashed #c7d2fe',borderRadius:6,fontSize:11,color:'#4f6ef7'}}>
+          {uploading ? '⏳ Загрузка...' : '📎 Прикрепить файл'}
+          <input type="file" style={{display:'none'}} onChange={handleUpload} accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export default function RegulationsPage({ currentUser }) {
   const [regulations, setRegulations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +200,7 @@ export default function RegulationsPage({ currentUser }) {
                 )}
               </div>
 
+              <FileAttachments regulation={r} isAdmin={currentUser.role==='admin'} onUpdate={fetchRegulations} />
               <div style={{fontSize:10,color:'#c8cfe0',marginTop:12}}>
                 Добавлен {new Date(r.created_at).toLocaleDateString('ru',{day:'numeric',month:'long',year:'numeric'})}
               </div>

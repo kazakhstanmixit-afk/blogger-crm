@@ -531,6 +531,43 @@ app.put('/api/regulations/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+
+app.post('/api/regulations/:id/file', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const isImage = req.file.mimetype.startsWith('image/');
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/regulations', resource_type: isImage ? 'image' : 'raw', use_filename: true, unique_filename: true },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('regulations').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const files = existing.files || [];
+      files.push({ url: result.secure_url, public_id: result.public_id, name: req.file.originalname, type: req.file.mimetype, uploaded_at: new Date().toISOString() });
+      db.get('regulations').find({ id: req.params.id }).assign({ files }).write();
+      res.json({ url: result.secure_url, name: req.file.originalname });
+    } catch(e) {
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/regulations/:id/file', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { public_id } = req.body;
+  const existing = db.get('regulations').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const files = (existing.files || []).filter(f => f.public_id !== public_id);
+  db.get('regulations').find({ id: req.params.id }).assign({ files }).write();
+  res.json({ ok: true });
+});
+
 app.delete('/api/regulations/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.get('regulations').remove({ id: req.params.id }).write();
@@ -1746,6 +1783,43 @@ app.put('/api/regulations/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   const { title, url, drive_url, description } = req.body;
   db.get('regulations').find({ id: req.params.id }).assign({ title, url: url||null, drive_url: drive_url||null, description: description||null }).write();
+  res.json({ ok: true });
+});
+
+
+app.post('/api/regulations/:id/file', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const isImage = req.file.mimetype.startsWith('image/');
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/regulations', resource_type: isImage ? 'image' : 'raw', use_filename: true, unique_filename: true },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('regulations').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const files = existing.files || [];
+      files.push({ url: result.secure_url, public_id: result.public_id, name: req.file.originalname, type: req.file.mimetype, uploaded_at: new Date().toISOString() });
+      db.get('regulations').find({ id: req.params.id }).assign({ files }).write();
+      res.json({ url: result.secure_url, name: req.file.originalname });
+    } catch(e) {
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/regulations/:id/file', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { public_id } = req.body;
+  const existing = db.get('regulations').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const files = (existing.files || []).filter(f => f.public_id !== public_id);
+  db.get('regulations').find({ id: req.params.id }).assign({ files }).write();
   res.json({ ok: true });
 });
 
