@@ -324,9 +324,15 @@ app.get('/api/dashboard', auth, (req, res) => {
 
     const totalActivity = activity.length;
     const recentActivity = filteredActivity.length;
+    const activityByUser = {};
+    filteredActivity.forEach(a => {
+      const u = users.find(x => x.id === a.user_id);
+      const name = u ? u.username : ('unknown:' + a.user_id);
+      activityByUser[name] = (activityByUser[name] || 0) + 1;
+    });
     res.json({
       period: { from: from.toISOString(), to: to.toISOString() },
-      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length },
+      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length, by_user: activityByUser },
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
@@ -1422,9 +1428,15 @@ app.get('/api/dashboard', auth, (req, res) => {
 
     const totalActivity = activity.length;
     const recentActivity = filteredActivity.length;
+    const activityByUser = {};
+    filteredActivity.forEach(a => {
+      const u = users.find(x => x.id === a.user_id);
+      const name = u ? u.username : ('unknown:' + a.user_id);
+      activityByUser[name] = (activityByUser[name] || 0) + 1;
+    });
     res.json({
       period: { from: from.toISOString(), to: to.toISOString() },
-      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length },
+      debug: { total_activity: totalActivity, period_activity: recentActivity, users_count: users.length, by_user: activityByUser },
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
