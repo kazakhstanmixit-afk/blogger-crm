@@ -3,6 +3,7 @@ import BloggerList from './BloggerList';
 import PaymentsPage from './PaymentsPage';
 import ProductsPage from './ProductsPage';
 import ExpensesPage from './ExpensesPage';
+import RegulationsPage from './RegulationsPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -14,6 +15,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'payments', icon:'💳', label:'Оплаты' },
     { id:'products', icon:'📦', label:'Товары и ТЗ' },
     { id:'expenses', icon:'💸', label:'Расходы' },
+    { id:'regulations', icon:'📋', label:'Регламенты' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -41,6 +43,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='products' && <ProductsPage currentUser={user} />}
         {page==='expenses' && <ExpensesPage currentUser={user} />}
+        {page==='regulations' && <RegulationsPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>

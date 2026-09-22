@@ -509,6 +509,35 @@ app.delete('/api/expenses/:id/receipt', auth, (req, res) => {
 });
 
 
+// ── REGULATIONS ──────────────────────────────────────────
+app.get('/api/regulations', auth, (req, res) => {
+  const list = db.get('regulations').value() || [];
+  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+});
+
+app.post('/api/regulations', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { title, url, drive_url, description } = req.body;
+  if (!title) return res.status(400).json({ error: 'Укажите название' });
+  const reg = { id: uuidv4(), title, url: url||null, drive_url: drive_url||null, description: description||null, created_at: new Date().toISOString() };
+  db.get('regulations').push(reg).write();
+  res.json({ id: reg.id });
+});
+
+app.put('/api/regulations/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { title, url, drive_url, description } = req.body;
+  db.get('regulations').find({ id: req.params.id }).assign({ title, url: url||null, drive_url: drive_url||null, description: description||null }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/regulations/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('regulations').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -516,7 +545,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1694,6 +1723,35 @@ app.delete('/api/expenses/:id/receipt', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const receipts = (existing.receipts || []).filter(r => r.public_id !== public_id);
   db.get('expenses').find({ id: req.params.id }).assign({ receipts }).write();
+  res.json({ ok: true });
+});
+
+
+// ── REGULATIONS ──────────────────────────────────────────
+app.get('/api/regulations', auth, (req, res) => {
+  const list = db.get('regulations').value() || [];
+  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+});
+
+app.post('/api/regulations', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { title, url, drive_url, description } = req.body;
+  if (!title) return res.status(400).json({ error: 'Укажите название' });
+  const reg = { id: uuidv4(), title, url: url||null, drive_url: drive_url||null, description: description||null, created_at: new Date().toISOString() };
+  db.get('regulations').push(reg).write();
+  res.json({ id: reg.id });
+});
+
+app.put('/api/regulations/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { title, url, drive_url, description } = req.body;
+  db.get('regulations').find({ id: req.params.id }).assign({ title, url: url||null, drive_url: drive_url||null, description: description||null }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/regulations/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('regulations').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
 
