@@ -131,7 +131,12 @@ export default function StatsPage({ currentUser }) {
         <div style={{ textAlign: 'center', padding: 40, color: '#9ba3be' }}>Загрузка...</div>
       ) : data && (
         <>
-          {/* Итого за период */}
+          {data.debug && (
+        <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'10px 16px',marginBottom:16,fontSize:12,color:'#92400e'}}>
+          📊 Всего записей активности в базе: <strong>{data.debug.total_activity}</strong> · За выбранный период: <strong>{data.debug.period_activity}</strong> · Менеджеров в системе: <strong>{data.debug.users_count}</strong>
+        </div>
+      )}
+      {/* Итого за период */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
             <StatCard value={data.totals.contacted} label="Написали" color="#f59e0b" bg="#fffbeb" />
             <StatCard value={data.totals.replied} label="Ответили" color="#6d28d9" bg="#f5f3ff" />
