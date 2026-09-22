@@ -444,6 +444,7 @@ app.post('/api/expenses', auth, (req, res) => {
     amount: Number(amount),
     comment: comment || null,
     goal: goal || null,
+    paid: false,
     receipts: [],
     created_at: new Date().toISOString(),
   };
@@ -461,6 +462,7 @@ app.put('/api/expenses/:id', auth, (req, res) => {
   if (amount) updates.amount = Number(amount);
   if (comment !== undefined) updates.comment = comment;
   if (goal !== undefined) updates.goal = goal;
+  if (req.body.paid !== undefined) updates.paid = req.body.paid;
   db.get('expenses').find({ id: req.params.id }).assign(updates).write();
   res.json({ ok: true });
 });
@@ -1631,6 +1633,7 @@ app.post('/api/expenses', auth, (req, res) => {
     amount: Number(amount),
     comment: comment || null,
     goal: goal || null,
+    paid: false,
     receipts: [],
     created_at: new Date().toISOString(),
   };
@@ -1648,6 +1651,7 @@ app.put('/api/expenses/:id', auth, (req, res) => {
   if (amount) updates.amount = Number(amount);
   if (comment !== undefined) updates.comment = comment;
   if (goal !== undefined) updates.goal = goal;
+  if (req.body.paid !== undefined) updates.paid = req.body.paid;
   db.get('expenses').find({ id: req.params.id }).assign(updates).write();
   res.json({ ok: true });
 });

@@ -193,6 +193,7 @@ export default function ExpensesPage({ currentUser }) {
               <th>Цель</th>
               <th>Сумма</th>
               <th>Комментарий</th>
+              <th>Статус</th>
               <th>Чек</th>
               <th></th>
             </tr>
@@ -210,6 +211,14 @@ export default function ExpensesPage({ currentUser }) {
                 <td style={{fontWeight:500}}>{e.goal||'—'}</td>
                 <td style={{fontWeight:700,color:'#dc2626',whiteSpace:'nowrap'}}>{(e.amount||0).toLocaleString('ru')} ₸</td>
                 <td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12,color:'#9ba3be'}} title={e.comment||''}>{e.comment||'—'}</td>
+                <td onClick={ev=>ev.stopPropagation()}>
+                  <span onClick={async()=>{await apiFetch(`/api/expenses/${e.id}`,{method:'PUT',body:JSON.stringify({paid:!e.paid})});fetchExpenses();}}
+                    style={{cursor:'pointer',display:'inline-block',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,
+                      background:e.paid?'#dcfce7':'#fee2e2',color:e.paid?'#15803d':'#dc2626',
+                      border:e.paid?'1px solid #bbf7d0':'1px solid #fecaca'}}>
+                    {e.paid ? '✓ Оплачено' : '✗ Не оплачено'}
+                  </span>
+                </td>
                 <td onClick={ev=>ev.stopPropagation()}><ReceiptCell expense={e} onUpdate={fetchExpenses} /></td>
                 <td onClick={ev=>ev.stopPropagation()}>
                   <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(e.id)}>🗑</button>
