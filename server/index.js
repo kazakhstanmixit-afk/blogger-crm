@@ -423,6 +423,90 @@ app.post('/api/export/selected', auth, (req, res) => {
 });
 
 
+// ── EXPENSES ──────────────────────────────────────────
+app.get('/api/expenses', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('expenses').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(e => e.user_id === req.user.id);
+  const { category } = req.query;
+  if (category) list = list.filter(e => e.category === category);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(e => ({ ...e, username: (users.find(u => u.id === e.user_id)||{}).username || null })));
+});
+
+app.post('/api/expenses', auth, (req, res) => {
+  const { category, amount, comment, goal } = req.body;
+  if (!amount || !category) return res.status(400).json({ error: 'Укажите сумму и категорию' });
+  const expense = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    category,
+    amount: Number(amount),
+    comment: comment || null,
+    goal: goal || null,
+    receipts: [],
+    created_at: new Date().toISOString(),
+  };
+  db.get('expenses').push(expense).write();
+  res.json({ id: expense.id });
+});
+
+app.put('/api/expenses/:id', auth, (req, res) => {
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { category, amount, comment, goal } = req.body;
+  const updates = {};
+  if (category) updates.category = category;
+  if (amount) updates.amount = Number(amount);
+  if (comment !== undefined) updates.comment = comment;
+  if (goal !== undefined) updates.goal = goal;
+  db.get('expenses').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/expenses/:id', auth, (req, res) => {
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('expenses').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+app.post('/api/expenses/:id/receipt', auth, (req, res) => {
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/expense-receipts', resource_type: 'image' },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('expenses').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const receipts = existing.receipts || [];
+      receipts.push({ url: result.secure_url, public_id: result.public_id, uploaded_at: new Date().toISOString() });
+      db.get('expenses').find({ id: req.params.id }).assign({ receipts }).write();
+      res.json({ url: result.secure_url });
+    } catch(e) {
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/expenses/:id/receipt', auth, (req, res) => {
+  const { public_id } = req.body;
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const receipts = (existing.receipts || []).filter(r => r.public_id !== public_id);
+  db.get('expenses').find({ id: req.params.id }).assign({ receipts }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -430,7 +514,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1523,6 +1607,90 @@ app.post('/api/export/selected', auth, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="selected_bloggers.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);
+});
+
+
+// ── EXPENSES ──────────────────────────────────────────
+app.get('/api/expenses', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('expenses').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(e => e.user_id === req.user.id);
+  const { category } = req.query;
+  if (category) list = list.filter(e => e.category === category);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(e => ({ ...e, username: (users.find(u => u.id === e.user_id)||{}).username || null })));
+});
+
+app.post('/api/expenses', auth, (req, res) => {
+  const { category, amount, comment, goal } = req.body;
+  if (!amount || !category) return res.status(400).json({ error: 'Укажите сумму и категорию' });
+  const expense = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    category,
+    amount: Number(amount),
+    comment: comment || null,
+    goal: goal || null,
+    receipts: [],
+    created_at: new Date().toISOString(),
+  };
+  db.get('expenses').push(expense).write();
+  res.json({ id: expense.id });
+});
+
+app.put('/api/expenses/:id', auth, (req, res) => {
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { category, amount, comment, goal } = req.body;
+  const updates = {};
+  if (category) updates.category = category;
+  if (amount) updates.amount = Number(amount);
+  if (comment !== undefined) updates.comment = comment;
+  if (goal !== undefined) updates.goal = goal;
+  db.get('expenses').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/expenses/:id', auth, (req, res) => {
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('expenses').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+app.post('/api/expenses/:id/receipt', auth, (req, res) => {
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/expense-receipts', resource_type: 'image' },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('expenses').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const receipts = existing.receipts || [];
+      receipts.push({ url: result.secure_url, public_id: result.public_id, uploaded_at: new Date().toISOString() });
+      db.get('expenses').find({ id: req.params.id }).assign({ receipts }).write();
+      res.json({ url: result.secure_url });
+    } catch(e) {
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/expenses/:id/receipt', auth, (req, res) => {
+  const { public_id } = req.body;
+  const existing = db.get('expenses').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const receipts = (existing.receipts || []).filter(r => r.public_id !== public_id);
+  db.get('expenses').find({ id: req.params.id }).assign({ receipts }).write();
+  res.json({ ok: true });
 });
 
 

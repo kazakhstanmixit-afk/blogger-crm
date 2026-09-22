@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import BloggerList from './BloggerList';
 import PaymentsPage from './PaymentsPage';
 import ProductsPage from './ProductsPage';
+import ExpensesPage from './ExpensesPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -12,6 +13,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'stats', icon:'📊', label:'Аналитика' },
     { id:'payments', icon:'💳', label:'Оплаты' },
     { id:'products', icon:'📦', label:'Товары и ТЗ' },
+    { id:'expenses', icon:'💸', label:'Расходы' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -38,6 +40,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='stats' && <StatsPage currentUser={user} />}
         {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='products' && <ProductsPage currentUser={user} />}
+        {page==='expenses' && <ExpensesPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>
