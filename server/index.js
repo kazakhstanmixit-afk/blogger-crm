@@ -284,12 +284,10 @@ app.get('/api/dashboard', auth, (req, res) => {
       const myPayments = filteredPayments.filter(p => p.manager_id === u.id);
 
       // Count by action/status
+      const added = myActivity.filter(a => a.action === 'created').length;
       const contacted = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('contacted')).length;
       const replied = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('replied')).length;
-      const declined = myActivity.filter(a => a.action === 'status_changed' && (
-        a.details.includes('declined')
-      )).length;
-      const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
+      const declined = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('declined')).length;
       const paymentSubmitted = myPayments.length + myActivity.filter(a => a.action === 'status_changed' && (a.details.includes('payment_pending') || a.details.includes('payment_submitted') || a.details.includes('paid'))).length;
 
       // Assigned to this manager (transferred status)
@@ -302,10 +300,10 @@ app.get('/api/dashboard', auth, (req, res) => {
         role: u.role,
         assigned_transferred: assignedTotal,
         assigned_total: assignedAll,
+        added,
         contacted,
         replied,
         declined,
-        category_changed: categoryChanged,
         payment_submitted: paymentSubmitted,
         total_actions: myActivity.length,
       };
@@ -336,10 +334,10 @@ app.get('/api/dashboard', auth, (req, res) => {
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
+        added: managerStats.reduce((s,m) => s + m.added, 0),
         contacted: managerStats.reduce((s,m) => s + m.contacted, 0),
         replied: managerStats.reduce((s,m) => s + m.replied, 0),
         declined: managerStats.reduce((s,m) => s + m.declined, 0),
-        category_changed: managerStats.reduce((s,m) => s + m.category_changed, 0),
         payment_submitted: managerStats.reduce((s,m) => s + m.payment_submitted, 0),
       }
     });
@@ -1388,12 +1386,10 @@ app.get('/api/dashboard', auth, (req, res) => {
       const myPayments = filteredPayments.filter(p => p.manager_id === u.id);
 
       // Count by action/status
+      const added = myActivity.filter(a => a.action === 'created').length;
       const contacted = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('contacted')).length;
       const replied = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('replied')).length;
-      const declined = myActivity.filter(a => a.action === 'status_changed' && (
-        a.details.includes('declined')
-      )).length;
-      const categoryChanged = myActivity.filter(a => a.action === 'category_changed').length;
+      const declined = myActivity.filter(a => a.action === 'status_changed' && a.details.includes('declined')).length;
       const paymentSubmitted = myPayments.length + myActivity.filter(a => a.action === 'status_changed' && (a.details.includes('payment_pending') || a.details.includes('payment_submitted') || a.details.includes('paid'))).length;
 
       // Assigned to this manager (transferred status)
@@ -1406,10 +1402,10 @@ app.get('/api/dashboard', auth, (req, res) => {
         role: u.role,
         assigned_transferred: assignedTotal,
         assigned_total: assignedAll,
+        added,
         contacted,
         replied,
         declined,
-        category_changed: categoryChanged,
         payment_submitted: paymentSubmitted,
         total_actions: myActivity.length,
       };
@@ -1440,10 +1436,10 @@ app.get('/api/dashboard', auth, (req, res) => {
       managers: managerStats,
       daily: Object.values(days).sort((a,b) => a.date.localeCompare(b.date)),
       totals: {
+        added: managerStats.reduce((s,m) => s + m.added, 0),
         contacted: managerStats.reduce((s,m) => s + m.contacted, 0),
         replied: managerStats.reduce((s,m) => s + m.replied, 0),
         declined: managerStats.reduce((s,m) => s + m.declined, 0),
-        category_changed: managerStats.reduce((s,m) => s + m.category_changed, 0),
         payment_submitted: managerStats.reduce((s,m) => s + m.payment_submitted, 0),
       }
     });

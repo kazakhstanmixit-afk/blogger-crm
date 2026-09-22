@@ -37,6 +37,9 @@ function ManagerRow({ m }) {
         <div style={{ fontSize: 10, color: '#9ba3be', marginTop: 2 }}>всего: {m.assigned_total}</div>
       </td>
       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#4f6ef7' }}>{m.added || 0}</span>
+      </td>
+      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b' }}>{m.contacted}</span>
       </td>
       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
@@ -139,7 +142,8 @@ export default function StatsPage({ currentUser }) {
       )}
       {/* Итого за период */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 24 }}>
-            <StatCard value={data.totals.contacted} label="Написали" color="#f59e0b" bg="#fffbeb" />
+            <StatCard value={data.totals.added} label="Добавлено в базу" color="#4f6ef7" bg="#eef1fe" />
+          <StatCard value={data.totals.contacted} label="Написали" color="#f59e0b" bg="#fffbeb" />
             <StatCard value={data.totals.replied} label="Ответили" color="#6d28d9" bg="#f5f3ff" />
             <StatCard value={data.totals.declined} label="Отказов" color="#dc2626" bg="#fef2f2" />
 <StatCard value={data.totals.payment_submitted} label="Подано на оплату" color="#15803d" bg="#f0fdf4" />
@@ -161,6 +165,7 @@ export default function StatsPage({ currentUser }) {
                     <tr style={{ background: '#f8f9fb' }}>
                       <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#9ba3be', textTransform: 'uppercase', letterSpacing: '.06em' }}>Менеджер</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#9ba3be', textTransform: 'uppercase' }}>Передано в работу</th>
+                      <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#4f6ef7', textTransform: 'uppercase' }}>Добавлено</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>Написали</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#6d28d9', textTransform: 'uppercase' }}>Ответили</th>
                       <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#dc2626', textTransform: 'uppercase' }}>Отказов</th>
