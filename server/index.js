@@ -228,6 +228,18 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // ── DASHBOARD ──────────────────────────────────────────
+
+app.get('/api/debug/activity', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({error:'no'});
+  const activity = db.get('activity').value() || [];
+  const users = db.get('users').value();
+  const last20 = activity.slice(-20).map(a => ({
+    ...a,
+    username: (users.find(u => u.id === a.user_id)||{}).username
+  }));
+  res.json({ total: activity.length, last20 });
+});
+
 app.get('/api/dashboard', auth, (req, res) => {
   try {
     const { date_from, date_to, period } = req.query;
@@ -1311,6 +1323,18 @@ app.get('/api/payments/export', auth, (req, res) => {
 
 
 // ── DASHBOARD ──────────────────────────────────────────
+
+app.get('/api/debug/activity', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({error:'no'});
+  const activity = db.get('activity').value() || [];
+  const users = db.get('users').value();
+  const last20 = activity.slice(-20).map(a => ({
+    ...a,
+    username: (users.find(u => u.id === a.user_id)||{}).username
+  }));
+  res.json({ total: activity.length, last20 });
+});
+
 app.get('/api/dashboard', auth, (req, res) => {
   try {
     const { date_from, date_to, period } = req.query;
