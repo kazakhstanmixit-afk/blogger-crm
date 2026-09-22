@@ -133,7 +133,8 @@ export default function StatsPage({ currentUser }) {
         <>
           {data.debug && (
         <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'10px 16px',marginBottom:16,fontSize:12,color:'#92400e'}}>
-          📊 Всего записей активности в базе: <strong>{data.debug.total_activity}</strong> · За выбранный период: <strong>{data.debug.period_activity}</strong> · Менеджеров в системе: <strong>{data.debug.users_count}</strong>
+          📊 Всего в базе: <strong>{data.debug.total_activity}</strong> · За период: <strong>{data.debug.period_activity}</strong> · Менеджеров: <strong>{data.debug.users_count}</strong>
+          {data.debug.by_user && <div style={{marginTop:6}}>{Object.entries(data.debug.by_user).map(([name,count]) => <span key={name} style={{marginRight:12}}>{name}: {count}</span>)}</div>}
         </div>
       )}
       {/* Итого за период */}
