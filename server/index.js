@@ -17,16 +17,17 @@ const pgPool = new Pool({
 async function initSupabase() {
   try {
     const client = await pgPool.connect();
+    await client.query(`DROP TABLE IF EXISTS crm_blogers.bloggers CASCADE`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS crm_blogers.bloggers (
         id TEXT PRIMARY KEY,
         name TEXT,
         instagram_url TEXT,
         tiktok_url TEXT,
-        instagram_followers INTEGER,
-        tiktok_followers INTEGER,
-        instagram_avg_reach INTEGER,
-        tiktok_avg_reach INTEGER,
+        instagram_followers NUMERIC,
+        tiktok_followers NUMERIC,
+        instagram_avg_reach NUMERIC,
+        tiktok_avg_reach NUMERIC,
         price_reels NUMERIC,
         price_tiktok NUMERIC,
         price_both NUMERIC,
