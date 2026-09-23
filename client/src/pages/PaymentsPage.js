@@ -90,6 +90,34 @@ function ReceiptCell({ payment, type, onUpdate }) {
   );
 }
 
+function KaspiCell({ payment, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(payment.kaspi || '');
+
+  const handleSave = async () => {
+    setEditing(false);
+    await apiFetch(`/api/payments/${payment.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ kaspi: val || null }),
+    });
+    onUpdate();
+  };
+
+  if (editing) return (
+    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+      <input value={val} onChange={e=>setVal(e.target.value.replace(/\D/g,'').slice(0,11))}
+        autoFocus onBlur={handleSave} onKeyDown={e=>{if(e.key==='Enter')handleSave();if(e.key==='Escape')setEditing(false);}}
+        placeholder="77001234567" style={{width:110,padding:'2px 6px',fontSize:12,border:'1px solid #4f6ef7',borderRadius:4,outline:'none',fontFamily:'monospace'}} />
+    </div>
+  );
+  return (
+    <span onClick={()=>setEditing(true)}
+      style={{cursor:'text',borderBottom:'1px dashed #c8cfe0',paddingBottom:1,fontSize:12,fontFamily:'monospace',color:val?'#1a1d2e':'#9ba3be'}}>
+      {val || '+ добавить'}
+    </span>
+  );
+}
+
 export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -453,7 +481,7 @@ export default function PaymentsPage({ currentUser }) {
                 <td>{p.recipient_name}</td>
                 <td style={{fontFamily:'monospace',letterSpacing:1,fontSize:12}}>{p.iin}</td>
                 <td>{p.payment_name||'—'}</td>
-                <td style={{fontSize:12}}>{p.kaspi||'—'}</td>
+                <td onClick={e=>e.stopPropagation()}><KaspiCell payment={p} onUpdate={fetchPayments} /></td>
                 <td style={{fontSize:12}}>{p.amount_video ? (p.amount_video).toLocaleString('ru')+' ₸' : '—'}</td>
                 <td style={{fontSize:12}}>{p.amount_product ? (p.amount_product).toLocaleString('ru')+' ₸' : '—'}</td>
                 <td style={{fontWeight:600,whiteSpace:'nowrap'}}>
