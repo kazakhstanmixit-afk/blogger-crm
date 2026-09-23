@@ -1313,7 +1313,17 @@ app.post('/api/payments', auth, (req, res) => {
 
 app.put('/api/payments/:id', auth, (req, res) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+    // Managers can only update kaspi field
+    if (req.user.role !== 'admin') {
+      const existing = db.get('payments').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      if (existing.manager_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+      if (req.body.kaspi !== undefined) {
+        db.get('payments').find({ id: req.params.id }).assign({ kaspi: req.body.kaspi || null }).write();
+        return res.json({ ok: true });
+      }
+      return res.status(403).json({ error: 'Нет доступа' });
+    }
     const existing = db.get('payments').find({ id: req.params.id }).value();
     if (!existing) return res.status(404).json({ error: 'Not found' });
 
