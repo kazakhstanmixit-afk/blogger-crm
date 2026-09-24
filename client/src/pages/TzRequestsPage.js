@@ -174,7 +174,7 @@ export default function TzRequestsPage({ currentUser }) {
                 </td>
                 <td style={{ fontSize: 12, fontWeight: 500 }}>{r.product || '—'}</td>
                 <td onClick={e => e.stopPropagation()}>
-                  {(() => { const s = TZ_STATUSES.find(x => x.value === r.status) || TZ_STATUSES[0]; return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:}}>{s.label}</span>; })()}
+                  {(() => { const s = TZ_STATUSES.find(x => x.value === r.status) || TZ_STATUSES[0]; return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:'1px solid '+s.border}}>{s.label}</span>; })()}
                 </td>
                 {[0, 1, 2].map(i => {
                   const v = r.videos?.[i];
