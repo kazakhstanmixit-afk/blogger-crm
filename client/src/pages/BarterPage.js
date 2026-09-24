@@ -57,7 +57,8 @@ function BarterModal({ barter, onClose, onSave }) {
           </div>
           <div className="form-row">
             <div className="field"><label>Город</label><input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="Алматы" /></div>
-            <div className="field"><label>Адрес доставки</label><input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Город, улица, дом..." /></div>
+            <div className="field"><label>Адрес доставки</label><input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Улица, дом..." /></div>
+          </div>
           <div className="form-row">
             <div className="field"><label>Номер для связи</label><input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+7 700 000 0000" /></div>
             <div className="field"><label>Товар</label><input value={form.product} onChange={e=>set('product',e.target.value)} placeholder="Название товара" /></div>
