@@ -661,7 +661,7 @@ app.put('/api/tz-requests/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, instagram_url, tiktok_url, product, videos } = req.body;
-  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[], format: req.body.format||null };
+  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[], format: req.body.format||null, tz_url: req.body.tz_url||null };
   if (req.body.status !== undefined) tzUpdates.status = req.body.status;
   db.get('tz_requests').find({ id: req.params.id }).assign(tzUpdates).write();
   res.json({ ok: true });
@@ -2026,7 +2026,7 @@ app.put('/api/tz-requests/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, instagram_url, tiktok_url, product, videos } = req.body;
-  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[], format: req.body.format||null };
+  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[], format: req.body.format||null, tz_url: req.body.tz_url||null };
   if (req.body.status !== undefined) tzUpdates.status = req.body.status;
   db.get('tz_requests').find({ id: req.params.id }).assign(tzUpdates).write();
   res.json({ ok: true });

@@ -24,6 +24,7 @@ function TzModal({ tz, onClose, onSave }) {
     product: tz?.product || '',
     videos: tz?.videos?.length ? tz.videos : [{ ...emptyVideo }, { ...emptyVideo }, { ...emptyVideo }],
     format: tz?.format || 'reels',
+    tz_url: tz?.tz_url || '',
     status: tz?.status || 'requested',
   });
   const [saving, setSaving] = useState(false);
@@ -42,7 +43,7 @@ function TzModal({ tz, onClose, onSave }) {
     const videos = form.videos.filter(v => v.url.trim());
     const res = await apiFetch(isEdit ? `/api/tz-requests/${tz.id}` : '/api/tz-requests', {
       method: isEdit ? 'PUT' : 'POST',
-      body: JSON.stringify({ ...form, videos, status: form.status, format: form.format }),
+      body: JSON.stringify({ ...form, videos, status: form.status, format: form.format, tz_url: form.tz_url || null }),
     });
     if (!res.ok) { const d = await res.json(); setError(d.error); setSaving(false); return; }
     onSave();
@@ -81,6 +82,12 @@ function TzModal({ tz, onClose, onSave }) {
               {TZ_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
+          {form.status === 'done' && (
+            <div className="field">
+              <label>Ссылка на ТЗ</label>
+              <input value={form.tz_url} onChange={e => set('tz_url', e.target.value)} placeholder="https://docs.google.com/..." />
+            </div>
+          )}
           {error && <div className="error-msg">{error}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
@@ -144,6 +151,7 @@ export default function TzRequestsPage({ currentUser }) {
               <th>Товар</th>
               <th>Формат</th>
               <th>Статус</th>
+              <th>Ссылка на ТЗ</th>
               <th>Видео 1</th>
               <th>Видео 2</th>
               <th>Видео 3</th>
@@ -170,6 +178,7 @@ export default function TzRequestsPage({ currentUser }) {
                 <td onClick={e => e.stopPropagation()}>
                   {(() => { const s = TZ_STATUSES.find(x => x.value === r.status) || TZ_STATUSES[0]; return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:'1px solid '+s.border}}>{s.label}</span>; })()}
                 </td>
+                <td onClick={e=>e.stopPropagation()}>{r.tz_url ? <a href={r.tz_url} target='_blank' rel='noreferrer' style={{color:'#4f6ef7',fontSize:11}}>📋 Открыть</a> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
                 {[0, 1, 2].map(i => {
                   const v = r.videos?.[i];
                   return (
