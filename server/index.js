@@ -576,6 +576,58 @@ app.delete('/api/regulations/:id', auth, (req, res) => {
 });
 
 
+// ── BARTER ──────────────────────────────────────────
+app.get('/api/barters', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('barters').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(b => b.user_id === req.user.id);
+  const { status } = req.query;
+  if (status) list = list.filter(b => b.status === status);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(b => ({ ...b, username: (users.find(u => u.id === b.user_id)||{}).username || null })));
+});
+
+app.post('/api/barters', auth, (req, res) => {
+  const { nick, url, address, phone, product, notes } = req.body;
+  if (!nick) return res.status(400).json({ error: 'Укажите ник' });
+  const barter = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    nick, url: url||null, address: address||null, phone: phone||null,
+    product: product||null, notes: notes||null,
+    status: 'transferred',
+    created_at: new Date().toISOString(),
+  };
+  db.get('barters').push(barter).write();
+  res.json({ id: barter.id });
+});
+
+app.put('/api/barters/:id', auth, (req, res) => {
+  const existing = db.get('barters').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { nick, url, address, phone, product, notes, status } = req.body;
+  const updates = {};
+  if (nick !== undefined) updates.nick = nick;
+  if (url !== undefined) updates.url = url;
+  if (address !== undefined) updates.address = address;
+  if (phone !== undefined) updates.phone = phone;
+  if (product !== undefined) updates.product = product;
+  if (notes !== undefined) updates.notes = notes;
+  if (status !== undefined) updates.status = status;
+  db.get('barters').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/barters/:id', auth, (req, res) => {
+  const existing = db.get('barters').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('barters').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -583,7 +635,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1837,6 +1889,58 @@ app.delete('/api/regulations/:id/file', auth, (req, res) => {
 app.delete('/api/regulations/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   db.get('regulations').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
+// ── BARTER ──────────────────────────────────────────
+app.get('/api/barters', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('barters').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(b => b.user_id === req.user.id);
+  const { status } = req.query;
+  if (status) list = list.filter(b => b.status === status);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(b => ({ ...b, username: (users.find(u => u.id === b.user_id)||{}).username || null })));
+});
+
+app.post('/api/barters', auth, (req, res) => {
+  const { nick, url, address, phone, product, notes } = req.body;
+  if (!nick) return res.status(400).json({ error: 'Укажите ник' });
+  const barter = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    nick, url: url||null, address: address||null, phone: phone||null,
+    product: product||null, notes: notes||null,
+    status: 'transferred',
+    created_at: new Date().toISOString(),
+  };
+  db.get('barters').push(barter).write();
+  res.json({ id: barter.id });
+});
+
+app.put('/api/barters/:id', auth, (req, res) => {
+  const existing = db.get('barters').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { nick, url, address, phone, product, notes, status } = req.body;
+  const updates = {};
+  if (nick !== undefined) updates.nick = nick;
+  if (url !== undefined) updates.url = url;
+  if (address !== undefined) updates.address = address;
+  if (phone !== undefined) updates.phone = phone;
+  if (product !== undefined) updates.product = product;
+  if (notes !== undefined) updates.notes = notes;
+  if (status !== undefined) updates.status = status;
+  db.get('barters').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/barters/:id', auth, (req, res) => {
+  const existing = db.get('barters').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('barters').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
 
