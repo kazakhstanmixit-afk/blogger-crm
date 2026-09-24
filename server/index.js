@@ -649,6 +649,7 @@ app.post('/api/tz-requests', auth, (req, res) => {
     tiktok_url: tiktok_url || null,
     product: product || null,
     videos: videos || [],
+    status: 'requested',
     created_at: new Date().toISOString(),
   };
   db.get('tz_requests').push(tz).write();
@@ -660,7 +661,9 @@ app.put('/api/tz-requests/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, instagram_url, tiktok_url, product, videos } = req.body;
-  db.get('tz_requests').find({ id: req.params.id }).assign({ nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] }).write();
+  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] };
+  if (req.body.status !== undefined) tzUpdates.status = req.body.status;
+  db.get('tz_requests').find({ id: req.params.id }).assign(tzUpdates).write();
   res.json({ ok: true });
 });
 
@@ -2011,6 +2014,7 @@ app.post('/api/tz-requests', auth, (req, res) => {
     tiktok_url: tiktok_url || null,
     product: product || null,
     videos: videos || [],
+    status: 'requested',
     created_at: new Date().toISOString(),
   };
   db.get('tz_requests').push(tz).write();
@@ -2022,7 +2026,9 @@ app.put('/api/tz-requests/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, instagram_url, tiktok_url, product, videos } = req.body;
-  db.get('tz_requests').find({ id: req.params.id }).assign({ nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] }).write();
+  const tzUpdates = { nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] };
+  if (req.body.status !== undefined) tzUpdates.status = req.body.status;
+  db.get('tz_requests').find({ id: req.params.id }).assign(tzUpdates).write();
   res.json({ ok: true });
 });
 
