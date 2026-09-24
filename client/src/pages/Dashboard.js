@@ -5,6 +5,7 @@ import ProductsPage from './ProductsPage';
 import ExpensesPage from './ExpensesPage';
 import RegulationsPage from './RegulationsPage';
 import BarterPage from './BarterPage';
+import TzRequestsPage from './TzRequestsPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -18,6 +19,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'expenses', icon:'💸', label:'Расходы' },
     { id:'regulations', icon:'📋', label:'Регламенты' },
     { id:'barter', icon:'🎁', label:'Бартер' },
+    { id:'tz', icon:'📝', label:'Запросы ТЗ' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -47,6 +49,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='expenses' && <ExpensesPage currentUser={user} />}
         {page==='regulations' && <RegulationsPage currentUser={user} />}
         {page==='barter' && <BarterPage currentUser={user} />}
+        {page==='tz' && <TzRequestsPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>

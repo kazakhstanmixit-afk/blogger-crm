@@ -629,6 +629,50 @@ app.delete('/api/barters/:id', auth, (req, res) => {
 });
 
 
+// ── TZ REQUESTS ──────────────────────────────────────────
+app.get('/api/tz-requests', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('tz_requests').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(t => t.user_id === req.user.id);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
+});
+
+app.post('/api/tz-requests', auth, (req, res) => {
+  const { nick, instagram_url, tiktok_url, product, videos } = req.body;
+  if (!nick) return res.status(400).json({ error: 'Укажите ник' });
+  const tz = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    nick,
+    instagram_url: instagram_url || null,
+    tiktok_url: tiktok_url || null,
+    product: product || null,
+    videos: videos || [],
+    created_at: new Date().toISOString(),
+  };
+  db.get('tz_requests').push(tz).write();
+  res.json({ id: tz.id });
+});
+
+app.put('/api/tz-requests/:id', auth, (req, res) => {
+  const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { nick, instagram_url, tiktok_url, product, videos } = req.body;
+  db.get('tz_requests').find({ id: req.params.id }).assign({ nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/tz-requests/:id', auth, (req, res) => {
+  const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('tz_requests').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -636,7 +680,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [], tz_requests: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1943,6 +1987,50 @@ app.delete('/api/barters/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   db.get('barters').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
+// ── TZ REQUESTS ──────────────────────────────────────────
+app.get('/api/tz-requests', auth, (req, res) => {
+  const users = db.get('users').value();
+  let list = db.get('tz_requests').value() || [];
+  if (req.user.role !== 'admin') list = list.filter(t => t.user_id === req.user.id);
+  list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
+});
+
+app.post('/api/tz-requests', auth, (req, res) => {
+  const { nick, instagram_url, tiktok_url, product, videos } = req.body;
+  if (!nick) return res.status(400).json({ error: 'Укажите ник' });
+  const tz = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    nick,
+    instagram_url: instagram_url || null,
+    tiktok_url: tiktok_url || null,
+    product: product || null,
+    videos: videos || [],
+    created_at: new Date().toISOString(),
+  };
+  db.get('tz_requests').push(tz).write();
+  res.json({ id: tz.id });
+});
+
+app.put('/api/tz-requests/:id', auth, (req, res) => {
+  const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const { nick, instagram_url, tiktok_url, product, videos } = req.body;
+  db.get('tz_requests').find({ id: req.params.id }).assign({ nick, instagram_url: instagram_url||null, tiktok_url: tiktok_url||null, product: product||null, videos: videos||[] }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/tz-requests/:id', auth, (req, res) => {
+  const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  db.get('tz_requests').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
 
