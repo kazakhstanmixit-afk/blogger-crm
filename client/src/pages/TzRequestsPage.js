@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../App';
 
+const FORMATS = [
+  { value: 'reels', label: 'Рилс' },
+  { value: 'stories', label: 'Сторис' },
+  { value: 'tiktok', label: 'TikTok' },
+];
+
 const TZ_STATUSES = [
   { value: 'requested', label: 'Сделан запрос', color: '#92400e', bg: '#fef3c7', border: '#fde68a' },
   { value: 'in_work', label: 'Взято в работу', color: '#1e40af', bg: '#dbeafe', border: '#bfdbfe' },
@@ -17,6 +23,7 @@ function TzModal({ tz, onClose, onSave }) {
     tiktok_url: tz?.tiktok_url || '',
     product: tz?.product || '',
     videos: tz?.videos?.length ? tz.videos : [{ ...emptyVideo }, { ...emptyVideo }, { ...emptyVideo }],
+    format: tz?.format || 'reels',
     status: tz?.status || 'requested',
   });
   const [saving, setSaving] = useState(false);
@@ -35,7 +42,7 @@ function TzModal({ tz, onClose, onSave }) {
     const videos = form.videos.filter(v => v.url.trim());
     const res = await apiFetch(isEdit ? `/api/tz-requests/${tz.id}` : '/api/tz-requests', {
       method: isEdit ? 'PUT' : 'POST',
-      body: JSON.stringify({ ...form, videos, status: form.status }),
+      body: JSON.stringify({ ...form, videos, status: form.status, format: form.format }),
     });
     if (!res.ok) { const d = await res.json(); setError(d.error); setSaving(false); return; }
     onSave();
@@ -59,6 +66,7 @@ function TzModal({ tz, onClose, onSave }) {
             <div className="field"><label>Ссылка TikTok</label><input value={form.tiktok_url} onChange={e => set('tiktok_url', e.target.value)} placeholder="https://tiktok.com/@..." /></div>
           </div>
 
+          <div className="field"><label>Формат ТЗ</label><select value={form.format} onChange={e => set('format', e.target.value)}>{FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}</select></div>
           <div className="section-divider">Залетевшие видео (до 3)</div>
           {form.videos.map((v, i) => (
             <div key={i} className="field" style={{ marginBottom: 8 }}>
@@ -134,6 +142,7 @@ export default function TzRequestsPage({ currentUser }) {
               <th>Ник</th>
               <th>Ссылки</th>
               <th>Товар</th>
+              <th>Формат</th>
               <th>Статус</th>
               <th>Видео 1</th>
               <th>Видео 2</th>
@@ -157,6 +166,7 @@ export default function TzRequestsPage({ currentUser }) {
                   {!r.instagram_url && !r.tiktok_url && <span style={{ color: '#9ba3be', fontSize: 11 }}>—</span>}
                 </td>
                 <td style={{ fontSize: 12, fontWeight: 500 }}>{r.product || '—'}</td>
+                <td style={{fontSize:12}}>{FORMATS.find(f=>f.value===r.format)?.label||r.format||'—'}</td>
                 <td onClick={e => e.stopPropagation()}>
                   {(() => { const s = TZ_STATUSES.find(x => x.value === r.status) || TZ_STATUSES[0]; return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:'1px solid '+s.border}}>{s.label}</span>; })()}
                 </td>
