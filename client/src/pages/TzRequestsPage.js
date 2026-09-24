@@ -7,13 +7,7 @@ const TZ_STATUSES = [
   { value: 'done', label: 'Готово', color: '#15803d', bg: '#dcfce7', border: '#bbf7d0' },
 ];
 
-const FORMATS = [
-  { value: 'reels', label: 'Рилс' },
-  { value: 'stories', label: 'Сторис' },
-  { value: 'tiktok', label: 'TikTok' },
-];
-
-const emptyVideo = { url: '', format: 'reels' };
+const emptyVideo = { url: '' };
 
 function TzModal({ tz, onClose, onSave }) {
   const isEdit = !!tz;
@@ -67,17 +61,9 @@ function TzModal({ tz, onClose, onSave }) {
 
           <div className="section-divider">Залетевшие видео (до 3)</div>
           {form.videos.map((v, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-end' }}>
-              <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-                <label>Ссылка на видео {i + 1}</label>
-                <input value={v.url} onChange={e => setVideo(i, 'url', e.target.value)} placeholder="https://..." />
-              </div>
-              <div className="field" style={{ width: 130, marginBottom: 0 }}>
-                <label>Формат</label>
-                <select value={v.format} onChange={e => setVideo(i, 'format', e.target.value)}>
-                  {FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </select>
-              </div>
+            <div key={i} className="field" style={{ marginBottom: 8 }}>
+              <label>Ссылка на видео {i + 1}</label>
+              <input value={v.url} onChange={e => setVideo(i, 'url', e.target.value)} placeholder="https://..." />
             </div>
           ))}
 
@@ -124,8 +110,6 @@ export default function TzRequestsPage({ currentUser }) {
     r.nick.toLowerCase().includes(search.toLowerCase()) ||
     (r.product || '').toLowerCase().includes(search.toLowerCase())
   );
-
-  const FORMAT_LABELS = { reels: 'Рилс', stories: 'Сторис', tiktok: 'TikTok' };
 
   return (
     <div className="page">
@@ -181,10 +165,7 @@ export default function TzRequestsPage({ currentUser }) {
                   return (
                     <td key={i} onClick={e => e.stopPropagation()}>
                       {v?.url ? (
-                        <div>
-                          <a href={v.url} target="_blank" rel="noreferrer" style={{ color: '#4f6ef7', fontSize: 11, textDecoration: 'none' }}>🎬 Открыть</a>
-                          <div style={{ fontSize: 10, color: '#9ba3be', marginTop: 2 }}>{FORMAT_LABELS[v.format] || v.format}</div>
-                        </div>
+                        <a href={v.url} target="_blank" rel="noreferrer" style={{ color: '#4f6ef7', fontSize: 11, textDecoration: 'none' }}>🎬 Открыть</a>
                       ) : <span style={{ color: '#9ba3be', fontSize: 11 }}>—</span>}
                     </td>
                   );
