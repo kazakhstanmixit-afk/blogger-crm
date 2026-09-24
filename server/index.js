@@ -593,7 +593,7 @@ app.post('/api/barters', auth, (req, res) => {
   const barter = {
     id: uuidv4(),
     user_id: req.user.id,
-    nick, url: url||null, address: address||null, phone: phone||null,
+    nick, url: url||null, city: req.body.city||null, address: address||null, phone: phone||null,
     product: product||null, notes: notes||null,
     status: 'transferred',
     created_at: new Date().toISOString(),
@@ -610,6 +610,7 @@ app.put('/api/barters/:id', auth, (req, res) => {
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
   if (url !== undefined) updates.url = url;
+  if (req.body.city !== undefined) updates.city = req.body.city;
   if (address !== undefined) updates.address = address;
   if (phone !== undefined) updates.phone = phone;
   if (product !== undefined) updates.product = product;
@@ -1910,7 +1911,7 @@ app.post('/api/barters', auth, (req, res) => {
   const barter = {
     id: uuidv4(),
     user_id: req.user.id,
-    nick, url: url||null, address: address||null, phone: phone||null,
+    nick, url: url||null, city: req.body.city||null, address: address||null, phone: phone||null,
     product: product||null, notes: notes||null,
     status: 'transferred',
     created_at: new Date().toISOString(),
@@ -1927,6 +1928,7 @@ app.put('/api/barters/:id', auth, (req, res) => {
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
   if (url !== undefined) updates.url = url;
+  if (req.body.city !== undefined) updates.city = req.body.city;
   if (address !== undefined) updates.address = address;
   if (phone !== undefined) updates.phone = phone;
   if (product !== undefined) updates.product = product;

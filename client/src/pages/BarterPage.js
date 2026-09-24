@@ -20,6 +20,7 @@ function BarterModal({ barter, onClose, onSave }) {
   const [form, setForm] = useState({
     nick: barter?.nick || '',
     url: barter?.url || '',
+    city: barter?.city || '',
     address: barter?.address || '',
     phone: barter?.phone || '',
     product: barter?.product || '',
@@ -54,7 +55,9 @@ function BarterModal({ barter, onClose, onSave }) {
             <div className="field"><label>Ник *</label><input required value={form.nick} onChange={e=>set('nick',e.target.value)} placeholder="@blogger" /></div>
             <div className="field"><label>Ссылка</label><input value={form.url} onChange={e=>set('url',e.target.value)} placeholder="https://instagram.com/..." /></div>
           </div>
-          <div className="field"><label>Адрес доставки</label><input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Город, улица, дом..." /></div>
+          <div className="form-row">
+            <div className="field"><label>Город</label><input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="Алматы" /></div>
+            <div className="field"><label>Адрес доставки</label><input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Город, улица, дом..." /></div>
           <div className="form-row">
             <div className="field"><label>Номер для связи</label><input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+7 700 000 0000" /></div>
             <div className="field"><label>Товар</label><input value={form.product} onChange={e=>set('product',e.target.value)} placeholder="Название товара" /></div>
@@ -156,6 +159,7 @@ export default function BarterPage({ currentUser }) {
               {currentUser.role==='admin' && <th>Менеджер</th>}
               <th>Ник</th>
               <th>Ссылка</th>
+              <th>Город</th>
               <th>Адрес</th>
               <th>Номер</th>
               <th>Товар</th>
@@ -177,6 +181,7 @@ export default function BarterPage({ currentUser }) {
                 <td onClick={e=>e.stopPropagation()}>
                   {b.url ? <a href={b.url} target="_blank" rel="noreferrer" className="td-link">🔗 Профиль</a> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}
                 </td>
+                <td style={{fontSize:12,fontWeight:500}}>{b.city||'—'}</td>
                 <td style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12}} title={b.address||''}>{b.address||'—'}</td>
                 <td style={{fontSize:12,fontFamily:'monospace'}}>{b.phone||'—'}</td>
                 <td style={{fontSize:12,fontWeight:500}}>{b.product||'—'}</td>
