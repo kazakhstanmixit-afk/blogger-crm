@@ -45,8 +45,8 @@ function ReceiptCell({ payment, type, onUpdate }) {
     const token = localStorage.getItem('token');
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('receipt_type', type || 'general');
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt`, {
+    const receiptType = type || 'general';
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt?receipt_type=${receiptType}`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token },
       body: fd,
