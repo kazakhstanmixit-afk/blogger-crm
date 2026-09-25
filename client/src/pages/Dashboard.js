@@ -6,6 +6,7 @@ import ExpensesPage from './ExpensesPage';
 import RegulationsPage from './RegulationsPage';
 import BarterPage from './BarterPage';
 import TzRequestsPage from './TzRequestsPage';
+import ExclusivePage from './ExclusivePage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 
@@ -20,6 +21,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'regulations', icon:'📋', label:'Регламенты' },
     { id:'barter', icon:'🎁', label:'Бартер' },
     { id:'tz', icon:'📝', label:'Запросы ТЗ' },
+    { id:'exclusive', icon:'⭐', label:'Эксклюзив', adminOnly: true },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -50,6 +52,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='regulations' && <RegulationsPage currentUser={user} />}
         {page==='barter' && <BarterPage currentUser={user} />}
         {page==='tz' && <TzRequestsPage currentUser={user} />}
+        {page==='exclusive' && <ExclusivePage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>

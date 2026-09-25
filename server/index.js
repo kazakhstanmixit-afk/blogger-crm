@@ -723,6 +723,39 @@ app.post('/api/inventory/decrease', auth, (req, res) => {
 });
 
 
+// ── EXCLUSIVE ──────────────────────────────────────────
+app.get('/api/exclusive', auth, (req, res) => {
+  const bloggers = db.get('bloggers').value().filter(b => b.is_exclusive);
+  const exData = db.get('exclusive_data').value() || [];
+  const result = bloggers.map(b => {
+    const ex = exData.find(e => e.blogger_id === b.id) || {};
+    const qty = ex.video_qty || 0;
+    const price = ex.video_price || 0;
+    return {
+      ...b,
+      payment_type: ex.payment_type || null,
+      video_qty: qty,
+      video_price: price,
+      total_monthly: qty * price,
+      conditions: ex.conditions || null,
+    };
+  });
+  res.json(result);
+});
+
+app.put('/api/exclusive/:blogger_id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { payment_type, video_qty, video_price, conditions } = req.body;
+  const existing = db.get('exclusive_data').find({ blogger_id: req.params.blogger_id }).value();
+  if (existing) {
+    db.get('exclusive_data').find({ blogger_id: req.params.blogger_id }).assign({ payment_type, video_qty: Number(video_qty)||0, video_price: Number(video_price)||0, conditions }).write();
+  } else {
+    db.get('exclusive_data').push({ id: uuidv4(), blogger_id: req.params.blogger_id, payment_type, video_qty: Number(video_qty)||0, video_price: Number(video_price)||0, conditions, created_at: new Date().toISOString() }).write();
+  }
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -730,7 +763,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [], tz_requests: [], inventory: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [], tz_requests: [], inventory: [], exclusive_data: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -795,6 +828,7 @@ function makeBlogger(d) {
     cpv_stories: cpv(d.price_stories, ir),
     category: d.category || null,
     er: d.er || null,
+    is_exclusive: d.is_exclusive || false,
     status: d.status || 'new',
     decline_reason: d.decline_reason || null,
     assigned_manager_id: d.assigned_manager_id || null,
@@ -2131,6 +2165,39 @@ app.post('/api/inventory/decrease', auth, (req, res) => {
     const newQty = Math.max(0, (item[field]||0) - (qty||1));
     db.get('inventory').find({ id }).assign({ [field]: newQty }).write();
   });
+  res.json({ ok: true });
+});
+
+
+// ── EXCLUSIVE ──────────────────────────────────────────
+app.get('/api/exclusive', auth, (req, res) => {
+  const bloggers = db.get('bloggers').value().filter(b => b.is_exclusive);
+  const exData = db.get('exclusive_data').value() || [];
+  const result = bloggers.map(b => {
+    const ex = exData.find(e => e.blogger_id === b.id) || {};
+    const qty = ex.video_qty || 0;
+    const price = ex.video_price || 0;
+    return {
+      ...b,
+      payment_type: ex.payment_type || null,
+      video_qty: qty,
+      video_price: price,
+      total_monthly: qty * price,
+      conditions: ex.conditions || null,
+    };
+  });
+  res.json(result);
+});
+
+app.put('/api/exclusive/:blogger_id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { payment_type, video_qty, video_price, conditions } = req.body;
+  const existing = db.get('exclusive_data').find({ blogger_id: req.params.blogger_id }).value();
+  if (existing) {
+    db.get('exclusive_data').find({ blogger_id: req.params.blogger_id }).assign({ payment_type, video_qty: Number(video_qty)||0, video_price: Number(video_price)||0, conditions }).write();
+  } else {
+    db.get('exclusive_data').push({ id: uuidv4(), blogger_id: req.params.blogger_id, payment_type, video_qty: Number(video_qty)||0, video_price: Number(video_price)||0, conditions, created_at: new Date().toISOString() }).write();
+  }
   res.json({ ok: true });
 });
 
