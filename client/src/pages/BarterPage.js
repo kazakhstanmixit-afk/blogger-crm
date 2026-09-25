@@ -16,6 +16,70 @@ function InventoryManager({ inventory, onUpdate, isAdmin }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ name: '', qty_almaty: '', qty_astana: '' });
+  const [scanning, setScanning] = useState(false);
+  const [invoiceResult, setInvoiceResult] = useState(null);
+  const [invoiceWarehouse, setInvoiceWarehouse] = useState('almaty');
+
+  const handleInvoice = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setScanning(true);
+    setInvoiceResult(null);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } },
+              { type: 'text', text: 'Это накладная товаров. Распознай все товары и их количество. Верни ТОЛЬКО JSON массив формата: [{"name": "название товара", "qty": число}]. Без пояснений, только JSON.' }
+            ]
+          }]
+        })
+      });
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const items = JSON.parse(clean);
+      setInvoiceResult(items);
+    } catch(err) {
+      alert('Не удалось распознать. Попробуй ещё раз или добавь вручную.');
+    }
+    setScanning(false);
+    e.target.value = '';
+  };
+
+  const applyInvoice = async () => {
+    for (const item of invoiceResult) {
+      const existing = inventory.find(inv => inv.name.toLowerCase().includes(item.name.toLowerCase()) || item.name.toLowerCase().includes(inv.name.toLowerCase()));
+      if (existing) {
+        const updates = {
+          name: existing.name,
+          qty_almaty: invoiceWarehouse === 'almaty' ? (existing.qty_almaty || 0) + item.qty : existing.qty_almaty || 0,
+          qty_astana: invoiceWarehouse === 'astana' ? (existing.qty_astana || 0) + item.qty : existing.qty_astana || 0,
+        };
+        await apiFetch(`/api/inventory/${existing.id}`, { method: 'PUT', body: JSON.stringify(updates) });
+      } else {
+        await apiFetch('/api/inventory', { method: 'POST', body: JSON.stringify({
+          name: item.name,
+          qty_almaty: invoiceWarehouse === 'almaty' ? item.qty : 0,
+          qty_astana: invoiceWarehouse === 'astana' ? item.qty : 0,
+        })});
+      }
+    }
+    setInvoiceResult(null);
+    onUpdate();
+  };
 
   const handleSave = async () => {
     if (!form.name) return;
@@ -40,8 +104,39 @@ function InventoryManager({ inventory, onUpdate, isAdmin }) {
     <div style={{ background: '#fff', border: '1px solid #e2e6ef', borderRadius: 10, padding: 16, marginBottom: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>📦 Остатки на складах</div>
-        {isAdmin && <button className="btn btn-primary btn-sm" onClick={() => { setShowAdd(true); setEditItem(null); setForm({ name: '', qty_almaty: '', qty_astana: '' }); }}>+ Добавить товар</button>}
+        {isAdmin && (
+          <div style={{display:'flex',gap:8}}>
+            <label style={{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,padding:'5px 10px',background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:7,fontSize:12,color:'#7c3aed',fontWeight:500}}>
+              {scanning ? '⏳ Распознаю...' : '📷 Накладная'}
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={handleInvoice} disabled={scanning} />
+            </label>
+            <button className="btn btn-primary btn-sm" onClick={() => { setShowAdd(true); setEditItem(null); setForm({ name: '', qty_almaty: '', qty_astana: '' }); }}>+ Добавить товар</button>
+          </div>
+        )}
       </div>
+      {invoiceResult && (
+        <div style={{background:'#f5f3ff',border:'1px solid #ddd6fe',borderRadius:8,padding:12,marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:600,color:'#7c3aed',marginBottom:8}}>📋 Распознано из накладной — выберите склад и подтвердите:</div>
+          <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'center'}}>
+            <span style={{fontSize:12,color:'#5a6380'}}>Склад:</span>
+            <select value={invoiceWarehouse} onChange={e=>setInvoiceWarehouse(e.target.value)} style={{fontSize:12,padding:'3px 8px',border:'1px solid #ddd6fe',borderRadius:6}}>
+              <option value="almaty">Алматы</option>
+              <option value="astana">Астана</option>
+            </select>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+            {invoiceResult.map((item,i) => (
+              <div key={i} style={{background:'#fff',border:'1px solid #ddd6fe',borderRadius:6,padding:'6px 10px',fontSize:12}}>
+                <span style={{fontWeight:500}}>{item.name}</span> — <span style={{color:'#7c3aed',fontWeight:600}}>{item.qty} шт</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={applyInvoice}>✓ Применить к остаткам</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setInvoiceResult(null)}>Отмена</button>
+          </div>
+        </div>
+      )}
 
       {(showAdd || editItem) && (
         <div style={{ background: '#f8f9fb', borderRadius: 8, padding: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
