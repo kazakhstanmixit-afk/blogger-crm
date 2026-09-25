@@ -160,42 +160,49 @@ function BarterModal({ barter, inventory, onClose, onSave, isAdmin }) {
 
           <div className="section-divider">Товары</div>
           <div className="field">
-            <label>Склад отправки</label>
-            <select value={form.warehouse} onChange={e => set('warehouse', e.target.value)}>
-              {WAREHOUSES.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
-            </select>
+            <label>Товары (текстом)</label>
+            <textarea value={form.product||''} onChange={e => set('product', e.target.value)} placeholder="Напр: тушь, палетка 3в1 02, флюид 01" />
           </div>
 
-          {inventory.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: '#9ba3be', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>Выбрать товар</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {inventory.map(item => {
-                  const qty = form.warehouse === 'astana' ? item.qty_astana : item.qty_almaty;
-                  return (
-                    <span key={item.id} onClick={() => qty > 0 && addItem(item)}
-                      style={{ cursor: qty > 0 ? 'pointer' : 'not-allowed', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500, border: '1px solid #e2e6ef', background: qty > 0 ? '#f8f9fb' : '#f1f5f9', color: qty > 0 ? '#1a1d2e' : '#9ba3be' }}>
-                      {item.name} <span style={{ color: qty > 3 ? '#16a34a' : qty > 0 ? '#d97706' : '#dc2626' }}>({qty})</span>
-                    </span>
-                  );
-                })}
+          {isAdmin && (
+            <>
+              <div style={{fontSize:11,color:'#9ba3be',marginBottom:6,marginTop:4}}>Дополнительно — выбрать из склада (уменьшит остатки):</div>
+              <div className="field">
+                <label>Склад отправки</label>
+                <select value={form.warehouse} onChange={e => set('warehouse', e.target.value)}>
+                  {WAREHOUSES.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+                </select>
               </div>
-            </div>
-          )}
-
-          {form.items.length > 0 && (
-            <div style={{ background: '#f8f9fb', borderRadius: 8, padding: 10, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: '#9ba3be', marginBottom: 6 }}>Выбранные товары:</div>
-              {form.items.map(item => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{item.name}</span>
-                  <input type="number" value={item.qty} onChange={e => setItemQty(item.id, e.target.value)} min={1}
-                    style={{ width: 50, padding: '2px 6px', fontSize: 12, border: '1px solid #e2e6ef', borderRadius: 4, textAlign: 'center' }} />
-                  <span style={{ fontSize: 11, color: '#9ba3be' }}>шт</span>
-                  <button type="button" onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16 }}>×</button>
+              {inventory.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {inventory.map(item => {
+                      const qty = form.warehouse === 'astana' ? item.qty_astana : item.qty_almaty;
+                      return (
+                        <span key={item.id} onClick={() => qty > 0 && addItem(item)}
+                          style={{ cursor: qty > 0 ? 'pointer' : 'not-allowed', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500, border: '1px solid #e2e6ef', background: qty > 0 ? '#f8f9fb' : '#f1f5f9', color: qty > 0 ? '#1a1d2e' : '#9ba3be' }}>
+                          {item.name} <span style={{ color: qty > 3 ? '#16a34a' : qty > 0 ? '#d97706' : '#dc2626' }}>({qty})</span>
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+              {form.items.length > 0 && (
+                <div style={{ background: '#f8f9fb', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: '#9ba3be', marginBottom: 6 }}>Выбрано из склада:</div>
+                  {form.items.map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{item.name}</span>
+                      <input type="number" value={item.qty} onChange={e => setItemQty(item.id, e.target.value)} min={1}
+                        style={{ width: 50, padding: '2px 6px', fontSize: 12, border: '1px solid #e2e6ef', borderRadius: 4, textAlign: 'center' }} />
+                      <span style={{ fontSize: 11, color: '#9ba3be' }}>шт</span>
+                      <button type="button" onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           <div className="field"><label>Заметки</label><textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Дополнительная информация..." /></div>
