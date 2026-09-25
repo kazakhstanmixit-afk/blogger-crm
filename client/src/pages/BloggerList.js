@@ -656,6 +656,7 @@ export default function BloggerList({ currentUser }) {
           <thead>
             <tr>
               {currentUser.role==='admin' && <th style={{width:32}}><input type="checkbox" className="in-work-check" checked={selected.size===bloggers.length&&bloggers.length>0} onChange={toggleSelectAll} /></th>}
+              {currentUser.role==='admin' && <th style={{width:32,textAlign:'center'}} title="Эксклюзив">⭐</th>}
               <th>Ник</th>
               {show('category') && <th>Категория</th>}
               {show('status') && <th>Статус</th>}
