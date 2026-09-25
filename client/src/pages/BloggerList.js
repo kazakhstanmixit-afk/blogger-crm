@@ -695,6 +695,7 @@ export default function BloggerList({ currentUser }) {
                   onClick={e=>{ if(!e.target.closest('input')&&!e.target.closest('a')&&!e.target.closest('button')&&!e.target.closest('[data-dropdown]')) setEditBlogger(b); }}>
                   {currentUser.role==='admin' && (
                     <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={isSelected} onChange={()=>toggleSelect(b.id)} /></td>
+                    {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()} style={{textAlign:'center'}}><input type="checkbox" checked={!!b.is_exclusive} onChange={async e=>{e.stopPropagation();await patch(b.id,{is_exclusive:e.target.checked});doFetch(page);}} style={{accentColor:'#f59e0b',width:16,height:16,cursor:'pointer'}} /></td>}
                   )}
                   <td style={{fontWeight:500,whiteSpace:'nowrap'}}>{b.name}{isFresh && <span className="badge-new">new</span>}</td>
                   {show('category') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
