@@ -1588,7 +1588,7 @@ app.post('/api/payments/:id/receipt', auth, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Нет файла' });
     try {
-      const receipt_type = req.body.receipt_type || 'general';
+      const receipt_type = req.query.receipt_type || req.body.receipt_type || 'general';
       const folder = receipt_type === 'video' ? 'blogger-crm/receipts-video' : receipt_type === 'product' ? 'blogger-crm/receipts-product' : 'blogger-crm/receipts';
       const result = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_stream(
