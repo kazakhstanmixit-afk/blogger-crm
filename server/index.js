@@ -588,13 +588,13 @@ app.get('/api/barters', auth, (req, res) => {
 });
 
 app.post('/api/barters', auth, (req, res) => {
-  const { nick, url, address, phone, product, notes } = req.body;
+  const { nick, url, address, phone, product, notes, items, warehouse } = req.body;
   if (!nick) return res.status(400).json({ error: 'Укажите ник' });
   const barter = {
     id: uuidv4(),
     user_id: req.user.id,
     nick, url: url||null, city: req.body.city||null, address: address||null, phone: phone||null,
-    product: product||null, notes: notes||null,
+    product: product||null, items: items||[], warehouse: warehouse||'almaty', notes: notes||null,
     status: 'transferred',
     created_at: new Date().toISOString(),
   };
@@ -611,6 +611,8 @@ app.put('/api/barters/:id', auth, (req, res) => {
   if (nick !== undefined) updates.nick = nick;
   if (url !== undefined) updates.url = url;
   if (req.body.city !== undefined) updates.city = req.body.city;
+  if (req.body.warehouse !== undefined) updates.warehouse = req.body.warehouse;
+  if (req.body.items !== undefined) updates.items = req.body.items;
   if (address !== undefined) updates.address = address;
   if (phone !== undefined) updates.phone = phone;
   if (product !== undefined) updates.product = product;
@@ -676,6 +678,51 @@ app.delete('/api/tz-requests/:id', auth, (req, res) => {
 });
 
 
+// ── INVENTORY ──────────────────────────────────────────
+app.get('/api/inventory', auth, (req, res) => {
+  const list = db.get('inventory').value() || [];
+  res.json(list.sort((a,b) => a.name.localeCompare(b.name)));
+});
+
+app.post('/api/inventory', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { name, qty_almaty, qty_astana } = req.body;
+  if (!name) return res.status(400).json({ error: 'Укажите название' });
+  const existing = db.get('inventory').find({ name }).value();
+  if (existing) return res.status(409).json({ error: 'Товар уже есть' });
+  const item = { id: uuidv4(), name, qty_almaty: Number(qty_almaty)||0, qty_astana: Number(qty_astana)||0, created_at: new Date().toISOString() };
+  db.get('inventory').push(item).write();
+  res.json({ id: item.id });
+});
+
+app.put('/api/inventory/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { name, qty_almaty, qty_astana } = req.body;
+  db.get('inventory').find({ id: req.params.id }).assign({ name, qty_almaty: Number(qty_almaty)||0, qty_astana: Number(qty_astana)||0 }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/inventory/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('inventory').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+// Decrease inventory when barter is created/updated
+app.post('/api/inventory/decrease', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { items } = req.body; // [{id, warehouse, qty}]
+  items.forEach(({ id, warehouse, qty }) => {
+    const item = db.get('inventory').find({ id }).value();
+    if (!item) return;
+    const field = warehouse === 'astana' ? 'qty_astana' : 'qty_almaty';
+    const newQty = Math.max(0, (item[field]||0) - (qty||1));
+    db.get('inventory').find({ id }).assign({ [field]: newQty }).write();
+  });
+  res.json({ ok: true });
+});
+
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
 }
@@ -683,7 +730,7 @@ if (process.env.NODE_ENV === 'production') {
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 const adapter = new FileSync(DB_PATH);
 const db = low(adapter);
-db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [], tz_requests: [] }).write();
+db.defaults({ users: [], bloggers: [], activity: [], batches: [], payments: [], products: [], expenses: [], regulations: [], barters: [], tz_requests: [], inventory: [] }).write();
 
 if (!db.get('users').find({ username: 'admin' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'admin', password: bcrypt.hashSync('admin123', 10), role: 'admin', created_at: new Date().toISOString() }).write();
@@ -1953,13 +2000,13 @@ app.get('/api/barters', auth, (req, res) => {
 });
 
 app.post('/api/barters', auth, (req, res) => {
-  const { nick, url, address, phone, product, notes } = req.body;
+  const { nick, url, address, phone, product, notes, items, warehouse } = req.body;
   if (!nick) return res.status(400).json({ error: 'Укажите ник' });
   const barter = {
     id: uuidv4(),
     user_id: req.user.id,
     nick, url: url||null, city: req.body.city||null, address: address||null, phone: phone||null,
-    product: product||null, notes: notes||null,
+    product: product||null, items: items||[], warehouse: warehouse||'almaty', notes: notes||null,
     status: 'transferred',
     created_at: new Date().toISOString(),
   };
@@ -1976,6 +2023,8 @@ app.put('/api/barters/:id', auth, (req, res) => {
   if (nick !== undefined) updates.nick = nick;
   if (url !== undefined) updates.url = url;
   if (req.body.city !== undefined) updates.city = req.body.city;
+  if (req.body.warehouse !== undefined) updates.warehouse = req.body.warehouse;
+  if (req.body.items !== undefined) updates.items = req.body.items;
   if (address !== undefined) updates.address = address;
   if (phone !== undefined) updates.phone = phone;
   if (product !== undefined) updates.product = product;
@@ -2037,6 +2086,51 @@ app.delete('/api/tz-requests/:id', auth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   db.get('tz_requests').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+
+// ── INVENTORY ──────────────────────────────────────────
+app.get('/api/inventory', auth, (req, res) => {
+  const list = db.get('inventory').value() || [];
+  res.json(list.sort((a,b) => a.name.localeCompare(b.name)));
+});
+
+app.post('/api/inventory', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { name, qty_almaty, qty_astana } = req.body;
+  if (!name) return res.status(400).json({ error: 'Укажите название' });
+  const existing = db.get('inventory').find({ name }).value();
+  if (existing) return res.status(409).json({ error: 'Товар уже есть' });
+  const item = { id: uuidv4(), name, qty_almaty: Number(qty_almaty)||0, qty_astana: Number(qty_astana)||0, created_at: new Date().toISOString() };
+  db.get('inventory').push(item).write();
+  res.json({ id: item.id });
+});
+
+app.put('/api/inventory/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { name, qty_almaty, qty_astana } = req.body;
+  db.get('inventory').find({ id: req.params.id }).assign({ name, qty_almaty: Number(qty_almaty)||0, qty_astana: Number(qty_astana)||0 }).write();
+  res.json({ ok: true });
+});
+
+app.delete('/api/inventory/:id', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  db.get('inventory').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
+// Decrease inventory when barter is created/updated
+app.post('/api/inventory/decrease', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { items } = req.body; // [{id, warehouse, qty}]
+  items.forEach(({ id, warehouse, qty }) => {
+    const item = db.get('inventory').find({ id }).value();
+    if (!item) return;
+    const field = warehouse === 'astana' ? 'qty_astana' : 'qty_almaty';
+    const newQty = Math.max(0, (item[field]||0) - (qty||1));
+    db.get('inventory').find({ id }).assign({ [field]: newQty }).write();
+  });
   res.json({ ok: true });
 });
 
