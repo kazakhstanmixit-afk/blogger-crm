@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../App';
 
 const FORMATS = [
@@ -14,6 +14,61 @@ const TZ_STATUSES = [
 ];
 
 const emptyVideo = { url: '' };
+
+function FileCell({ tzId, files = [], onChanged }) {
+  const inputRef = useRef();
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch((process.env.REACT_APP_API_URL || '') + `/api/tz-requests/${tzId}/file`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd,
+      });
+      if (res.ok) onChanged();
+    } catch (err) {}
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  const handleDelete = async (public_id) => {
+    if (!window.confirm('Удалить файл?')) return;
+    await apiFetch(`/api/tz-requests/${tzId}/file`, {
+      method: 'DELETE',
+      body: JSON.stringify({ public_id }),
+    });
+    onChanged();
+  };
+
+  return (
+    <div onClick={e => e.stopPropagation()}>
+      {files.map((f, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+          <a href={f.url} target="_blank" rel="noreferrer" style={{ color: '#4f6ef7', fontSize: 11, textDecoration: 'none', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>
+            📄 {f.name}
+          </a>
+          <button onClick={() => handleDelete(f.public_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: '0 2px' }}>✕</button>
+        </div>
+      ))}
+      <button
+        className="btn btn-sm btn-secondary"
+        style={{ fontSize: 10, padding: '2px 6px', marginTop: files.length ? 2 : 0 }}
+        onClick={() => inputRef.current.click()}
+        disabled={uploading}
+      >
+        {uploading ? '...' : '+ PDF'}
+      </button>
+      <input ref={inputRef} type="file" accept=".pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleUpload} />
+    </div>
+  );
+}
 
 function TzModal({ tz, onClose, onSave }) {
   const isEdit = !!tz;
@@ -141,7 +196,7 @@ export default function TzRequestsPage({ currentUser }) {
       </div>
 
       <div className="table-wrap" style={{ overflowX: 'auto' }}>
-        <table style={{ minWidth: 900 }}>
+        <table style={{ minWidth: 1000 }}>
           <thead>
             <tr>
               <th>Дата</th>
@@ -152,6 +207,7 @@ export default function TzRequestsPage({ currentUser }) {
               <th>Формат</th>
               <th>Статус</th>
               <th>Ссылка на ТЗ</th>
+              <th>Файлы</th>
               <th>Видео 1</th>
               <th>Видео 2</th>
               <th>Видео 3</th>
@@ -160,9 +216,9 @@ export default function TzRequestsPage({ currentUser }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: '#9ba3be' }}>Загрузка...</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40, color: '#9ba3be' }}>Загрузка...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={9}><div className="empty-state"><div style={{ fontSize: 36 }}>📝</div><p>Запросов пока нет</p></div></td></tr>
+              <tr><td colSpan={10}><div className="empty-state"><div style={{ fontSize: 36 }}>📝</div><p>Запросов пока нет</p></div></td></tr>
             ) : filtered.map(r => (
               <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => { setEditTz(r); setShowForm(true); }}>
                 <td style={{ fontSize: 11, color: '#9ba3be', whiteSpace: 'nowrap' }}>{new Date(r.created_at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</td>
@@ -179,6 +235,9 @@ export default function TzRequestsPage({ currentUser }) {
                   {(() => { const s = TZ_STATUSES.find(x => x.value === r.status) || TZ_STATUSES[0]; return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:500,color:s.color,background:s.bg,border:'1px solid '+s.border}}>{s.label}</span>; })()}
                 </td>
                 <td onClick={e=>e.stopPropagation()}>{r.tz_url ? <a href={r.tz_url} target='_blank' rel='noreferrer' style={{color:'#4f6ef7',fontSize:11}}>📋 Открыть</a> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
+                <td onClick={e => e.stopPropagation()} style={{ minWidth: 120 }}>
+                  <FileCell tzId={r.id} files={r.files || []} onChanged={fetchRequests} />
+                </td>
                 {[0, 1, 2].map(i => {
                   const v = r.videos?.[i];
                   return (

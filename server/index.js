@@ -2123,6 +2123,39 @@ app.delete('/api/tz-requests/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/tz-requests/:id/file', auth, (req, res) => {
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single('file');
+  upload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'blogger-crm/tz-files', resource_type: 'raw', use_filename: true, unique_filename: true },
+          (error, result) => error ? reject(error) : resolve(result)
+        ).end(req.file.buffer);
+      });
+      const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const files = existing.files || [];
+      files.push({ url: result.secure_url, public_id: result.public_id, name: req.file.originalname, uploaded_at: new Date().toISOString() });
+      db.get('tz_requests').find({ id: req.params.id }).assign({ files }).write();
+      res.json({ url: result.secure_url, name: req.file.originalname });
+    } catch(e) {
+      res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
+    }
+  });
+});
+
+app.delete('/api/tz-requests/:id/file', auth, (req, res) => {
+  const { public_id } = req.body;
+  const existing = db.get('tz_requests').find({ id: req.params.id }).value();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const files = (existing.files || []).filter(f => f.public_id !== public_id);
+  db.get('tz_requests').find({ id: req.params.id }).assign({ files }).write();
+  res.json({ ok: true });
+});
+
 
 // ── INVENTORY ──────────────────────────────────────────
 app.get('/api/inventory', auth, (req, res) => {
