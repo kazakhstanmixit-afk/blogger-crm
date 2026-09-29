@@ -2129,18 +2129,26 @@ app.post('/api/tz-requests/:id/file', auth, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Нет файла' });
     try {
+      // Транслитерация кириллицы чтобы Cloudinary не ломал имя файла
+      const translitMap = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+      const originalName = req.file.originalname;
+      const safeBase = originalName.replace(/\.[^.]+$/, '').replace(/[а-яёА-ЯЁ]/g, c => translitMap[c.toLowerCase()] || c).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const ext = originalName.match(/\.[^.]+$/) ? originalName.match(/\.[^.]+$/)[0] : '';
+      const safeName = (safeBase || 'file') + ext;
+
       const result = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_stream(
-          { folder: 'blogger-crm/tz-files', resource_type: 'raw', use_filename: true, unique_filename: true },
+          { folder: 'blogger-crm/tz-files', resource_type: 'raw', public_id: safeName.replace(/\.[^.]+$/, '') + '_' + Date.now(), use_filename: false },
           (error, result) => error ? reject(error) : resolve(result)
         ).end(req.file.buffer);
       });
       const existing = db.get('tz_requests').find({ id: req.params.id }).value();
       if (!existing) return res.status(404).json({ error: 'Not found' });
       const files = existing.files || [];
-      files.push({ url: result.secure_url, public_id: result.public_id, name: req.file.originalname, uploaded_at: new Date().toISOString() });
+      // Сохраняем оригинальное имя для отображения, безопасное для Cloudinary
+      files.push({ url: result.secure_url, public_id: result.public_id, name: originalName, uploaded_at: new Date().toISOString() });
       db.get('tz_requests').find({ id: req.params.id }).assign({ files }).write();
-      res.json({ url: result.secure_url, name: req.file.originalname });
+      res.json({ url: result.secure_url, name: originalName });
     } catch(e) {
       res.status(500).json({ error: 'Ошибка загрузки: ' + e.message });
     }
