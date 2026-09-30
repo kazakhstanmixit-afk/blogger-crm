@@ -558,7 +558,10 @@ export default function PaymentsPage({ currentUser }) {
                 ? {bg:'#dcfce7',border:'#86efac',text:'#15803d',accent:'#16a34a'}
                 : color === 'red'
                 ? {bg:'#fee2e2',border:'#fca5a5',text:'#991b1b',accent:'#dc2626'}
+                : color === 'blue'
+                ? {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',accent:'#2563eb'}
                 : {bg:'#f8f9fb',border:'#e2e6ef',text:'#3a3f5a',accent:'#4f6ef7'};
+              const GROUP_LABELS = { green: 'Счёт на оплату', red: 'ИП', blue: '' };
               return (
                 <div key={i}
                   onClick={() => setApprovalFilter(isActive ? '' : g.url)}
