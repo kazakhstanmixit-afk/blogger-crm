@@ -603,7 +603,6 @@ export default function PaymentsPage({ currentUser }) {
                   )}
                 </td>
                 <td><StatusBadge status={p.status} /></td>
-                <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
                 <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
