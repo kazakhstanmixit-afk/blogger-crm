@@ -160,6 +160,7 @@ export default function PaymentsPage({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [approvalFilter, setApprovalFilter] = useState('');
+  const [approvalExistsFilter, setApprovalExistsFilter] = useState(''); // 'yes' | 'no' | ''
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
@@ -450,6 +451,8 @@ export default function PaymentsPage({ currentUser }) {
   const filteredPayments = React.useMemo(() => {
     let list = payments;
     if (approvalFilter) list = list.filter(p => p.approval_url === approvalFilter);
+    if (approvalExistsFilter === 'yes') list = list.filter(p => !!p.approval_url);
+    if (approvalExistsFilter === 'no') list = list.filter(p => !p.approval_url);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(p =>
@@ -461,13 +464,13 @@ export default function PaymentsPage({ currentUser }) {
       );
     }
     return list;
-  }, [payments, approvalFilter, search]);
+  }, [payments, approvalFilter, approvalExistsFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
   const pagedPayments = filteredPayments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Сбрасываем страницу при изменении фильтров/поиска
-  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, search]);
+  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, search]);
 
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = () => {
@@ -523,8 +526,13 @@ export default function PaymentsPage({ currentUser }) {
           <option value="">Все статусы</option>
           {Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
         </select>
-        {approvalFilter && (
-          <button className="btn btn-secondary btn-sm" onClick={()=>setApprovalFilter('')}>✕ Сбросить фильтр</button>
+        <select className="select-filter" value={approvalExistsFilter} onChange={e=>{ setApprovalExistsFilter(e.target.value); setApprovalFilter(''); }}>
+          <option value="">Все (с/без согласования)</option>
+          <option value="yes">✅ Есть ссылка на согласование</option>
+          <option value="no">❌ Без ссылки на согласование</option>
+        </select>
+        {(approvalFilter || approvalExistsFilter) && (
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ setApprovalFilter(''); setApprovalExistsFilter(''); }}>✕ Сбросить фильтр</button>
         )}
       </div>
 
@@ -536,17 +544,32 @@ export default function PaymentsPage({ currentUser }) {
               const isActive = approvalFilter === g.url;
               const label = g.url.replace(/https?:\/\//,'').replace(/\?.*/,'');
               const shortLabel = label.length > 40 ? label.slice(0,40)+'…' : label;
+              const CARD_COLORS = [
+                {bg:'#dcfce7',border:'#86efac',text:'#15803d',active:'#16a34a'},
+                {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',active:'#2563eb'},
+                {bg:'#fef3c7',border:'#fcd34d',text:'#92400e',active:'#d97706'},
+                {bg:'#fce7f3',border:'#f9a8d4',text:'#9d174d',active:'#db2777'},
+                {bg:'#ede9fe',border:'#c4b5fd',text:'#5b21b6',active:'#7c3aed'},
+                {bg:'#ffedd5',border:'#fdba74',text:'#9a3412',active:'#ea580c'},
+                {bg:'#cffafe',border:'#67e8f9',text:'#155e75',active:'#0891b2'},
+                {bg:'#d1fae5',border:'#6ee7b7',text:'#065f46',active:'#059669'},
+              ];
+              const c = CARD_COLORS[i % CARD_COLORS.length];
               return (
                 <div key={i}
                   onClick={() => setApprovalFilter(isActive ? '' : g.url)}
                   style={{
-                    cursor:'pointer',padding:'8px 14px',borderRadius:8,border:isActive?'2px solid #4f6ef7':'1px solid #e2e6ef',
-                    background:isActive?'#eef1fe':'#fff',boxShadow:'0 1px 3px rgba(0,0,0,.06)',
+                    cursor:'pointer',padding:'8px 14px',borderRadius:8,
+                    border:isActive?`2px solid ${c.active}`:`1px solid ${c.border}`,
+                    background:c.bg,
+                    boxShadow:isActive?`0 0 0 3px ${c.border}40`:'0 1px 3px rgba(0,0,0,.06)',
                     display:'flex',flexDirection:'column',gap:2,minWidth:180,maxWidth:280,
+                    transform:isActive?'scale(1.02)':'scale(1)',
+                    transition:'all .15s',
                   }}>
-                  <div style={{fontSize:10,color:'#9ba3be'}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
-                  <div style={{fontSize:11,color:isActive?'#4f6ef7':'#3a3f5a',fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:isActive?'#4f6ef7':'#1a1d2e'}}>{g.total.toLocaleString('ru')} ₸</div>
+                  <div style={{fontSize:10,color:c.text,opacity:.7}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
+                  <div style={{fontSize:11,color:c.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:c.active}}>{g.total.toLocaleString('ru')} ₸</div>
                 </div>
               );
             })}
