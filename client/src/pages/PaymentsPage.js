@@ -393,14 +393,7 @@ export default function PaymentsPage({ currentUser }) {
     fetchPayments();
   };
 
-  const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleAll = () => {
-    const visible = filteredPayments;
-    if (selected.size === visible.length && visible.every(p => selected.has(p.id))) setSelected(new Set());
-    else setSelected(new Set(visible.map(p => p.id)));
-  };
-
-  // Группы по ссылке на согласование (только те у кого есть ссылка)
+  // Группы по ссылке на согласование
   const approvalGroups = React.useMemo(() => {
     const groups = {};
     payments.forEach(p => {
@@ -419,6 +412,12 @@ export default function PaymentsPage({ currentUser }) {
     if (approvalFilter) list = list.filter(p => p.approval_url === approvalFilter);
     return list;
   }, [payments, approvalFilter]);
+
+  const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const toggleAll = () => {
+    if (selected.size === filteredPayments.length && filteredPayments.every(p => selected.has(p.id))) setSelected(new Set());
+    else setSelected(new Set(filteredPayments.map(p => p.id)));
+  };
 
   const stats = {
     pending: payments.filter(p=>p.status==='pending').length,
