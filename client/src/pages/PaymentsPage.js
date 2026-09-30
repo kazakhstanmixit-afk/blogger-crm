@@ -574,17 +574,21 @@ export default function PaymentsPage({ currentUser }) {
                     transform:isActive?'scale(1.02)':'scale(1)',
                     transition:'all .15s',
                   }}>
-                  <div style={{fontSize:10,color:C.text,opacity:.7}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
-                  {GROUP_LABELS[color] && <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em'}}>{GROUP_LABELS[color]}</div>}
-                  <div style={{fontSize:11,color:C.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.total.toLocaleString('ru')} ₸</div>
-                  <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:5,marginTop:2}}>
-                    <button onClick={()=>setGroupColor(g.url, color==='green'?'':'green')}
-                      style={{width:22,height:22,borderRadius:'50%',border:color==='green'?'3px solid #15803d':'2px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0,boxShadow:color==='green'?'0 0 0 2px #15803d40':'none'}} />
-                    <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')}
-                      style={{width:22,height:22,borderRadius:'50%',border:color==='red'?'3px solid #991b1b':'2px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0,boxShadow:color==='red'?'0 0 0 2px #991b1b40':'none'}} />
-                    <button onClick={()=>setGroupColor(g.url, color==='blue'?'':'blue')}
-                      style={{width:22,height:22,borderRadius:'50%',border:color==='blue'?'3px solid #1e40af':'2px solid #93c5fd',background:'#dbeafe',cursor:'pointer',padding:0,boxShadow:color==='blue'?'0 0 0 2px #1e40af40':'none'}} />
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4}}>
+                    <div>
+                      <div style={{fontSize:10,color:C.text,opacity:.7,marginBottom:1}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} зая.</div>
+                      {GROUP_LABELS[color] && <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:1}}>{GROUP_LABELS[color]}</div>}
+                      <div style={{fontSize:10,color:C.text,fontWeight:500,wordBreak:'break-all',maxWidth:110}} title={g.url}>{shortLabel}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:C.accent,marginTop:2}}>{g.total.toLocaleString('ru')} ₸</div>
+                    </div>
+                    <div onClick={e=>e.stopPropagation()} style={{display:'flex',flexDirection:'column',gap:4,paddingTop:2,flexShrink:0}}>
+                      <button onClick={()=>setGroupColor(g.url, color==='green'?'':'green')}
+                        style={{width:20,height:20,borderRadius:'50%',border:color==='green'?'3px solid #15803d':'2px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0,display:'block'}} />
+                      <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')}
+                        style={{width:20,height:20,borderRadius:'50%',border:color==='red'?'3px solid #991b1b':'2px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0,display:'block'}} />
+                      <button onClick={()=>setGroupColor(g.url, color==='blue'?'':'blue')}
+                        style={{width:20,height:20,borderRadius:'50%',border:color==='blue'?'3px solid #1e40af':'2px solid #93c5fd',background:'#dbeafe',cursor:'pointer',padding:0,display:'block'}} />
+                    </div>
                   </div>
                 </div>
               );
