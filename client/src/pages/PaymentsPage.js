@@ -122,6 +122,7 @@ export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [selected, setSelected] = useState(new Set());
@@ -183,8 +184,10 @@ export default function PaymentsPage({ currentUser }) {
     const date = new Date().toLocaleDateString('ru');
 
     const rows = filtered.map((p, i) => {
-      const receipts = p.receipts || [];
-      const receiptImgs = receipts.map(r => `<img src="${r.url}" style="width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid #ddd;margin:2px;" />`).join('');
+      const allReceipts = [...(p.receipts_video || []), ...(p.receipts_product || []), ...(p.receipts || [])];
+      const receiptImgs = allReceipts.map(r =>
+        `<img src="${r.url}" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid #ddd;margin:2px;" crossorigin="anonymous" />`
+      ).join('');
       return `<tr>
         <td style="text-align:center">${i+1}</td>
         <td><strong>${p.blogger_name||'—'}</strong><br/><span style="color:#666;font-size:10px">${p.manager_name||''}</span></td>
@@ -194,7 +197,7 @@ export default function PaymentsPage({ currentUser }) {
         <td style="text-align:right">${p.amount_product ? (p.amount_product).toLocaleString('ru')+' ₸' : '—'}</td>
         <td style="text-align:right;font-weight:700">${(p.amount||0).toLocaleString('ru')} ₸</td>
         <td>${p.approval_url ? `<a href="${p.approval_url}" style="color:#4f6ef7;font-size:10px">🔗 ссылка</a>` : '—'}</td>
-        <td>${receiptImgs || '—'}</td>
+        <td>${receiptImgs || '<span style="color:#999;font-size:10px">нет</span>'}</td>
         <td>${LABELS[p.status]||p.status}</td>
       </tr>`;
     }).join('');
@@ -246,7 +249,17 @@ export default function PaymentsPage({ currentUser }) {
     w.document.write(html);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 800);
+    // Ждём загрузки всех изображений перед печатью
+    w.addEventListener('load', () => {
+      const imgs = w.document.images;
+      if (imgs.length === 0) { setTimeout(() => w.print(), 300); return; }
+      let loaded = 0;
+      const tryPrint = () => { loaded++; if (loaded >= imgs.length) setTimeout(() => w.print(), 300); };
+      for (let i = 0; i < imgs.length; i++) {
+        if (imgs[i].complete) tryPrint();
+        else { imgs[i].onload = tryPrint; imgs[i].onerror = tryPrint; }
+      }
+    });
   };
 
   const handleExportSelected = async () => {
@@ -381,7 +394,31 @@ export default function PaymentsPage({ currentUser }) {
   };
 
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleAll = () => { if(selected.size===payments.length) setSelected(new Set()); else setSelected(new Set(payments.map(p=>p.id))); };
+  const toggleAll = () => {
+    const visible = filteredPayments;
+    if (selected.size === visible.length && visible.every(p => selected.has(p.id))) setSelected(new Set());
+    else setSelected(new Set(visible.map(p => p.id)));
+  };
+
+  // Группы по ссылке на согласование (только те у кого есть ссылка)
+  const approvalGroups = React.useMemo(() => {
+    const groups = {};
+    payments.forEach(p => {
+      if (p.approval_url) {
+        if (!groups[p.approval_url]) groups[p.approval_url] = { url: p.approval_url, payments: [], total: 0, date: p.created_at };
+        groups[p.approval_url].payments.push(p);
+        groups[p.approval_url].total += p.amount || 0;
+        if (p.created_at < groups[p.approval_url].date) groups[p.approval_url].date = p.created_at;
+      }
+    });
+    return Object.values(groups).sort((a,b) => new Date(b.date) - new Date(a.date));
+  }, [payments]);
+
+  const filteredPayments = React.useMemo(() => {
+    let list = payments;
+    if (approvalFilter) list = list.filter(p => p.approval_url === approvalFilter);
+    return list;
+  }, [payments, approvalFilter]);
 
   const stats = {
     pending: payments.filter(p=>p.status==='pending').length,
@@ -424,7 +461,36 @@ export default function PaymentsPage({ currentUser }) {
           <option value="">Все статусы</option>
           {Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
         </select>
+        {approvalFilter && (
+          <button className="btn btn-secondary btn-sm" onClick={()=>setApprovalFilter('')}>✕ Сбросить фильтр</button>
+        )}
       </div>
+
+      {currentUser.role==='admin' && approvalGroups.length > 0 && (
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Группы по согласованию</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {approvalGroups.map((g, i) => {
+              const isActive = approvalFilter === g.url;
+              const label = g.url.replace(/https?:\/\//,'').replace(/\?.*/,'');
+              const shortLabel = label.length > 40 ? label.slice(0,40)+'…' : label;
+              return (
+                <div key={i}
+                  onClick={() => setApprovalFilter(isActive ? '' : g.url)}
+                  style={{
+                    cursor:'pointer',padding:'8px 14px',borderRadius:8,border:isActive?'2px solid #4f6ef7':'1px solid #e2e6ef',
+                    background:isActive?'#eef1fe':'#fff',boxShadow:'0 1px 3px rgba(0,0,0,.06)',
+                    display:'flex',flexDirection:'column',gap:2,minWidth:180,maxWidth:280,
+                  }}>
+                  <div style={{fontSize:10,color:'#9ba3be'}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
+                  <div style={{fontSize:11,color:isActive?'#4f6ef7':'#3a3f5a',fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:isActive?'#4f6ef7':'#1a1d2e'}}>{g.total.toLocaleString('ru')} ₸</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {selected.size > 0 && (
         <div style={{background:'#eef1fe',border:'1px solid #c7d2fe',borderRadius:8,padding:'12px 16px',marginBottom:10}}>
@@ -470,9 +536,9 @@ export default function PaymentsPage({ currentUser }) {
           <tbody>
             {loading ? (
               <tr><td colSpan={12} style={{textAlign:'center',padding:40,color:'#9ba3be'}}>Загрузка...</td></tr>
-            ) : payments.length===0 ? (
+            ) : filteredPayments.length===0 ? (
               <tr><td colSpan={12}><div className="empty-state"><div style={{fontSize:36}}>💳</div><p>Заявок пока нет</p></div></td></tr>
-            ) : payments.map(p=>(
+            ) : filteredPayments.map(p=>(
               <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
