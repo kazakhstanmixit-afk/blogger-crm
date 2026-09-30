@@ -160,6 +160,9 @@ export default function PaymentsPage({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [approvalFilter, setApprovalFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [selected, setSelected] = useState(new Set());
@@ -447,8 +450,24 @@ export default function PaymentsPage({ currentUser }) {
   const filteredPayments = React.useMemo(() => {
     let list = payments;
     if (approvalFilter) list = list.filter(p => p.approval_url === approvalFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(p =>
+        (p.blogger_name || '').toLowerCase().includes(q) ||
+        (p.recipient_name || '').toLowerCase().includes(q) ||
+        (p.iin || '').includes(q) ||
+        String(p.amount || '').includes(q) ||
+        (p.manager_name || '').toLowerCase().includes(q)
+      );
+    }
     return list;
-  }, [payments, approvalFilter]);
+  }, [payments, approvalFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
+  const pagedPayments = filteredPayments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Сбрасываем страницу при изменении фильтров/поиска
+  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, search]);
 
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = () => {
@@ -493,6 +512,13 @@ export default function PaymentsPage({ currentUser }) {
       )}
 
       <div className="toolbar">
+        <input
+          className="search-input"
+          placeholder="🔍 Блогер, ФИО, ИИН, сумма..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{minWidth:220}}
+        />
         <select className="select-filter" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
           <option value="">Все статусы</option>
           {Object.entries(PAYMENT_STATUS).map(([v,s])=><option key={v} value={v}>{s.label}</option>)}
@@ -574,7 +600,7 @@ export default function PaymentsPage({ currentUser }) {
               <tr><td colSpan={12} style={{textAlign:'center',padding:40,color:'#9ba3be'}}>Загрузка...</td></tr>
             ) : filteredPayments.length===0 ? (
               <tr><td colSpan={12}><div className="empty-state"><div style={{fontSize:36}}>💳</div><p>Заявок пока нет</p></div></td></tr>
-            ) : filteredPayments.map(p=>(
+            ) : pagedPayments.map(p=>(
               <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
@@ -624,6 +650,28 @@ export default function PaymentsPage({ currentUser }) {
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:16,flexWrap:'wrap'}}>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setPage(1)} disabled={page===1}>«</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>‹</button>
+          {Array.from({length:totalPages},(_,i)=>i+1).filter(n=>n===1||n===totalPages||Math.abs(n-page)<=2).reduce((acc,n,i,arr)=>{
+            if(i>0&&n-arr[i-1]>1)acc.push(<span key={'e'+n} style={{color:'#9ba3be',padding:'0 4px'}}>…</span>);
+            acc.push(
+              <button key={n} className={`btn btn-sm${page===n?' btn-primary':' btn-secondary'}`}
+                onClick={()=>setPage(n)} style={{minWidth:32}}>
+                {n}
+              </button>
+            );
+            return acc;
+          },[])}
+          <button className="btn btn-secondary btn-sm" onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>›</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setPage(totalPages)} disabled={page===totalPages}>»</button>
+          <span style={{fontSize:11,color:'#9ba3be',marginLeft:4}}>
+            {(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filteredPayments.length)} из {filteredPayments.length}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
