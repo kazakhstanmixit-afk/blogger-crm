@@ -161,6 +161,9 @@ export default function PaymentsPage({ currentUser }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [approvalFilter, setApprovalFilter] = useState('');
   const [approvalExistsFilter, setApprovalExistsFilter] = useState(''); // 'yes' | 'no' | ''
+  const [groupColors, setGroupColors] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('approvalGroupColors') || '{}'); } catch { return {}; }
+  });
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
@@ -472,6 +475,12 @@ export default function PaymentsPage({ currentUser }) {
   // Сбрасываем страницу при изменении фильтров/поиска
   React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, search]);
 
+  const setGroupColor = (url, color) => {
+    const next = { ...groupColors, [url]: color };
+    setGroupColors(next);
+    localStorage.setItem('approvalGroupColors', JSON.stringify(next));
+  };
+
   const toggleSelect = (id) => setSelected(prev => { const n = new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleAll = () => {
     if (selected.size === filteredPayments.length && filteredPayments.every(p => selected.has(p.id))) setSelected(new Set());
@@ -544,32 +553,35 @@ export default function PaymentsPage({ currentUser }) {
               const isActive = approvalFilter === g.url;
               const label = g.url.replace(/https?:\/\//,'').replace(/\?.*/,'');
               const shortLabel = label.length > 40 ? label.slice(0,40)+'…' : label;
-              const CARD_COLORS = [
-                {bg:'#dcfce7',border:'#86efac',text:'#15803d',active:'#16a34a'},
-                {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',active:'#2563eb'},
-                {bg:'#fef3c7',border:'#fcd34d',text:'#92400e',active:'#d97706'},
-                {bg:'#fce7f3',border:'#f9a8d4',text:'#9d174d',active:'#db2777'},
-                {bg:'#ede9fe',border:'#c4b5fd',text:'#5b21b6',active:'#7c3aed'},
-                {bg:'#ffedd5',border:'#fdba74',text:'#9a3412',active:'#ea580c'},
-                {bg:'#cffafe',border:'#67e8f9',text:'#155e75',active:'#0891b2'},
-                {bg:'#d1fae5',border:'#6ee7b7',text:'#065f46',active:'#059669'},
-              ];
-              const c = CARD_COLORS[i % CARD_COLORS.length];
+              const color = groupColors[g.url] || '';
+              const C = color === 'green'
+                ? {bg:'#dcfce7',border:'#86efac',text:'#15803d',accent:'#16a34a'}
+                : color === 'red'
+                ? {bg:'#fee2e2',border:'#fca5a5',text:'#991b1b',accent:'#dc2626'}
+                : {bg:'#f8f9fb',border:'#e2e6ef',text:'#3a3f5a',accent:'#4f6ef7'};
               return (
                 <div key={i}
                   onClick={() => setApprovalFilter(isActive ? '' : g.url)}
                   style={{
                     cursor:'pointer',padding:'8px 14px',borderRadius:8,
-                    border:isActive?`2px solid ${c.active}`:`1px solid ${c.border}`,
-                    background:c.bg,
-                    boxShadow:isActive?`0 0 0 3px ${c.border}40`:'0 1px 3px rgba(0,0,0,.06)',
-                    display:'flex',flexDirection:'column',gap:2,minWidth:180,maxWidth:280,
+                    border:isActive?`2px solid ${C.accent}`:`1px solid ${C.border}`,
+                    background:C.bg,
+                    boxShadow:isActive?`0 0 0 3px ${C.border}60`:'0 1px 3px rgba(0,0,0,.06)',
+                    display:'flex',flexDirection:'column',gap:3,minWidth:180,maxWidth:280,
                     transform:isActive?'scale(1.02)':'scale(1)',
                     transition:'all .15s',
                   }}>
-                  <div style={{fontSize:10,color:c.text,opacity:.7}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
-                  <div style={{fontSize:11,color:c.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:c.active}}>{g.total.toLocaleString('ru')} ₸</div>
+                  <div style={{fontSize:10,color:C.text,opacity:.7}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
+                  <div style={{fontSize:11,color:C.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.total.toLocaleString('ru')} ₸</div>
+                    <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:3}}>
+                      <button onClick={()=>setGroupColor(g.url, color==='green'?'':'green')} title="Зелёный"
+                        style={{width:18,height:18,borderRadius:'50%',border:color==='green'?'2px solid #15803d':'1px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0,flexShrink:0}} />
+                      <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')} title="Красный"
+                        style={{width:18,height:18,borderRadius:'50%',border:color==='red'?'2px solid #991b1b':'1px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0,flexShrink:0}} />
+                    </div>
+                  </div>
                 </div>
               );
             })}
