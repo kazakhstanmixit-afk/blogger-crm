@@ -18,17 +18,54 @@ function StatusBadge({ status }) {
   );
 }
 
-function ApprovalInput({ paymentId, onSave }) {
+function ApprovalCell({ payment, isAdmin, onSave }) {
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState('');
-  if (!editing) return <span onClick={()=>setEditing(true)} style={{color:'#9ba3be',fontSize:11,cursor:'pointer',borderBottom:'1px dashed #c8cfe0'}}>+ добавить</span>;
-  return (
-    <div style={{display:'flex',gap:4}}>
-      <input value={val} onChange={e=>setVal(e.target.value)} placeholder="https://..." style={{width:120,fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none'}} />
-      <button className="btn btn-primary btn-sm" onClick={async()=>{await apiFetch(`/api/payments/${paymentId}`,{method:'PUT',body:JSON.stringify({approval_url:val})});setEditing(false);onSave();}}>✓</button>
-      <button className="btn btn-secondary btn-sm" onClick={()=>setEditing(false)}>×</button>
-    </div>
-  );
+  const [val, setVal] = useState(payment.approval_url || '');
+
+  const handleSave = async () => {
+    await apiFetch(`/api/payments/${payment.id}`, { method: 'PUT', body: JSON.stringify({ approval_url: val || null }) });
+    setEditing(false);
+    onSave();
+  };
+
+  if (editing) {
+    return (
+      <div style={{display:'flex',gap:4,alignItems:'center'}}>
+        <input
+          autoFocus
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') { setVal(payment.approval_url||''); setEditing(false); } }}
+          placeholder="https://..."
+          style={{width:160,fontSize:11,padding:'3px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none'}}
+        />
+        <button className="btn btn-primary btn-sm" onClick={handleSave}>✓</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => { setVal(payment.approval_url||''); setEditing(false); }}>×</button>
+      </div>
+    );
+  }
+
+  if (payment.approval_url) {
+    return (
+      <div style={{display:'flex',alignItems:'center',gap:4}}>
+        <a href={payment.approval_url} target="_blank" rel="noreferrer" style={{color:'#4f6ef7',fontSize:11}}>🔗 Открыть</a>
+        {isAdmin && <span onClick={() => setEditing(true)} style={{cursor:'pointer',color:'#9ba3be',fontSize:10,borderBottom:'1px dashed #c8cfe0'}}>изм.</span>}
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="btn btn-sm"
+        style={{fontSize:11,padding:'3px 10px',background:'#eef1fe',color:'#4f6ef7',border:'1px solid #c7d2fe'}}>
+        + Добавить
+      </button>
+    );
+  }
+
+  return <span style={{color:'#9ba3be',fontSize:11}}>—</span>;
 }
 
 function ReceiptCell({ payment, type, onUpdate }) {
@@ -567,7 +604,7 @@ export default function PaymentsPage({ currentUser }) {
                 </td>
                 <td><StatusBadge status={p.status} /></td>
                 <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11,color:'#9ba3be'}} title={p.notes||''}>{p.notes||'—'}</td>
-                <td onClick={e=>e.stopPropagation()}>{p.approval_url ? <a href={p.approval_url} target='_blank' rel='noreferrer' style={{color:'#4f6ef7',fontSize:11}}>🔗 Открыть</a> : currentUser.role==='admin' ? <ApprovalInput paymentId={p.id} onSave={fetchPayments}/> : <span style={{color:'#9ba3be',fontSize:11}}>—</span>}</td>
+                <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
                 {currentUser.role==='admin' && (
