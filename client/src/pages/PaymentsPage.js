@@ -561,7 +561,7 @@ export default function PaymentsPage({ currentUser }) {
                 : color === 'blue'
                 ? {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',accent:'#2563eb'}
                 : {bg:'#f8f9fb',border:'#e2e6ef',text:'#3a3f5a',accent:'#4f6ef7'};
-              const GROUP_LABELS = { green: 'Счёт на оплату', red: 'ИП', blue: '' };
+              const GROUP_LABELS = { green: '', red: '', blue: 'Счёт на оплату / ИП' };
               return (
                 <div key={i}
                   onClick={() => setApprovalFilter(isActive ? '' : g.url)}
@@ -575,6 +575,7 @@ export default function PaymentsPage({ currentUser }) {
                     transition:'all .15s',
                   }}>
                   <div style={{fontSize:10,color:C.text,opacity:.7}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} заявок</div>
+                  {GROUP_LABELS[color] && <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em'}}>{GROUP_LABELS[color]}</div>}
                   <div style={{fontSize:11,color:C.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                     <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{g.total.toLocaleString('ru')} ₸</div>
@@ -583,6 +584,8 @@ export default function PaymentsPage({ currentUser }) {
                         style={{width:18,height:18,borderRadius:'50%',border:color==='green'?'2px solid #15803d':'1px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0,flexShrink:0}} />
                       <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')} title="Красный"
                         style={{width:18,height:18,borderRadius:'50%',border:color==='red'?'2px solid #991b1b':'1px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0,flexShrink:0}} />
+                      <button onClick={()=>setGroupColor(g.url, color==='blue'?'':'blue')} title="Счёт на оплату / ИП"
+                        style={{width:18,height:18,borderRadius:'50%',border:color==='blue'?'2px solid #1e40af':'1px solid #93c5fd',background:'#dbeafe',cursor:'pointer',padding:0,flexShrink:0}} />
                     </div>
                   </div>
                 </div>
