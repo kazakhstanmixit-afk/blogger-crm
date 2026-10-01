@@ -8,6 +8,7 @@ const STATUS_OPTIONS = [
   { value: 'new', label: 'Новый', color: '#64748b' },
   { value: 'contacted', label: 'Написали', color: '#92400e' },
   { value: 'replied', label: 'Ответили', color: '#5b21b6' },
+  { value: 'considering', label: 'На рассмотрении', color: '#0891b2' },
   { value: 'transferred', label: 'Передано в работу', color: '#0369a1' },
   { value: 'in_work', label: 'В работе', color: '#15803d' },
   { value: 'declined', label: 'Отказ (контент)', color: '#991b1b' },

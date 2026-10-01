@@ -7,6 +7,7 @@ const STATUS_OPTIONS = [
   { value:'new', label:'Новый' },
   { value:'contacted', label:'Написали' },
   { value:'replied', label:'Ответили' },
+  { value:'considering', label:'На рассмотрении' },
   { value:'transferred', label:'Передано в работу' },
   { value:'in_work', label:'В работе' },
   { value:'declined', label:'Отказ (контент)' },
