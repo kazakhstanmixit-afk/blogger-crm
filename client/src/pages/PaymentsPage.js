@@ -633,6 +633,7 @@ export default function PaymentsPage({ currentUser }) {
               <th>Сумма</th>
               <th>Статус</th>
               <th>Ссылка на согласование</th>
+              <th>Заметки</th>
               <th>Чек видео</th>
               <th>Чек товара</th>
               {currentUser.role==='admin' && <th>Действия</th>}
@@ -673,6 +674,7 @@ export default function PaymentsPage({ currentUser }) {
                 </td>
                 <td><StatusBadge status={p.status} /></td>
                 <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
+                <td style={{maxWidth:180,fontSize:12,color:p.notes?'#1a1d2e':'#9ba3be',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{p.notes||'—'}</td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
                 {currentUser.role==='admin' && (
