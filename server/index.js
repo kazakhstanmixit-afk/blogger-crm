@@ -786,7 +786,8 @@ if (needsMigration) {
     if (b.price_reels && ir) b.cpv_reels = parseFloat((b.price_reels / ir).toFixed(2));
     if (b.price_tiktok && tr) b.cpv_tiktok = parseFloat((b.price_tiktok / tr).toFixed(2));
     if (b.price_both && (ir+tr)) b.cpv_both = parseFloat((b.price_both / (ir+tr)).toFixed(2));
-    if (b.price_stories && ir) b.cpv_stories = parseFloat((b.price_stories / ir).toFixed(2));
+    const sr = b.stories_avg_reach || ir;
+    if (b.price_stories && sr) b.cpv_stories = parseFloat((b.price_stories / sr).toFixed(2));
   }).write();
   console.log('Migration done');
 }
@@ -818,6 +819,7 @@ function makeBlogger(d) {
     tiktok_followers: Number(d.tiktok_followers) || 0,
     instagram_avg_reach: ir,
     tiktok_avg_reach: tr,
+    stories_avg_reach: d.stories_avg_reach ? Number(d.stories_avg_reach) : null,
     price_reels: d.price_reels ? Number(d.price_reels) : null,
     price_tiktok: d.price_tiktok ? Number(d.price_tiktok) : null,
     price_both: d.price_both ? Number(d.price_both) : null,
@@ -825,7 +827,7 @@ function makeBlogger(d) {
     cpv_reels: cpv(d.price_reels, ir),
     cpv_tiktok: cpv(d.price_tiktok, tr),
     cpv_both: cpv(d.price_both, ir + tr),
-    cpv_stories: cpv(d.price_stories, ir),
+    cpv_stories: cpv(d.price_stories, d.stories_avg_reach || ir),
     category: d.category || null,
     er: d.er || null,
     is_exclusive: d.is_exclusive || false,
@@ -1100,6 +1102,7 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
   // recalc cpv if price or reach changed
   const ir = Number(updates.instagram_avg_reach ?? existing.instagram_avg_reach) || 0;
   const tr = Number(updates.tiktok_avg_reach ?? existing.tiktok_avg_reach) || 0;
+  const sr = Number(updates.stories_avg_reach ?? existing.stories_avg_reach) || ir;
   const pr = Number(updates.price_reels ?? existing.price_reels) || null;
   const pt = Number(updates.price_tiktok ?? existing.price_tiktok) || null;
   const pb = Number(updates.price_both ?? existing.price_both) || null;
@@ -1107,7 +1110,7 @@ app.patch('/api/bloggers/:id', auth, (req, res) => {
   if (pr !== undefined) updates.cpv_reels = cpv(pr, ir);
   if (pt !== undefined) updates.cpv_tiktok = cpv(pt, tr);
   if (pb !== undefined) updates.cpv_both = cpv(pb, ir+tr);
-  if (ps !== undefined) updates.cpv_stories = cpv(ps, ir);
+  if (ps !== undefined) updates.cpv_stories = cpv(ps, sr);
   if (updates.status && updates.status !== existing.status) {
     if (updates.status === 'contacted' || updates.status === 'declined') {
       if (!existing.contacted_at) updates.contacted_at = new Date().toISOString();

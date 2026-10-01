@@ -29,7 +29,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   const [form, setForm] = useState({
     name:'', instagram_url:'', tiktok_url:'',
     instagram_followers:'', tiktok_followers:'', er:'',
-    instagram_avg_reach:'', tiktok_avg_reach:'',
+    instagram_avg_reach:'', tiktok_avg_reach:'', stories_avg_reach:'',
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
     status:'new', decline_reason:'', assigned_manager_id:'', in_work:false,
     notes:'', last_comment:'', category:'',
@@ -52,7 +52,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   const cpvReels = cpv(form.price_reels, form.instagram_avg_reach);
   const cpvTT = cpv(form.price_tiktok, form.tiktok_avg_reach);
   const cpvBoth = cpv(form.price_both, n('instagram_avg_reach')+n('tiktok_avg_reach'));
-  const cpvStories = cpv(form.price_stories, form.instagram_avg_reach);
+  const cpvStories = cpv(form.price_stories, form.stories_avg_reach || form.instagram_avg_reach);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,6 +82,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
         tiktok_followers: Number(form.tiktok_followers)||0,
         instagram_avg_reach: Number(form.instagram_avg_reach)||0,
         tiktok_avg_reach: Number(form.tiktok_avg_reach)||0,
+        stories_avg_reach: form.stories_avg_reach ? Number(form.stories_avg_reach) : null,
         price_reels: form.price_reels ? Number(form.price_reels) : null,
         price_tiktok: form.price_tiktok ? Number(form.price_tiktok) : null,
         price_both: form.price_both ? Number(form.price_both) : null,
@@ -113,9 +114,10 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
           </div>
 
           <div className="section-divider">Аудитория</div>
-          <div className="form-row" style={{gridTemplateColumns:'1fr 1fr 1fr 1fr'}}>
+          <div className="form-row" style={{gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr'}}>
             <div className="field"><label>Подп. Инст</label><input type="number" value={form.instagram_followers||''} onChange={e=>set('instagram_followers',e.target.value)} /></div>
             <div className="field"><label>Охват Инст</label><input type="number" value={form.instagram_avg_reach||''} onChange={e=>set('instagram_avg_reach',e.target.value)} /></div>
+            <div className="field"><label>Охват Сторис</label><input type="number" value={form.stories_avg_reach||''} onChange={e=>set('stories_avg_reach',e.target.value)} placeholder="просмотры" /></div>
             <div className="field"><label>Подп. ТТ</label><input type="number" value={form.tiktok_followers||''} onChange={e=>set('tiktok_followers',e.target.value)} /></div>
             <div className="field"><label>Охват ТТ</label><input type="number" value={form.tiktok_avg_reach||''} onChange={e=>set('tiktok_avg_reach',e.target.value)} /></div>
           </div>

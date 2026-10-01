@@ -37,7 +37,8 @@ const ALL_COLUMNS = [
   { key: 'cpv_tt', label: 'CPV ТТ', default: true },
   { key: 'price_both', label: 'Рилс+ТТ', default: true },
   { key: 'cpv_both', label: 'CPV Р+ТТ', default: true },
-  { key: 'price_stories', label: 'Сторис', default: false },
+  { key: 'stories_reach', label: 'Охват Сторис', default: false },
+  { key: 'price_stories', label: 'Сторис ₸', default: false },
   { key: 'cpv_stories', label: 'CPV Сторис', default: false },
   { key: 'er', label: 'ER %', default: false },
   { key: 'added', label: 'Добавлен', default: true },
@@ -321,6 +322,7 @@ export default function BloggerList({ currentUser }) {
     const colMap = {
       inst_followers: 'instagram_followers',
       inst_reach: 'instagram_avg_reach',
+      stories_reach: 'stories_avg_reach',
       tt_followers: 'tiktok_followers',
       tt_reach: 'tiktok_avg_reach',
       price_reels: 'price_reels',
@@ -673,7 +675,8 @@ export default function BloggerList({ currentUser }) {
               {show('cpv_tt') && <SortTh col='cpv_tt'>CPV ТТ</SortTh>}
               {show('price_both') && <SortTh col='price_both'>Рилс+ТТ</SortTh>}
               {show('cpv_both') && <SortTh col='cpv_both'>CPV Р+ТТ</SortTh>}
-              {show('price_stories') && <SortTh col='price_stories'>Сторис</SortTh>}
+              {show('stories_reach') && <SortTh col='stories_reach'>Охват Сторис</SortTh>}
+              {show('price_stories') && <SortTh col='price_stories'>Сторис ₸</SortTh>}
               {show('cpv_stories') && <SortTh col='cpv_stories'>CPV Сторис</SortTh>}
               {show('added') && <th>Добавлен</th>}
               <th></th>
@@ -721,6 +724,7 @@ export default function BloggerList({ currentUser }) {
                   {show('price_both') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_both} type="number" suffix="₸" onSave={v=>patch(b.id,{price_both:Number(v)})} /></td>}
                   {show('cpv_both') && <td><span className={`cpv-badge ${cpvClass(b.cpv_both)}`}>{b.cpv_both?b.cpv_both+'₸':'—'}</span></td>}
                   {show('er') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.er} type="number" suffix="%" onSave={v=>patch(b.id,{er:parseFloat(v)||null})} /></td>}
+                  {show('stories_reach') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.stories_avg_reach} type="number" onSave={v=>patch(b.id,{stories_avg_reach:Number(v)||null})} /></td>}
                   {show('price_stories') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_stories} type="number" suffix="₸" onSave={v=>patch(b.id,{price_stories:Number(v)})} /></td>}
                   {show('cpv_stories') && <td><span className={`cpv-badge ${cpvClass(b.cpv_stories)}`}>{b.cpv_stories?b.cpv_stories+'₸':'—'}</span></td>}
                   {show('added') && <td style={{fontSize:11,color:isFresh?'#4f6ef7':'#9ba3be',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>}
