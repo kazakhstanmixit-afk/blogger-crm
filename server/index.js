@@ -796,6 +796,16 @@ if (needsMigration) {
     if (b.price_stories && sr) b.cpv_stories = parseFloat((b.price_stories / sr).toFixed(2));
   }).write();
   console.log('Migration done');
+
+  // Set TZ visibility: anastasiia sees sabrina, saya sees nadira
+  const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira'] };
+  Object.entries(tzVisibility).forEach(([username, canView]) => {
+    const u = db.get('users').find({ username }).value();
+    if (u && !u.can_view_users) {
+      db.get('users').find({ username }).assign({ can_view_users: canView }).write();
+      console.log(`TZ visibility set: ${username} → ${canView.join(', ')}`);
+    }
+  });
 }
 
 function auth(req, res, next) {
