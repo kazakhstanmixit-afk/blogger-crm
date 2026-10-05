@@ -2246,6 +2246,113 @@ app.put('/api/exclusive/:blogger_id', auth, (req, res) => {
 });
 
 
+// ── DAILY REPORT (read-only, viewer/admin) ────────────────
+// GET /api/daily-report?date=YYYY-MM-DD
+// Returns aggregated data for the specified date (defaults to today).
+// Authentication: Bearer JWT (role: admin or viewer)
+app.get('/api/daily-report', auth, (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'viewer') {
+    return res.status(403).json({ error: 'Нет доступа' });
+  }
+
+  const dateParam = req.query.date; // e.g. "2026-10-05"
+  const targetDate = dateParam ? new Date(dateParam) : new Date();
+  const dayStart = new Date(targetDate); dayStart.setHours(0,0,0,0);
+  const dayEnd   = new Date(targetDate); dayEnd.setHours(23,59,59,999);
+
+  const inDay = (iso) => {
+    const d = new Date(iso);
+    return d >= dayStart && d <= dayEnd;
+  };
+
+  const activity = (db.get('activity').value() || []).filter(a => inDay(a.created_at));
+  const payments  = (db.get('payments').value()  || []);
+  const tzRequests = (db.get('tz_requests').value() || []);
+  const users = db.get('users').value() || [];
+
+  // ── 1. Status changes ─────────────────────────────────
+  const statusChanges = activity
+    .filter(a => a.action === 'status_change' || (a.details && a.details.includes('→')))
+    .map(a => ({
+      time: a.created_at,
+      manager: a.username,
+      blogger: a.blogger_name || null,
+      details: a.details,
+    }));
+
+  // ── 2. Taken in work ──────────────────────────────────
+  const takenInWork = activity
+    .filter(a => a.action === 'in_work' || (a.details && a.details.toLowerCase().includes('в работу')))
+    .map(a => ({ time: a.created_at, manager: a.username, blogger: a.blogger_name || null, details: a.details }));
+
+  // ── 3. Data changes (edits) ───────────────────────────
+  const dataChanges = activity
+    .filter(a => !statusChanges.find(s => s.time === a.created_at && s.manager === a.username))
+    .map(a => ({ time: a.created_at, manager: a.username, blogger: a.blogger_name || null, details: a.details }));
+
+  // ── 4. Per-manager summary ────────────────────────────
+  const managerMap = {};
+  activity.forEach(a => {
+    if (!managerMap[a.username]) managerMap[a.username] = { manager: a.username, actions: 0, status_changes: 0, in_work: 0 };
+    managerMap[a.username].actions++;
+    if (a.details && a.details.includes('→')) managerMap[a.username].status_changes++;
+    if (a.details && a.details.toLowerCase().includes('в работу')) managerMap[a.username].in_work++;
+  });
+
+  // ── 5. TZ requests ────────────────────────────────────
+  const tzCreatedToday = tzRequests.filter(t => inDay(t.created_at)).map(t => ({
+    id: t.id, nick: t.nick, product: t.product, status: t.status,
+    manager: (users.find(u => u.id === t.user_id)||{}).username || null,
+    created_at: t.created_at,
+  }));
+  const tzByStatus = { new: 0, in_progress: 0, done: 0, cancelled: 0 };
+  tzRequests.forEach(t => { if (tzByStatus[t.status] !== undefined) tzByStatus[t.status]++; });
+
+  // ── 6. Payments ───────────────────────────────────────
+  const paymentsCreatedToday = payments.filter(p => inDay(p.created_at)).map(p => ({
+    id: p.id, blogger_name: p.blogger_name, manager_name: p.manager_name,
+    amount: p.amount, status: p.status, notes: p.notes || null, created_at: p.created_at,
+  }));
+
+  const paymentActionsToday = activity
+    .filter(a => a.action && a.action.startsWith('payment'))
+    .map(a => ({ time: a.created_at, manager: a.username, details: a.details }));
+
+  const paymentStats = {
+    pending:   payments.filter(p => p.status === 'pending').reduce((s,p) => s + (p.amount||0), 0),
+    submitted: payments.filter(p => p.status === 'submitted').reduce((s,p) => s + (p.amount||0), 0),
+    paid:      payments.filter(p => p.status === 'paid').reduce((s,p) => s + (p.amount||0), 0),
+    pending_count:   payments.filter(p => p.status === 'pending').length,
+    submitted_count: payments.filter(p => p.status === 'submitted').length,
+    paid_count:      payments.filter(p => p.status === 'paid').length,
+  };
+
+  res.json({
+    date: dayStart.toISOString().slice(0,10),
+    generated_at: new Date().toISOString(),
+    summary: {
+      total_activity: activity.length,
+      status_changes: statusChanges.length,
+      taken_in_work: takenInWork.length,
+      tz_created_today: tzCreatedToday.length,
+      payments_created_today: paymentsCreatedToday.length,
+    },
+    managers: Object.values(managerMap).sort((a,b) => b.actions - a.actions),
+    status_changes: statusChanges,
+    taken_in_work: takenInWork,
+    data_changes: dataChanges,
+    tz: {
+      created_today: tzCreatedToday,
+      totals_by_status: tzByStatus,
+    },
+    payments: {
+      created_today: paymentsCreatedToday,
+      actions_today: paymentActionsToday,
+      totals: paymentStats,
+    },
+  });
+});
+
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
