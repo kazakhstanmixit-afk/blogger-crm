@@ -865,8 +865,9 @@ app.post('/api/login', (req, res) => {
   const user = db.get('users').find({ username }).value();
   if (!user || !bcrypt.compareSync(password, user.password))
     return res.status(401).json({ error: 'Неверный логин или пароль' });
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  const canView = user.can_view_users || [];
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role, can_view_users: canView }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token, user: { id: user.id, username: user.username, role: user.role, can_view_users: canView } });
 });
 
 // USERS

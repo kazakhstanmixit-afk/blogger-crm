@@ -200,7 +200,7 @@ export default function TzRequestsPage({ currentUser }) {
           <thead>
             <tr>
               <th>Дата</th>
-              {currentUser.role === 'admin' && <th>Менеджер</th>}
+              {(currentUser.role === 'admin' || currentUser.can_view_users?.length > 0) && <th>Менеджер</th>}
               <th>Ник</th>
               <th>Ссылки</th>
               <th>Товар</th>
@@ -222,7 +222,7 @@ export default function TzRequestsPage({ currentUser }) {
             ) : filtered.map(r => (
               <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => { setEditTz(r); setShowForm(true); }}>
                 <td style={{ fontSize: 11, color: '#9ba3be', whiteSpace: 'nowrap' }}>{new Date(r.created_at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</td>
-                {currentUser.role === 'admin' && <td><span className="tag">{r.username || '—'}</span></td>}
+                {(currentUser.role === 'admin' || currentUser.can_view_users?.length > 0) && <td><span className="tag">{r.username || '—'}</span></td>}
                 <td style={{ fontWeight: 500 }}>{r.nick}</td>
                 <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                   {r.instagram_url && <a href={r.instagram_url} target="_blank" rel="noreferrer" className="td-link">📸</a>}
