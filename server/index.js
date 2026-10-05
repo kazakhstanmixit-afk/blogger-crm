@@ -776,6 +776,11 @@ if (!db.get('users').find({ username: 'admin' }).value()) {
   console.log('Default admin: admin / admin123');
 }
 
+if (!db.get('users').find({ username: 'grok_bot' }).value()) {
+  db.get('users').push({ id: uuidv4(), username: 'grok_bot', password: bcrypt.hashSync('GrokBot2026!', 10), role: 'viewer', created_at: new Date().toISOString() }).write();
+  console.log('Viewer bot created: grok_bot / GrokBot2026!');
+}
+
 // Always apply TZ visibility settings on startup
 { const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira'] };
   Object.entries(tzVisibility).forEach(([username, canView]) => {
