@@ -635,7 +635,13 @@ app.delete('/api/barters/:id', auth, (req, res) => {
 app.get('/api/tz-requests', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('tz_requests').value() || [];
-  if (req.user.role !== 'admin') list = list.filter(t => t.user_id === req.user.id);
+  if (req.user.role !== 'admin') {
+    // can_view_users: array of usernames this manager can also see TZ for
+    const me = users.find(u => u.id === req.user.id);
+    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
+    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+    list = list.filter(t => allowedIds.includes(t.user_id));
+  }
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
 });
@@ -871,6 +877,15 @@ app.put('/api/users/:id/password', auth, (req, res) => {
   if (!password || password.length < 4) return res.status(400).json({ error: 'Пароль минимум 4 символа' });
   const hashed = require('bcryptjs').hashSync(password, 10);
   db.get('users').find({ id: req.params.id }).assign({ password: hashed }).write();
+  res.json({ ok: true });
+});
+
+// Set which users' TZ this manager can view
+app.put('/api/users/:id/can-view', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
+  const { can_view_users } = req.body; // array of usernames
+  if (!Array.isArray(can_view_users)) return res.status(400).json({ error: 'can_view_users должен быть массивом' });
+  db.get('users').find({ id: req.params.id }).assign({ can_view_users }).write();
   res.json({ ok: true });
 });
 
@@ -2084,7 +2099,13 @@ app.delete('/api/barters/:id', auth, (req, res) => {
 app.get('/api/tz-requests', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('tz_requests').value() || [];
-  if (req.user.role !== 'admin') list = list.filter(t => t.user_id === req.user.id);
+  if (req.user.role !== 'admin') {
+    // can_view_users: array of usernames this manager can also see TZ for
+    const me = users.find(u => u.id === req.user.id);
+    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
+    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+    list = list.filter(t => allowedIds.includes(t.user_id));
+  }
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
 });
