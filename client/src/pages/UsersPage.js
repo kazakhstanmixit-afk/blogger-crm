@@ -90,9 +90,7 @@ export default function UsersPage({ currentUser }) {
                 <div style={{fontSize:12, color:'var(--text3)'}}>{u.role === 'admin' ? 'Администратор' : u.role === 'operator' ? 'Оператор' : 'Менеджер'}</div>
               </div>
               <div style={{display:'flex',gap:6}}>
-                {u.role === 'admin' && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setChangePwdId(u.id); setNewPassword(''); setPwdError(''); setPwdSuccess(''); }}>🔑 Пароль</button>
-                )}
+                <button className="btn btn-secondary btn-sm" onClick={() => { setChangePwdId(u.id); setNewPassword(''); setPwdError(''); setPwdSuccess(''); }}>🔑 Пароль</button>
                 {u.id !== currentUser.id && (
                   <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u.id)}>Удалить</button>
                 )}
