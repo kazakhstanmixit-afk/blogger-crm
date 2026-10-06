@@ -34,6 +34,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
     status:'new', decline_reason:'', assigned_manager_id:'', in_work:false,
     notes:'', last_comment:'', category:'',
+    manager_instagram:'', manager_whatsapp:'',
     ...(blogger||{}),
     er: blogger?.er || '',
   });
@@ -177,6 +178,16 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
                 <option value="">— Не назначен —</option>
                 {users.map(u=><option key={u.id} value={u.id}>{u.username}</option>)}
               </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="field">
+              <label>Инста менеджера <span style={{fontSize:10,color:'#9ba3be'}}>(с какой писали)</span></label>
+              <input value={form.manager_instagram||''} onChange={e=>set('manager_instagram',e.target.value)} placeholder="@my_account" />
+            </div>
+            <div className="field">
+              <label>ВЦ менеджера <span style={{fontSize:10,color:'#9ba3be'}}>(с какого номера)</span></label>
+              <input value={form.manager_whatsapp||''} onChange={e=>set('manager_whatsapp',e.target.value)} placeholder="+7 700 000 00 00" />
             </div>
           </div>
           <div className="field">

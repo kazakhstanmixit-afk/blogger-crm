@@ -869,6 +869,8 @@ function makeBlogger(d) {
     in_work: !!(d.in_work === true || d.in_work === 'true' || d.in_work === 1 || d.status === 'in_work' || d.status === 'transferred'),
     notes: d.notes || null,
     last_comment: d.last_comment || null,
+    manager_instagram: d.manager_instagram || null,
+    manager_whatsapp: d.manager_whatsapp || null,
     contacted_at: d.contacted_at || null,
     price_updated_at: d.price_updated_at || null,
   };
