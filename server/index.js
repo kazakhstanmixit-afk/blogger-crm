@@ -817,7 +817,17 @@ if (needsMigration) {
 function auth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    // operator role: only GET /api/bloggers and POST /api/bloggers allowed
+    if (req.user.role === 'operator') {
+      const allowed =
+        (req.method === 'GET'  && req.path === '/api/bloggers') ||
+        (req.method === 'POST' && req.path === '/api/bloggers');
+      if (!allowed) return res.status(403).json({ error: 'Нет доступа' });
+    }
+    next();
+  }
   catch { res.status(401).json({ error: 'Invalid token' }); }
 }
 

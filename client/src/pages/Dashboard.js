@@ -12,7 +12,10 @@ import UsersPage from './UsersPage';
 
 export default function Dashboard({ user, onLogout }) {
   const [page, setPage] = useState('bloggers');
-  const navItems = [
+  const isOperator = user.role === 'operator';
+  const navItems = isOperator ? [
+    { id:'bloggers', icon:'👥', label:'Блогеры' },
+  ] : [
     { id:'bloggers', icon:'👥', label:'Блогеры' },
     { id:'stats', icon:'📊', label:'Аналитика' },
     { id:'payments', icon:'💳', label:'Оплаты' },
@@ -39,7 +42,7 @@ export default function Dashboard({ user, onLogout }) {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="user-info"><strong>{user.username}</strong>{user.role==='admin'?'Администратор':'Менеджер'}</div>
+          <div className="user-info"><strong>{user.username}</strong>{user.role==='admin'?'Администратор':user.role==='operator'?'Оператор':'Менеджер'}</div>
           <button className="btn btn-secondary btn-sm" style={{width:'100%'}} onClick={onLogout}>Выйти</button>
         </div>
       </aside>
