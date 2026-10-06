@@ -780,6 +780,10 @@ if (!db.get('users').find({ username: 'grok_bot' }).value()) {
   db.get('users').push({ id: uuidv4(), username: 'grok_bot', password: bcrypt.hashSync('GrokBot2026!', 10), role: 'viewer', created_at: new Date().toISOString() }).write();
   console.log('Viewer bot created: grok_bot / GrokBot2026!');
 }
+if (!db.get('users').find({ username: 'zarina1234' }).value()) {
+  db.get('users').push({ id: uuidv4(), username: 'zarina1234', password: bcrypt.hashSync('zarina1234', 10), role: 'operator', created_at: new Date().toISOString() }).write();
+  console.log('Operator created: zarina1234 / zarina1234');
+}
 
 // Always apply TZ visibility settings on startup
 { const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira'] };
