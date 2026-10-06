@@ -71,6 +71,7 @@ export default function UsersPage({ currentUser }) {
               <label>Роль</label>
               <select value={role} onChange={e => setRole(e.target.value)}>
                 <option value="manager">Менеджер</option>
+                <option value="operator">Оператор</option>
                 <option value="admin">Администратор</option>
               </select>
             </div>
@@ -86,7 +87,7 @@ export default function UsersPage({ currentUser }) {
             <div key={u.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)'}}>
               <div>
                 <strong>{u.username}</strong>
-                <div style={{fontSize:12, color:'var(--text3)'}}>{u.role === 'admin' ? 'Администратор' : 'Менеджер'}</div>
+                <div style={{fontSize:12, color:'var(--text3)'}}>{u.role === 'admin' ? 'Администратор' : u.role === 'operator' ? 'Оператор' : 'Менеджер'}</div>
               </div>
               <div style={{display:'flex',gap:6}}>
                 {u.role === 'admin' && (
