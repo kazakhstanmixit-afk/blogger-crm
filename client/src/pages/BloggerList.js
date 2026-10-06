@@ -715,6 +715,7 @@ export default function BloggerList({ currentUser }) {
                     {b.tiktok_url && <a href={b.tiktok_url} target="_blank" rel="noreferrer" className="td-link">🎵</a>}
                     {b.manager_instagram && <a href={`https://instagram.com/${b.manager_instagram.replace(/^@/,'')}`} target="_blank" rel="noreferrer" className="td-link" title={`Инста менеджера: ${b.manager_instagram}`}>👤</a>}
                     {b.manager_whatsapp && <a href={`https://wa.me/${b.manager_whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="td-link" title={`ВЦ менеджера: ${b.manager_whatsapp}`}>💬</a>}
+                    {b.blogger_whatsapp && <a href={`https://wa.me/${b.blogger_whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="td-link" title={`ВЦ блогера: ${b.blogger_whatsapp}`}>📱</a>}
                   </td>}
                   {show('inst_followers') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.instagram_followers} type="number" onSave={v=>patch(b.id,{instagram_followers:Number(v)})} /></td>}
                   {show('inst_reach') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.instagram_avg_reach} type="number" onSave={v=>patch(b.id,{instagram_avg_reach:Number(v)})} /></td>}

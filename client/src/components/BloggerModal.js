@@ -28,7 +28,7 @@ function cpvColor(v) { if(!v) return '#9ba3be'; if(v<=10) return '#15803d'; if(v
 export default function BloggerModal({ blogger, users, currentUser, onSave, onClose }) {
   const isEdit = !!blogger;
   const [form, setForm] = useState({
-    name:'', instagram_url:'', tiktok_url:'',
+    name:'', instagram_url:'', tiktok_url:'', blogger_whatsapp:'',
     instagram_followers:'', tiktok_followers:'', er:'',
     instagram_avg_reach:'', tiktok_avg_reach:'', stories_avg_reach:'',
     price_reels:'', price_tiktok:'', price_both:'', price_stories:'',
@@ -113,6 +113,10 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             <div className="field"><label>Ник *</label><input required value={form.name} onChange={e=>set('name',e.target.value)} placeholder="@blogger_name" /></div>
             <div className="field"><label>Ссылка Instagram</label><input value={form.instagram_url||''} onChange={e=>set('instagram_url',e.target.value)} placeholder="https://instagram.com/..." /></div>
             <div className="field"><label>Ссылка TikTok</label><input value={form.tiktok_url||''} onChange={e=>set('tiktok_url',e.target.value)} placeholder="https://tiktok.com/@..." /></div>
+          </div>
+          <div className="field" style={{marginTop:8}}>
+            <label>ВЦ блогера <span style={{fontSize:10,color:'#9ba3be'}}>(номер WhatsApp)</span></label>
+            <input value={form.blogger_whatsapp||''} onChange={e=>set('blogger_whatsapp',e.target.value)} placeholder="+7 700 000 00 00" />
           </div>
 
           <div className="section-divider">Аудитория</div>

@@ -871,6 +871,7 @@ function makeBlogger(d) {
     last_comment: d.last_comment || null,
     manager_instagram: d.manager_instagram || null,
     manager_whatsapp: d.manager_whatsapp || null,
+    blogger_whatsapp: d.blogger_whatsapp || null,
     contacted_at: d.contacted_at || null,
     price_updated_at: d.price_updated_at || null,
   };
