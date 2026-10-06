@@ -2182,7 +2182,7 @@ app.post('/api/tz-requests/:id/file', auth, (req, res) => {
     try {
       // Транслитерация кириллицы чтобы Cloudinary не ломал имя файла
       const translitMap = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
-      const originalName = req.file.originalname;
+      const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
       const safeBase = originalName.replace(/\.[^.]+$/, '').replace(/[а-яёА-ЯЁ]/g, c => translitMap[c.toLowerCase()] || c).replace(/[^a-zA-Z0-9_-]/g, '_');
       const ext = originalName.match(/\.[^.]+$/) ? originalName.match(/\.[^.]+$/)[0] : '';
       const safeName = (safeBase || 'file') + ext;
