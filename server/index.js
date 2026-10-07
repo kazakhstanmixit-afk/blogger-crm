@@ -786,14 +786,14 @@ if (!db.get('users').find({ username: 'zarina1234' }).value()) {
 }
 
 // Always apply TZ visibility settings on startup
-{ const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira'] };
+{ const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira', 'aneljan1'] };
   Object.entries(tzVisibility).forEach(([username, canView]) => {
     const u = db.get('users').find({ username }).value();
     if (u) {
       db.get('users').find({ username }).assign({ can_view_users: canView }).write();
     }
   });
-  console.log('TZ visibility applied: anastasiia→sabrina, saya→nadira');
+  console.log('TZ visibility applied: anastasiia→sabrina, saya→nadira+aneljan1');
 }
 
 // migration
