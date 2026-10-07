@@ -329,6 +329,64 @@ export default function BarterPage({ currentUser }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = (e) => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(b => b.id)));
+    }
+  };
+
+  const printForLogist = () => {
+    const items = filtered.filter(b => selected.has(b.id));
+    const rows = items.map((b, i) => {
+      const goods = b.items?.length > 0 ? b.items.map(i => `${i.name} x${i.qty}`).join(', ') : b.product || '—';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${new Date(b.created_at).toLocaleDateString('ru', {day:'numeric',month:'short'})}</td>
+        ${currentUser.role === 'admin' ? `<td>${b.username || '—'}</td>` : ''}
+        <td><b>${b.nick}</b></td>
+        <td>${b.city || '—'}</td>
+        <td>${b.address || '—'}</td>
+        <td>${b.phone || '—'}</td>
+        <td>${goods}</td>
+      </tr>`;
+    }).join('');
+    const managerCol = currentUser.role === 'admin' ? '<th>Менеджер</th>' : '';
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Бартер — логист</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:12px;padding:20px;color:#111}
+      h2{margin-bottom:4px}
+      .date{color:#666;font-size:11px;margin-bottom:16px}
+      table{border-collapse:collapse;width:100%}
+      th{background:#f0f0f0;text-align:left;padding:7px 10px;border:1px solid #ccc;font-size:11px}
+      td{padding:7px 10px;border:1px solid #ddd;vertical-align:top;font-size:12px}
+      tr:nth-child(even) td{background:#fafafa}
+      @media print{button{display:none}}
+    </style></head><body>
+    <h2>📦 Список отправок для логиста</h2>
+    <div class="date">Дата выгрузки: ${new Date().toLocaleDateString('ru',{day:'numeric',month:'long',year:'numeric'})}</div>
+    <button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#4f6ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Печать / Сохранить PDF</button>
+    <table>
+      <thead><tr><th>№</th><th>Дата</th>${managerCol}<th>Ник</th><th>Город</th><th>Адрес</th><th>Телефон</th><th>Товары</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -410,12 +468,18 @@ ${b.notes ? `\nПримечание: ${b.notes}` : ''}`.trim();
           <option value="">Все статусы</option>
           {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
+        {selected.size > 0 && (
+          <button className="btn btn-primary" onClick={printForLogist}>
+            📄 Выгрузить для логиста ({selected.size})
+          </button>
+        )}
       </div>
 
       <div className="table-wrap" style={{ overflowX: 'auto' }}>
         <table style={{ minWidth: 900 }}>
           <thead>
             <tr>
+              <th style={{width:32}}><input type="checkbox" onChange={toggleAll} checked={selected.size === filtered.length && filtered.length > 0} /></th>
               <th>Дата</th>
               {currentUser.role === 'admin' && <th>Менеджер</th>}
               <th>Ник</th>
@@ -434,7 +498,8 @@ ${b.notes ? `\nПримечание: ${b.notes}` : ''}`.trim();
             ) : filtered.length === 0 ? (
               <tr><td colSpan={10}><div className="empty-state"><div style={{ fontSize: 36 }}>🎁</div><p>Бартеров пока нет</p></div></td></tr>
             ) : filtered.map(b => (
-              <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => { setEditBarter(b); setShowForm(true); }}>
+              <tr key={b.id} style={{ cursor: 'pointer', background: selected.has(b.id) ? '#f0f4ff' : '' }} onClick={() => { setEditBarter(b); setShowForm(true); }}>
+                <td onClick={e => toggleSelect(b.id, e)}><input type="checkbox" checked={selected.has(b.id)} onChange={()=>{}} /></td>
                 <td style={{ fontSize: 11, color: '#9ba3be', whiteSpace: 'nowrap' }}>{new Date(b.created_at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</td>
                 {currentUser.role === 'admin' && <td><span className="tag">{b.username || '—'}</span></td>}
                 <td style={{ fontWeight: 500 }}>
