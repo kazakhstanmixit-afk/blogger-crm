@@ -580,7 +580,12 @@ app.delete('/api/regulations/:id', auth, (req, res) => {
 app.get('/api/barters', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('barters').value() || [];
-  if (req.user.role !== 'admin') list = list.filter(b => b.user_id === req.user.id);
+  if (req.user.role !== 'admin') {
+    const me = users.find(u => u.id === req.user.id);
+    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
+    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+    list = list.filter(b => allowedIds.includes(b.user_id));
+  }
   const { status } = req.query;
   if (status) list = list.filter(b => b.status === status);
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
@@ -1486,7 +1491,10 @@ app.get('/api/payments', auth, (req, res) => {
     let list = db.get('payments').value() || [];
 
     if (req.user.role !== 'admin') {
-      list = list.filter(p => p.manager_id === req.user.id);
+      const me = db.get('users').find({ id: req.user.id }).value();
+      const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
+      const allowedIds = db.get('users').value().filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+      list = list.filter(p => allowedIds.includes(p.manager_id));
     }
 
     const { status } = req.query;
@@ -2078,7 +2086,12 @@ app.delete('/api/regulations/:id', auth, (req, res) => {
 app.get('/api/barters', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('barters').value() || [];
-  if (req.user.role !== 'admin') list = list.filter(b => b.user_id === req.user.id);
+  if (req.user.role !== 'admin') {
+    const me = users.find(u => u.id === req.user.id);
+    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
+    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+    list = list.filter(b => allowedIds.includes(b.user_id));
+  }
   const { status } = req.query;
   if (status) list = list.filter(b => b.status === status);
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));

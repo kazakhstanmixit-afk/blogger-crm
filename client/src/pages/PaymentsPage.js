@@ -622,7 +622,7 @@ export default function PaymentsPage({ currentUser }) {
             <tr>
               {currentUser.role==='admin' && <th style={{width:32}}><input type="checkbox" className="in-work-check" checked={selected.size===payments.length&&payments.length>0} onChange={toggleAll} /></th>}
               <th>Дата</th>
-              {currentUser.role==='admin' && <th>Менеджер</th>}
+              {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && <th>Менеджер</th>}
               <th>Блогер</th>
               <th>ФИО получателя</th>
               <th>ИИН</th>
@@ -648,7 +648,7 @@ export default function PaymentsPage({ currentUser }) {
               <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
-                {currentUser.role==='admin' && <td><span className="tag">{p.manager_name||'—'}</span></td>}
+                {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && <td><span className="tag">{p.manager_name||'—'}</span></td>}
                 <td style={{fontWeight:500}}>{p.blogger_name||'—'}</td>
                 <td>{p.recipient_name}</td>
                 <td style={{fontFamily:'monospace',letterSpacing:1,fontSize:12}}>{p.iin}</td>

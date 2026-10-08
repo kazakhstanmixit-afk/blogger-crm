@@ -481,7 +481,7 @@ ${b.notes ? `\nПримечание: ${b.notes}` : ''}`.trim();
             <tr>
               <th style={{width:32}}><input type="checkbox" onChange={toggleAll} checked={selected.size === filtered.length && filtered.length > 0} /></th>
               <th>Дата</th>
-              {currentUser.role === 'admin' && <th>Менеджер</th>}
+              {(currentUser.role === 'admin' || currentUser.can_view_users?.length > 0) && <th>Менеджер</th>}
               <th>Ник</th>
               <th>Город</th>
               <th>Адрес</th>
@@ -501,7 +501,7 @@ ${b.notes ? `\nПримечание: ${b.notes}` : ''}`.trim();
               <tr key={b.id} style={{ cursor: 'pointer', background: selected.has(b.id) ? '#f0f4ff' : '' }} onClick={() => { setEditBarter(b); setShowForm(true); }}>
                 <td onClick={e => toggleSelect(b.id, e)}><input type="checkbox" checked={selected.has(b.id)} onChange={()=>{}} /></td>
                 <td style={{ fontSize: 11, color: '#9ba3be', whiteSpace: 'nowrap' }}>{new Date(b.created_at).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</td>
-                {currentUser.role === 'admin' && <td><span className="tag">{b.username || '—'}</span></td>}
+                {(currentUser.role === 'admin' || currentUser.can_view_users?.length > 0) && <td><span className="tag">{b.username || '—'}</span></td>}
                 <td style={{ fontWeight: 500 }}>
                   {b.url ? <a href={b.url} target="_blank" rel="noreferrer" style={{ color: '#4f6ef7', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>{b.nick}</a> : b.nick}
                 </td>
