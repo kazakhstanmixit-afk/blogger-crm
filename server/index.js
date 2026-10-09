@@ -786,12 +786,22 @@ if (!db.get('users').find({ username: 'grok_bot' }).value()) {
   console.log('Viewer bot created: grok_bot / GrokBot2026!');
 }
 if (!db.get('users').find({ username: 'zarina1234' }).value()) {
-  // Try to recover old id from orphaned bloggers
-  const existingUserIds = db.get('users').map('id').value();
-  const orphanedBloggers = db.get('bloggers').filter(b => b.assigned_manager_id && !existingUserIds.includes(b.assigned_manager_id)).value();
-  const oldZarinaId = orphanedBloggers.length > 0 ? orphanedBloggers[0].assigned_manager_id : uuidv4();
-  db.get('users').push({ id: oldZarinaId, username: 'zarina1234', password: bcrypt.hashSync('zarina1234', 10), role: 'operator', created_at: new Date().toISOString() }).write();
-  console.log('Operator restored: zarina1234 / zarina1234, id=' + oldZarinaId + ', orphaned bloggers=' + orphanedBloggers.length);
+  db.get('users').push({ id: uuidv4(), username: 'zarina1234', password: bcrypt.hashSync('zarina1234', 10), role: 'operator', created_at: new Date().toISOString() }).write();
+  console.log('Operator created: zarina1234 / zarina1234');
+}
+// Reassign orphaned bloggers to zarina1234
+{
+  const zarina = db.get('users').find({ username: 'zarina1234' }).value();
+  if (zarina) {
+    const existingUserIds = db.get('users').map('id').value();
+    const orphaned = db.get('bloggers').filter(b => b.assigned_manager_id && !existingUserIds.includes(b.assigned_manager_id)).value();
+    if (orphaned.length > 0) {
+      orphaned.forEach(b => {
+        db.get('bloggers').find({ id: b.id }).assign({ assigned_manager_id: zarina.id }).write();
+      });
+      console.log('Reassigned ' + orphaned.length + ' orphaned bloggers to zarina1234');
+    }
+  }
 }
 
 // Always apply TZ visibility settings on startup
