@@ -641,11 +641,13 @@ app.get('/api/tz-requests', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('tz_requests').value() || [];
   if (req.user.role !== 'admin') {
-    // can_view_users: array of usernames this manager can also see TZ for
     const me = users.find(u => u.id === req.user.id);
-    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
-    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-    list = list.filter(t => allowedIds.includes(t.user_id));
+    const canView = me?.can_view_users || [];
+    if (!canView.includes('*all*')) {
+      const allowedUsernames = [req.user.username, ...canView];
+      const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+      list = list.filter(t => allowedIds.includes(t.user_id));
+    }
   }
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
@@ -805,14 +807,14 @@ if (!db.get('users').find({ username: 'zarina1234' }).value()) {
 }
 
 // Always apply TZ visibility settings on startup
-{ const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira', 'aneljan1'] };
+{ const tzVisibility = { anastasiia: ['sabrina'], saya: ['nadira', 'aneljan1'], zara: ['*all*'] };
   Object.entries(tzVisibility).forEach(([username, canView]) => {
     const u = db.get('users').find({ username }).value();
     if (u) {
       db.get('users').find({ username }).assign({ can_view_users: canView }).write();
     }
   });
-  console.log('TZ visibility applied: anastasiia→sabrina, saya→nadira+aneljan1');
+  console.log('TZ visibility applied: anastasiia→sabrina, saya→nadira+aneljan1, zara→*all*');
 }
 
 // migration
@@ -2166,11 +2168,13 @@ app.get('/api/tz-requests', auth, (req, res) => {
   const users = db.get('users').value();
   let list = db.get('tz_requests').value() || [];
   if (req.user.role !== 'admin') {
-    // can_view_users: array of usernames this manager can also see TZ for
     const me = users.find(u => u.id === req.user.id);
-    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
-    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-    list = list.filter(t => allowedIds.includes(t.user_id));
+    const canView = me?.can_view_users || [];
+    if (!canView.includes('*all*')) {
+      const allowedUsernames = [req.user.username, ...canView];
+      const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+      list = list.filter(t => allowedIds.includes(t.user_id));
+    }
   }
   list = list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   res.json(list.map(t => ({ ...t, username: (users.find(u => u.id === t.user_id)||{}).username || null })));
