@@ -15,6 +15,7 @@ export default function Dashboard({ user, onLogout }) {
   const isOperator = user.role === 'operator';
   const navItems = isOperator ? [
     { id:'bloggers', icon:'👥', label:'Блогеры' },
+    { id:'tz', icon:'📝', label:'Запросы ТЗ' },
   ] : [
     { id:'bloggers', icon:'👥', label:'Блогеры' },
     { id:'stats', icon:'📊', label:'Аналитика' },
@@ -48,6 +49,7 @@ export default function Dashboard({ user, onLogout }) {
       </aside>
       <main className="main-content">
         {page==='bloggers' && <BloggerList currentUser={user} />}
+        {page==='tz' && isOperator && <TzRequestsPage currentUser={user} />}
         {page==='stats' && <StatsPage currentUser={user} />}
         {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='products' && <ProductsPage currentUser={user} />}

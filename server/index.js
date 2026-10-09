@@ -832,7 +832,12 @@ function auth(req, res, next) {
     if (req.user.role === 'operator') {
       const allowed =
         (req.method === 'GET'  && req.path === '/api/bloggers') ||
-        (req.method === 'POST' && req.path === '/api/bloggers');
+        (req.method === 'POST' && req.path === '/api/bloggers') ||
+        (req.method === 'GET'  && req.path === '/api/tz-requests') ||
+        (req.method === 'POST' && req.path === '/api/tz-requests') ||
+        (req.method === 'PUT'  && req.path.startsWith('/api/tz-requests/')) ||
+        (req.method === 'POST' && req.path.startsWith('/api/tz-requests/') && req.path.endsWith('/file')) ||
+        (req.method === 'DELETE' && req.path.startsWith('/api/tz-requests/') && req.path.endsWith('/file'));
       if (!allowed) return res.status(403).json({ error: 'Нет доступа' });
     }
     next();
