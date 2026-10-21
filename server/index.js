@@ -352,23 +352,34 @@ app.get('/api/dashboard', auth, (req, res) => {
 // ── PRODUCTS ──────────────────────────────────────────
 app.get('/api/products', auth, (req, res) => {
   const list = db.get('products').value() || [];
-  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+  // migrate tz_url → tz_list on the fly
+  const migrated = list.map(p => ({
+    ...p,
+    tz_list: p.tz_list || (p.tz_url ? [{ label: 'ТЗ', url: p.tz_url }] : [])
+  }));
+  res.json(migrated.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
 });
 
 app.post('/api/products', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const { article, name, tz_url, notes } = req.body;
+  const { article, name, tz_list, notes } = req.body;
   if (!article || !name) return res.status(400).json({ error: 'Укажите артикул и название' });
   if (db.get('products').find({ article }).value()) return res.status(409).json({ error: 'Артикул уже существует' });
-  const product = { id: uuidv4(), article, name, tz_url: tz_url||null, notes: notes||null, created_at: new Date().toISOString() };
+  const product = { id: uuidv4(), article, name, tz_list: Array.isArray(tz_list) ? tz_list : [], notes: notes||null, created_at: new Date().toISOString() };
   db.get('products').push(product).write();
   res.json({ id: product.id });
 });
 
 app.put('/api/products/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const { article, name, tz_url, notes } = req.body;
-  db.get('products').find({ id: req.params.id }).assign({ article, name, tz_url: tz_url||null, notes: notes||null }).write();
+  const { article, name, tz_list, notes } = req.body;
+  const p = db.get('products').find({ id: req.params.id }).value();
+  if (!p) return res.status(404).json({ error: 'Не найдено' });
+  db.get('products').find({ id: req.params.id }).assign({
+    article, name,
+    tz_list: Array.isArray(tz_list) ? tz_list : (p.tz_list || []),
+    notes: notes||null, tz_url: null
+  }).write();
   res.json({ ok: true });
 });
 
@@ -1879,23 +1890,34 @@ app.get('/api/dashboard', auth, (req, res) => {
 // ── PRODUCTS ──────────────────────────────────────────
 app.get('/api/products', auth, (req, res) => {
   const list = db.get('products').value() || [];
-  res.json(list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+  // migrate tz_url → tz_list on the fly
+  const migrated = list.map(p => ({
+    ...p,
+    tz_list: p.tz_list || (p.tz_url ? [{ label: 'ТЗ', url: p.tz_url }] : [])
+  }));
+  res.json(migrated.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
 });
 
 app.post('/api/products', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const { article, name, tz_url, notes } = req.body;
+  const { article, name, tz_list, notes } = req.body;
   if (!article || !name) return res.status(400).json({ error: 'Укажите артикул и название' });
   if (db.get('products').find({ article }).value()) return res.status(409).json({ error: 'Артикул уже существует' });
-  const product = { id: uuidv4(), article, name, tz_url: tz_url||null, notes: notes||null, created_at: new Date().toISOString() };
+  const product = { id: uuidv4(), article, name, tz_list: Array.isArray(tz_list) ? tz_list : [], notes: notes||null, created_at: new Date().toISOString() };
   db.get('products').push(product).write();
   res.json({ id: product.id });
 });
 
 app.put('/api/products/:id', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
-  const { article, name, tz_url, notes } = req.body;
-  db.get('products').find({ id: req.params.id }).assign({ article, name, tz_url: tz_url||null, notes: notes||null }).write();
+  const { article, name, tz_list, notes } = req.body;
+  const p = db.get('products').find({ id: req.params.id }).value();
+  if (!p) return res.status(404).json({ error: 'Не найдено' });
+  db.get('products').find({ id: req.params.id }).assign({
+    article, name,
+    tz_list: Array.isArray(tz_list) ? tz_list : (p.tz_list || []),
+    notes: notes||null, tz_url: null
+  }).write();
   res.json({ ok: true });
 });
 
