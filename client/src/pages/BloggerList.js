@@ -504,6 +504,36 @@ export default function BloggerList({ currentUser }) {
   const toggleSelect = (id) => setSelected(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleSelectAll = () => { if(selected.size===bloggers.length) setSelected(new Set()); else setSelected(new Set(bloggers.map(b=>b.id))); };
 
+  const selectAllFiltered = async () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (statusFilter) params.set('status', statusFilter);
+    if (managerFilter) params.set('manager', managerFilter);
+    if (inWorkOnly) params.set('in_work', '1');
+    if (platformFilter) params.set('platform', platformFilter);
+    if (batchFilter) params.set('batch_id', batchFilter);
+    if (cpvMin) params.set('cpv_min', cpvMin);
+    if (cpvMax) params.set('cpv_max', cpvMax);
+    if (reachMin) params.set('reach_min', reachMin);
+    if (followersMin) params.set('followers_min', followersMin);
+    if (followersMax) params.set('followers_max', followersMax);
+    if (reelsMin) params.set('reels_min', reelsMin);
+    if (reelsMax) params.set('reels_max', reelsMax);
+    if (ttMin) params.set('tt_min', ttMin);
+    if (ttMax) params.set('tt_max', ttMax);
+    if (excludeDeclined) params.set('exclude_declined', '1');
+    if (excludeInWork) params.set('exclude_in_work', '1');
+    if (excludeTransferred) params.set('exclude_transferred', '1');
+    if (categoryFilter) params.set('category', categoryFilter);
+    if (excludeCategories.length) params.set('exclude_category', excludeCategories.join(','));
+    if (noPrice) params.set('no_price', '1');
+    if (noManager) params.set('no_manager', '1');
+    params.set('ids_only', '1');
+    const res = await apiFetch('/api/bloggers?' + params);
+    const json = await res.json();
+    setSelected(new Set(json.ids || []));
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -649,6 +679,12 @@ export default function BloggerList({ currentUser }) {
               <button className="btn btn-secondary btn-sm" onClick={()=>setShowBulkStatus(true)}>🔄 Статус</button>
               <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>🗑 Удалить</button>
             </>}
+            {selected.size < total && (
+              <button className="btn btn-secondary btn-sm" onClick={selectAllFiltered}
+                style={{borderColor:'#818cf8',color:'#4f46e5'}}>
+                ☑ Выбрать все {total}
+              </button>
+            )}
             <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(new Set())}>Снять выделение</button>
           </div>
         </div>

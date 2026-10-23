@@ -1009,6 +1009,10 @@ app.get('/api/bloggers', auth, (req, res) => {
     });
   }
   const total = list.length;
+  // ids_only mode — return all matching IDs without pagination (for bulk select)
+  if (req.query.ids_only === '1') {
+    return res.json({ ids: list.map(b => b.id), total });
+  }
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
