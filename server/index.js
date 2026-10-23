@@ -2469,17 +2469,84 @@ app.get('/api/daily-report', auth, (req, res) => {
 // ── MCP READ-ONLY API ──────────────────────────────────────────
 const MCP_API_KEY = process.env.MCP_API_KEY || process.env.MCP_KEY || 'mixit-crm-readonly-2026';
 
+// MCP over HTTP (Streamable HTTP transport) — Claude.ai connector
+// Each request: POST /mcp/bbmcp_... with JSON-RPC body
+app.post('/mcp/:key', express.json(), (req, res) => {
+  const key = req.params.key;
+  if (key !== MCP_API_KEY) return res.status(401).json({ jsonrpc:'2.0', error:{ code:-32001, message:'Unauthorized' }, id: req.body?.id ?? null });
+
+  const { method, params, id } = req.body || {};
+
+  if (method === 'initialize') {
+    return res.json({ jsonrpc:'2.0', id, result:{
+      protocolVersion:'2024-11-05',
+      serverInfo:{ name:'mixit-crm', version:'1.0.0' },
+      capabilities:{ tools:{} }
+    }});
+  }
+
+  if (method === 'notifications/initialized') {
+    return res.status(204).end();
+  }
+
+  if (method === 'tools/list') {
+    return res.json({ jsonrpc:'2.0', id, result:{ tools:[
+      { name:'get_bloggers',    description:'Все блогеры: ник, ссылки, подписчики, охваты, цены, статус, менеджер.', inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_payments',    description:'Все оплаты: сумма, статус, блогер, менеджер, дата.',                    inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_barters',     description:'Все бартеры: блогер, город, адрес, товары, статус, менеджер.',         inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_tz_requests', description:'Все запросы ТЗ: ник, товар, формат, статус, менеджер.',               inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_products',    description:'Товары и варианты ТЗ.',                                                inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_expenses',    description:'Расходы.',                                                             inputSchema:{ type:'object', properties:{}, required:[] } },
+      { name:'get_stats',       description:'Сводная статистика CRM по всем менеджерам.',                          inputSchema:{ type:'object', properties:{}, required:[] } },
+    ]}});
+  }
+
+  if (method === 'tools/call') {
+    const users = db.get('users').value();
+    const name = params?.name;
+    let data;
+    if (name === 'get_bloggers') {
+      data = (db.get('bloggers').value()||[]).map(b=>({...b, manager_name:(users.find(u=>u.id===b.assigned_manager_id)||{}).username||null}));
+    } else if (name === 'get_payments') {
+      data = (db.get('payments').value()||[]).map(p=>({...p, manager_name:(users.find(u=>u.id===p.manager_id)||{}).username||null}));
+    } else if (name === 'get_barters') {
+      data = (db.get('barters').value()||[]).map(b=>({...b, manager_name:(users.find(u=>u.id===b.user_id)||{}).username||null}));
+    } else if (name === 'get_tz_requests') {
+      data = (db.get('tz_requests').value()||[]).map(t=>({...t, manager_name:(users.find(u=>u.id===t.user_id)||{}).username||null}));
+    } else if (name === 'get_products') {
+      data = db.get('products').value()||[];
+    } else if (name === 'get_expenses') {
+      data = (db.get('expenses').value()||[]).map(e=>({...e, manager_name:(users.find(u=>u.id===e.user_id)||{}).username||null}));
+    } else if (name === 'get_stats') {
+      const bloggers=db.get('bloggers').value()||[], payments=db.get('payments').value()||[], barters=db.get('barters').value()||[], tz=db.get('tz_requests').value()||[], expenses=db.get('expenses').value()||[];
+      const by_manager={};
+      users.filter(u=>u.role!=='viewer').forEach(u=>{ by_manager[u.username]={ bloggers:bloggers.filter(b=>b.assigned_manager_id===u.id).length, payments:payments.filter(p=>p.manager_id===u.id).length, barters:barters.filter(b=>b.user_id===u.id).length, tz_requests:tz.filter(t=>t.user_id===u.id).length }; });
+      data = { totals:{ bloggers:bloggers.length, payments:payments.length, barters:barters.length, tz_requests:tz.length, expenses:expenses.length }, by_manager };
+    } else {
+      return res.json({ jsonrpc:'2.0', id, error:{ code:-32601, message:`Unknown tool: ${name}` } });
+    }
+    return res.json({ jsonrpc:'2.0', id, result:{ content:[{ type:'text', text:JSON.stringify(data,null,2) }] } });
+  }
+
+  res.json({ jsonrpc:'2.0', id, error:{ code:-32601, message:`Unknown method: ${method}` } });
+});
+
+// GET /mcp/:key — ping / discovery check
+app.get('/mcp/:key', (req, res) => {
+  const key = req.params.key;
+  if (key !== MCP_API_KEY) return res.status(401).json({ error: 'Ключ не совпадает' });
+  res.json({ status: 'OK: коннектор Миксит CRM работает', hint: 'Use POST for MCP JSON-RPC' });
+});
+
 function mcpAuth(req, res, next) {
   const key = req.headers['x-api-key'] || req.query.api_key;
-  if (!MCP_API_KEY) return res.status(500).json({ error: 'MCP_KEY не задана в Render' });
   if (key !== MCP_API_KEY) return res.status(401).json({ error: 'Ключ не совпадает' });
   next();
 }
 
-// Диагностика — открыть в браузере с ключом в URL
+// Диагностика
 app.get('/mcp/:key/ping', (req, res) => {
   const key = req.params.key;
-  if (!MCP_API_KEY) return res.json({ status: 'MCP_KEY не задана в Render' });
   if (key !== MCP_API_KEY) return res.json({ status: 'Ключ не совпадает' });
   res.json({ status: 'OK: коннектор Миксит CRM работает' });
 });
