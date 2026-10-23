@@ -2470,6 +2470,101 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
 
+// ── MCP READ-ONLY API ──────────────────────────────────────────
+const MCP_API_KEY = process.env.MCP_API_KEY || 'mixit-crm-readonly-2026';
+
+function mcpAuth(req, res, next) {
+  const key = req.headers['x-api-key'] || req.query.api_key;
+  if (key !== MCP_API_KEY) return res.status(401).json({ error: 'Invalid API key' });
+  next();
+}
+
+// List all bloggers
+app.get('/mcp/bloggers', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value() || [];
+  res.json(bloggers.map(b => ({
+    ...b,
+    manager_name: (users.find(u => u.id === b.assigned_manager_id) || {}).username || null,
+  })));
+});
+
+// List all payments
+app.get('/mcp/payments', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const payments = db.get('payments').value() || [];
+  res.json(payments.map(p => ({
+    ...p,
+    manager_name: (users.find(u => u.id === p.manager_id) || {}).username || null,
+  })));
+});
+
+// List all barters
+app.get('/mcp/barters', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const barters = db.get('barters').value() || [];
+  res.json(barters.map(b => ({
+    ...b,
+    manager_name: (users.find(u => u.id === b.user_id) || {}).username || null,
+  })));
+});
+
+// List all TZ requests
+app.get('/mcp/tz-requests', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const list = db.get('tz_requests').value() || [];
+  res.json(list.map(t => ({
+    ...t,
+    manager_name: (users.find(u => u.id === t.user_id) || {}).username || null,
+  })));
+});
+
+// List all products
+app.get('/mcp/products', mcpAuth, (req, res) => {
+  res.json(db.get('products').value() || []);
+});
+
+// List all expenses
+app.get('/mcp/expenses', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const expenses = db.get('expenses').value() || [];
+  res.json(expenses.map(e => ({
+    ...e,
+    manager_name: (users.find(u => u.id === e.user_id) || {}).username || null,
+  })));
+});
+
+// Stats summary
+app.get('/mcp/stats', mcpAuth, (req, res) => {
+  const users = db.get('users').value();
+  const bloggers = db.get('bloggers').value() || [];
+  const payments = db.get('payments').value() || [];
+  const barters = db.get('barters').value() || [];
+  const tz = db.get('tz_requests').value() || [];
+  const expenses = db.get('expenses').value() || [];
+
+  const managerStats = {};
+  users.filter(u => u.role !== 'viewer').forEach(u => {
+    managerStats[u.username] = {
+      bloggers: bloggers.filter(b => b.assigned_manager_id === u.id).length,
+      payments: payments.filter(p => p.manager_id === u.id).length,
+      barters: barters.filter(b => b.user_id === u.id).length,
+      tz_requests: tz.filter(t => t.user_id === u.id).length,
+    };
+  });
+
+  res.json({
+    totals: {
+      bloggers: bloggers.length,
+      payments: payments.length,
+      barters: barters.length,
+      tz_requests: tz.length,
+      expenses: expenses.length,
+    },
+    by_manager: managerStats,
+  });
+});
+
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
 
 // ── PRODUCTS ──────────────────────────────────────────

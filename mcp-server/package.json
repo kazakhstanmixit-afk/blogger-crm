@@ -1,0 +1,10 @@
+{
+  "name": "blogger-crm-mcp",
+  "version": "1.0.0",
+  "description": "MCP сервер для доступа к Blogger CRM (только чтение)",
+  "main": "index.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
