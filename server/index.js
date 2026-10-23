@@ -2471,13 +2471,22 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ── MCP READ-ONLY API ──────────────────────────────────────────
-const MCP_API_KEY = process.env.MCP_API_KEY || 'mixit-crm-readonly-2026';
+const MCP_API_KEY = process.env.MCP_API_KEY || process.env.MCP_KEY || 'mixit-crm-readonly-2026';
 
 function mcpAuth(req, res, next) {
   const key = req.headers['x-api-key'] || req.query.api_key;
-  if (key !== MCP_API_KEY) return res.status(401).json({ error: 'Invalid API key' });
+  if (!MCP_API_KEY) return res.status(500).json({ error: 'MCP_KEY не задана в Render' });
+  if (key !== MCP_API_KEY) return res.status(401).json({ error: 'Ключ не совпадает' });
   next();
 }
+
+// Диагностика — открыть в браузере с ключом в URL
+app.get('/mcp/:key/ping', (req, res) => {
+  const key = req.params.key;
+  if (!MCP_API_KEY) return res.json({ status: 'MCP_KEY не задана в Render' });
+  if (key !== MCP_API_KEY) return res.json({ status: 'Ключ не совпадает' });
+  res.json({ status: 'OK: коннектор Миксит CRM работает' });
+});
 
 // List all bloggers
 app.get('/mcp/bloggers', mcpAuth, (req, res) => {

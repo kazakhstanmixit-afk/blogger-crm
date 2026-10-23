@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /**
  * Blogger CRM — MCP Server (read-only)
- * Подключается к CRM и даёт Claude читать все данные.
+ * Ключ передаётся прямо в URL, OAuth Client ID оставить пустым.
  *
- * Запуск: node index.js
- * Требует: node 18+
+ * URL для коннектора Claude:
+ * https://blogger-crm.onrender.com/mcp/<MCP_KEY>
  */
 
 const readline = require('readline');
 
-const CRM_URL = process.env.CRM_URL || 'https://blogger-crm.onrender.com';
-const API_KEY = process.env.CRM_API_KEY || 'mixit-crm-readonly-2026';
+// Ключ берётся из переменной окружения или первого аргумента
+const API_KEY = process.env.MCP_KEY || process.argv[2] || '';
+const CRM_BASE = process.env.CRM_URL || 'https://blogger-crm.onrender.com';
 
 async function callCRM(path) {
-  const url = `${CRM_URL}/mcp${path}`;
+  const url = `${CRM_BASE}/mcp${path}`;
   const res = await fetch(url, { headers: { 'x-api-key': API_KEY } });
   if (!res.ok) throw new Error(`CRM error ${res.status}: ${await res.text()}`);
   return res.json();
@@ -22,37 +23,37 @@ async function callCRM(path) {
 const TOOLS = [
   {
     name: 'get_bloggers',
-    description: 'Получить список всех блогеров из CRM. Возвращает ник, ссылки, подписчиков, охваты, цены, статус, менеджера.',
+    description: 'Все блогеры: ник, ссылки, подписчики, охваты, цены, статус, менеджер.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_payments',
-    description: 'Получить все оплаты блогерам. Возвращает сумму, статус, блогера, менеджера, дату.',
+    description: 'Все оплаты: сумма, статус, блогер, менеджер, дата.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_barters',
-    description: 'Получить все бартерные запросы. Возвращает блогера, город, адрес, товары, статус, менеджера.',
+    description: 'Все бартеры: блогер, город, адрес, товары, статус, менеджер.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_tz_requests',
-    description: 'Получить все запросы ТЗ (технические задания). Возвращает ник, товар, формат, статус, менеджера.',
+    description: 'Все запросы ТЗ: ник, товар, формат, статус, менеджер.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_products',
-    description: 'Получить список товаров с их ТЗ (техническими заданиями).',
+    description: 'Товары и варианты ТЗ.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_expenses',
-    description: 'Получить список расходов.',
+    description: 'Расходы.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_stats',
-    description: 'Получить сводную статистику CRM: общие цифры и разбивку по менеджерам.',
+    description: 'Сводная статистика CRM по всем менеджерам.',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
 ];
@@ -67,7 +68,6 @@ const TOOL_MAP = {
   get_stats:       () => callCRM('/stats'),
 };
 
-// ── MCP JSON-RPC over stdio ───────────────────────────────────
 const rl = readline.createInterface({ input: process.stdin });
 
 async function handle(msg) {
@@ -76,7 +76,7 @@ async function handle(msg) {
   if (method === 'initialize') {
     return { id, result: {
       protocolVersion: '2024-11-05',
-      serverInfo: { name: 'blogger-crm', version: '1.0.0' },
+      serverInfo: { name: 'mixit-crm', version: '1.0.0' },
       capabilities: { tools: {} },
     }};
   }
