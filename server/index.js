@@ -2466,10 +2466,6 @@ app.get('/api/daily-report', auth, (req, res) => {
   });
 });
 
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
-}
-
 // ── MCP READ-ONLY API ──────────────────────────────────────────
 const MCP_API_KEY = process.env.MCP_API_KEY || process.env.MCP_KEY || 'mixit-crm-readonly-2026';
 
@@ -2573,6 +2569,10 @@ app.get('/mcp/stats', mcpAuth, (req, res) => {
     by_manager: managerStats,
   });
 });
+
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
+}
 
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
 
