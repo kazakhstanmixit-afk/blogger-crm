@@ -396,9 +396,11 @@ function ManagerCell({ payment, managers, onUpdate }) {
 
   if (editing) return (
     <div style={{position:'relative'}}>
-      <select autoFocus value={payment.manager_name||''} onChange={e=>handleChange(e.target.value)}
-        onBlur={()=>setEditing(false)}
-        style={{fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none',background:'#fff'}}>
+      <select autoFocus value={payment.manager_name||''}
+        onChange={e=>handleChange(e.target.value)}
+        onBlur={e=>{ if (!e.target.value || e.target.value === payment.manager_name) setEditing(false); }}
+        style={{fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none',background:'#fff',minWidth:90}}>
+        <option value="">— выбрать —</option>
         {managers.map(m=><option key={m} value={m}>{m}</option>)}
       </select>
     </div>
@@ -448,6 +450,15 @@ export default function PaymentsPage({ currentUser }) {
   const [selected, setSelected] = useState(new Set());
   const [editingId, setEditingId] = useState(null);
   const [editAmount, setEditAmount] = useState('');
+  const [allUsers, setAllUsers] = useState([]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'admin') {
+      apiFetch('/api/users').then(r => r.ok ? r.json() : []).then(data => {
+        setAllUsers(Array.isArray(data) ? data.map(u => u.username).filter(Boolean) : []);
+      }).catch(() => {});
+    }
+  }, [currentUser]);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -767,9 +778,10 @@ export default function PaymentsPage({ currentUser }) {
   };
 
   const managers = React.useMemo(() => {
-    const set = new Set(payments.map(p => p.manager_name).filter(Boolean));
-    return Array.from(set).sort();
-  }, [payments]);
+    const fromPayments = payments.map(p => p.manager_name).filter(Boolean);
+    const combined = new Set([...allUsers, ...fromPayments]);
+    return Array.from(combined).sort();
+  }, [payments, allUsers]);
 
   const stats = {
     pending: payments.filter(p=>p.status==='pending').length,
