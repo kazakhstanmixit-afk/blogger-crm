@@ -7,6 +7,7 @@ const PAYMENT_STATUS = {
   submitted: { label: 'Подано', color: '#1e40af', bg: '#dbeafe', border: '#bfdbfe' },
   paid: { label: 'Оплачено', color: '#15803d', bg: '#dcfce7', border: '#bbf7d0' },
   rejected: { label: 'Отклонено', color: '#991b1b', bg: '#fee2e2', border: '#fecaca' },
+  refunded: { label: 'Возврат', color: '#9a3412', bg: '#ffedd5', border: '#fed7aa' },
 };
 
 function StatusBadge({ status }) {
@@ -383,34 +384,43 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
 
 function ManagerCell({ payment, managers, onUpdate }) {
   const [editing, setEditing] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [localName, setLocalName] = React.useState(payment.manager_name || '');
 
-  const handleChange = async (managerName) => {
+  React.useEffect(() => { setLocalName(payment.manager_name || ''); }, [payment.manager_name]);
+
+  const handleChange = async (e) => {
+    const managerName = e.target.value;
+    if (!managerName) return;
+    setLocalName(managerName);
+    setSaving(true);
     setEditing(false);
-    if (managerName === payment.manager_name) return;
-    await apiFetch(`/api/payments/${payment.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ manager_name: managerName }),
-    });
-    onUpdate();
+    try {
+      const res = await apiFetch(`/api/payments/${payment.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ manager_name: managerName }),
+      });
+      if (!res.ok) { alert('Ошибка сохранения'); setLocalName(payment.manager_name || ''); }
+      else onUpdate();
+    } catch { alert('Ошибка соединения'); setLocalName(payment.manager_name || ''); }
+    setSaving(false);
   };
 
   if (editing) return (
-    <div style={{position:'relative'}}>
-      <select autoFocus value={payment.manager_name||''}
-        onChange={e=>handleChange(e.target.value)}
-        onBlur={e=>{ if (!e.target.value || e.target.value === payment.manager_name) setEditing(false); }}
-        style={{fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none',background:'#fff',minWidth:90}}>
-        <option value="">— выбрать —</option>
-        {managers.map(m=><option key={m} value={m}>{m}</option>)}
-      </select>
-    </div>
+    <select autoFocus value={localName}
+      onChange={handleChange}
+      onBlur={()=>setEditing(false)}
+      style={{fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none',background:'#fff',minWidth:90}}>
+      <option value="">— менеджер —</option>
+      {managers.map(m=><option key={m} value={m}>{m}</option>)}
+    </select>
   );
 
   return (
     <span className="tag" onClick={()=>setEditing(true)}
-      style={{cursor:'pointer',borderBottom:'1px dashed #c8cfe0',paddingBottom:1}}
+      style={{cursor:'pointer',borderBottom:'1px dashed #c8cfe0',paddingBottom:1,opacity:saving?0.5:1}}
       title="Нажми чтобы изменить менеджера">
-      {payment.manager_name||'—'}
+      {saving ? '...' : (localName || '—')}
     </span>
   );
 }
@@ -511,7 +521,7 @@ export default function PaymentsPage({ currentUser }) {
 
   const handlePDFReport = () => {
     const filtered = statusFilter ? payments.filter(p => p.status === statusFilter) : payments;
-    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено', refunded:'Возврат' };
     const date = new Date().toLocaleDateString('ru');
 
     const rows = filtered.map((p, i) => {
@@ -597,7 +607,7 @@ export default function PaymentsPage({ currentUser }) {
     const token = localStorage.getItem('token');
     const selectedPayments = payments.filter(p => selected.has(p.id));
     const total = selectedPayments.reduce((s,p) => s+(p.amount||0), 0);
-    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено', refunded:'Возврат' };
     const rows = selectedPayments.map((p,i) => ({
       '№': i+1,
       'Дата': new Date(p.created_at).toLocaleDateString('ru'),
@@ -634,7 +644,7 @@ export default function PaymentsPage({ currentUser }) {
 
   const handleExportPDF = () => {
     const pending = payments.filter(p => p.status === 'pending');
-    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено' };
+    const LABELS = { pending:'К оплате', submitted:'Подано', paid:'Оплачено', rejected:'Отклонено', refunded:'Возврат' };
     const date = new Date().toLocaleDateString('ru');
 
     const pendingAmount = payments.filter(p=>p.status==='pending').reduce((s,p)=>s+(p.amount||0),0);
@@ -788,9 +798,11 @@ export default function PaymentsPage({ currentUser }) {
     submitted: payments.filter(p=>p.status==='submitted').length,
     paid: payments.filter(p=>p.status==='paid').length,
     paidAmount: payments.filter(p=>p.status==='paid').reduce((s,p)=>s+(p.amount||0),0),
-    totalAmount: payments.filter(p=>p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0),
-    ipAmount: payments.filter(p=>p.is_ip && p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0),
-    ipCount: payments.filter(p=>p.is_ip).length,
+    totalAmount: payments.filter(p=>p.status!=='rejected'&&p.status!=='refunded').reduce((s,p)=>s+(p.amount||0),0),
+    ipAmount: payments.filter(p=>p.is_ip && p.status!=='rejected'&&p.status!=='refunded').reduce((s,p)=>s+(p.amount||0),0),
+    ipCount: payments.filter(p=>p.is_ip && p.status!=='refunded').length,
+    refunded: payments.filter(p=>p.status==='refunded').length,
+    refundedAmount: payments.filter(p=>p.status==='refunded').reduce((s,p)=>s+(p.amount||0),0),
   };
 
   return (
@@ -822,6 +834,12 @@ export default function PaymentsPage({ currentUser }) {
             <div className="stat-value" style={{fontSize:16,color:'#15803d'}}>{stats.ipAmount.toLocaleString('ru')} ₸</div>
             <div className="stat-label">По ИП <span style={{color:'#9ba3be'}}>({stats.ipCount} зая.)</span></div>
           </div>
+          {stats.refunded > 0 && (
+            <div className="stat-card" style={{borderLeft:'3px solid #fed7aa'}}>
+              <div className="stat-value" style={{fontSize:16,color:'#9a3412'}}>{stats.refundedAmount.toLocaleString('ru')} ₸</div>
+              <div className="stat-label">Возвраты <span style={{color:'#9ba3be'}}>({stats.refunded} зая.)</span></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -915,7 +933,7 @@ export default function PaymentsPage({ currentUser }) {
             ) : filteredPayments.length===0 ? (
               <tr><td colSpan={12}><div className="empty-state"><div style={{fontSize:36}}>💳</div><p>Заявок пока нет</p></div></td></tr>
             ) : pagedPayments.map(p=>(
-              <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.is_ip?'#dcfce7':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
+              <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.status==='refunded'?'#fff7ed':p.is_ip?'#dcfce7':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
                 {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && (
