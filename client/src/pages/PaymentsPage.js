@@ -168,6 +168,9 @@ export default function PaymentsPage({ currentUser }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [approvalFilter, setApprovalFilter] = useState('');
   const [approvalExistsFilter, setApprovalExistsFilter] = useState(''); // 'yes' | 'no' | ''
+  const [managerFilter, setManagerFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [groupColors, setGroupColors] = useState(() => {
     try { return JSON.parse(localStorage.getItem('approvalGroupColors') || '{}'); } catch { return {}; }
   });
@@ -463,6 +466,9 @@ export default function PaymentsPage({ currentUser }) {
     if (approvalFilter) list = list.filter(p => p.approval_url === approvalFilter);
     if (approvalExistsFilter === 'yes') list = list.filter(p => !!p.approval_url);
     if (approvalExistsFilter === 'no') list = list.filter(p => !p.approval_url);
+    if (managerFilter) list = list.filter(p => p.manager_name === managerFilter);
+    if (dateFrom) list = list.filter(p => p.created_at && p.created_at.slice(0,10) >= dateFrom);
+    if (dateTo) list = list.filter(p => p.created_at && p.created_at.slice(0,10) <= dateTo);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(p =>
@@ -474,13 +480,13 @@ export default function PaymentsPage({ currentUser }) {
       );
     }
     return list;
-  }, [payments, approvalFilter, approvalExistsFilter, search]);
+  }, [payments, approvalFilter, approvalExistsFilter, managerFilter, dateFrom, dateTo, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
   const pagedPayments = filteredPayments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Сбрасываем страницу при изменении фильтров/поиска
-  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, search]);
+  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, managerFilter, dateFrom, dateTo, search]);
 
   const setGroupColor = (url, color) => {
     const next = { ...groupColors, [url]: color };
@@ -494,12 +500,19 @@ export default function PaymentsPage({ currentUser }) {
     else setSelected(new Set(filteredPayments.map(p => p.id)));
   };
 
+  const managers = React.useMemo(() => {
+    const set = new Set(payments.map(p => p.manager_name).filter(Boolean));
+    return Array.from(set).sort();
+  }, [payments]);
+
   const stats = {
     pending: payments.filter(p=>p.status==='pending').length,
     submitted: payments.filter(p=>p.status==='submitted').length,
     paid: payments.filter(p=>p.status==='paid').length,
     paidAmount: payments.filter(p=>p.status==='paid').reduce((s,p)=>s+(p.amount||0),0),
     totalAmount: payments.filter(p=>p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0),
+    ipAmount: payments.filter(p=>p.is_ip && p.status!=='rejected').reduce((s,p)=>s+(p.amount||0),0),
+    ipCount: payments.filter(p=>p.is_ip).length,
   };
 
   return (
@@ -527,6 +540,10 @@ export default function PaymentsPage({ currentUser }) {
           <div className="stat-card"><div className="stat-value stat-green">{stats.paid}</div><div className="stat-label">Оплачено</div></div>
           <div className="stat-card"><div className="stat-value" style={{fontSize:18}}>{stats.paidAmount.toLocaleString('ru')} ₸</div><div className="stat-label">Выплачено</div></div>
           <div className="stat-card"><div className="stat-value" style={{fontSize:16,color:'#4f6ef7'}}>{stats.totalAmount.toLocaleString('ru')} ₸</div><div className="stat-label">Итого к выплате</div></div>
+          <div className="stat-card" style={{borderLeft:'3px solid #86efac'}}>
+            <div className="stat-value" style={{fontSize:16,color:'#15803d'}}>{stats.ipAmount.toLocaleString('ru')} ₸</div>
+            <div className="stat-label">По ИП <span style={{color:'#9ba3be'}}>({stats.ipCount} зая.)</span></div>
+          </div>
         </div>
       )}
 
@@ -547,8 +564,18 @@ export default function PaymentsPage({ currentUser }) {
           <option value="yes">✅ Есть ссылка на согласование</option>
           <option value="no">❌ Без ссылки на согласование</option>
         </select>
-        {(approvalFilter || approvalExistsFilter) && (
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ setApprovalFilter(''); setApprovalExistsFilter(''); }}>✕ Сбросить фильтр</button>
+        {currentUser.role === 'admin' && (
+          <select className="select-filter" value={managerFilter} onChange={e=>setManagerFilter(e.target.value)}>
+            <option value="">Все менеджеры</option>
+            {managers.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        <input type="date" className="select-filter" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+          style={{width:140}} title="Дата с" />
+        <input type="date" className="select-filter" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+          style={{width:140}} title="Дата по" />
+        {(approvalFilter || approvalExistsFilter || managerFilter || dateFrom || dateTo) && (
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ setApprovalFilter(''); setApprovalExistsFilter(''); setManagerFilter(''); setDateFrom(''); setDateTo(''); }}>✕ Сбросить</button>
         )}
       </div>
 
