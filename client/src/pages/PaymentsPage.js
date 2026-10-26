@@ -236,18 +236,141 @@ function DraggableScroll({ children }) {
 }
 
 function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilter, groupColors, setGroupColor }) {
+  const STORE_KEY = 'approvalBuckets';
+  const [buckets, setBuckets] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { return []; }
+  });
+  const [newName, setNewName] = React.useState('');
+  const [adding, setAdding] = React.useState(false);
+  const [dragging, setDragging] = React.useState(null); // url being dragged
+  const [over, setOver] = React.useState(null); // bucket id hovered
+
+  const save = (next) => { setBuckets(next); localStorage.setItem(STORE_KEY, JSON.stringify(next)); };
+
+  const addBucket = () => {
+    if (!newName.trim()) return;
+    save([...buckets, { id: Date.now().toString(), name: newName.trim(), urls: [] }]);
+    setNewName(''); setAdding(false);
+  };
+
+  const removeBucket = (id) => save(buckets.filter(b => b.id !== id));
+
+  const renameBucket = (id, name) => save(buckets.map(b => b.id === id ? {...b, name} : b));
+
+  // urls assigned to any bucket
+  const assigned = new Set(buckets.flatMap(b => b.urls));
+  const unassigned = approvalGroups.filter(g => !assigned.has(g.url));
+
+  const dropIntoBucket = (bucketId) => {
+    if (!dragging) return;
+    save(buckets.map(b => {
+      const urls = b.urls.filter(u => u !== dragging);
+      if (b.id === bucketId) urls.push(dragging);
+      return {...b, urls};
+    }));
+    setDragging(null); setOver(null);
+  };
+
+  const removeFromBucket = (bucketId, url) => {
+    save(buckets.map(b => b.id === bucketId ? {...b, urls: b.urls.filter(u => u !== url)} : b));
+  };
+
+  const colStyle = (isOver) => ({
+    minWidth: 220, maxWidth: 260, borderRadius: 10, border: isOver ? '2px dashed #4f6ef7' : '1px dashed #e2e6ef',
+    background: isOver ? '#eef1fe' : '#f8f9fb', padding: '8px 10px', flexShrink: 0,
+  });
+
   return (
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Группы по согласованию</div>
-      <DraggableScroll>
-        {approvalGroups.map((g, i) => (
-          <GroupCard key={i} g={g} isActive={approvalFilter===g.url}
-            onClick={() => setApprovalFilter(approvalFilter===g.url ? '' : g.url)}
-            groupColors={groupColors} setGroupColor={setGroupColor} />
-        ))}
-      </DraggableScroll>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em'}}>Группы по согласованию</div>
+        {adding ? (
+          <div style={{display:'flex',gap:4}}>
+            <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter')addBucket();if(e.key==='Escape')setAdding(false);}}
+              placeholder="Название колонки" style={{fontSize:12,padding:'2px 8px',border:'1px solid #4f6ef7',borderRadius:5,outline:'none',width:140}} />
+            <button className="btn btn-primary btn-sm" onClick={addBucket}>+</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setAdding(false)}>×</button>
+          </div>
+        ) : (
+          <button className="btn btn-secondary btn-sm" onClick={()=>setAdding(true)} style={{fontSize:11}}>+ Колонка</button>
+        )}
+      </div>
+
+      <div style={{display:'flex',gap:10,overflowX:'auto',paddingBottom:8,alignItems:'flex-start'}}>
+        {/* Unassigned pool */}
+        <div style={{...colStyle(over==='__pool__'),minWidth:240}}
+          onDragOver={e=>{e.preventDefault();setOver('__pool__');}}
+          onDragLeave={()=>setOver(null)}
+          onDrop={()=>{
+            if(!dragging) return;
+            save(buckets.map(b=>({...b,urls:b.urls.filter(u=>u!==dragging)})));
+            setDragging(null);setOver(null);
+          }}>
+          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',marginBottom:6}}>Без группы · {unassigned.length}</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:40}}>
+            {unassigned.map((g,i)=>(
+              <div key={i} draggable
+                onDragStart={()=>setDragging(g.url)}
+                onDragEnd={()=>{setDragging(null);setOver(null);}}
+                style={{cursor:'grab'}}>
+                <GroupCard g={g} isActive={approvalFilter===g.url}
+                  onClick={()=>setApprovalFilter(approvalFilter===g.url?'':g.url)}
+                  groupColors={groupColors} setGroupColor={setGroupColor} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* User buckets */}
+        {buckets.map(bucket => {
+          const cards = bucket.urls.map(url => approvalGroups.find(g=>g.url===url)).filter(Boolean);
+          const isOver = over === bucket.id;
+          return (
+            <div key={bucket.id} style={colStyle(isOver)}
+              onDragOver={e=>{e.preventDefault();setOver(bucket.id);}}
+              onDragLeave={()=>setOver(null)}
+              onDrop={()=>dropIntoBucket(bucket.id)}>
+              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:6}}>
+                <BucketTitle name={bucket.name} onRename={name=>renameBucket(bucket.id,name)} />
+                <span style={{color:'#9ba3be',fontSize:11,marginLeft:2}}>{cards.length}</span>
+                {cards.length===0 && <button onClick={()=>removeBucket(bucket.id)}
+                  style={{marginLeft:'auto',background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>}
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:40}}>
+                {cards.map((g,i)=>(
+                  <div key={i} draggable
+                    onDragStart={()=>setDragging(g.url)}
+                    onDragEnd={()=>{setDragging(null);setOver(null);}}
+                    style={{position:'relative',cursor:'grab'}}>
+                    <GroupCard g={g} isActive={approvalFilter===g.url}
+                      onClick={()=>setApprovalFilter(approvalFilter===g.url?'':g.url)}
+                      groupColors={groupColors} setGroupColor={setGroupColor} />
+                    <button onClick={e=>{e.stopPropagation();removeFromBucket(bucket.id,g.url);}}
+                      title="Убрать из группы"
+                      style={{position:'absolute',top:2,right:2,background:'rgba(255,255,255,.8)',border:'none',borderRadius:'50%',width:16,height:16,fontSize:10,cursor:'pointer',color:'#9ba3be',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+                  </div>
+                ))}
+                {cards.length===0 && <div style={{fontSize:11,color:'#c8cfe0',textAlign:'center',paddingTop:8}}>перетащи сюда</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
+}
+
+function BucketTitle({ name, onRename }) {
+  const [editing, setEditing] = React.useState(false);
+  const [val, setVal] = React.useState(name);
+  if (editing) return (
+    <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
+      onBlur={()=>{onRename(val||name);setEditing(false);}}
+      onKeyDown={e=>{if(e.key==='Enter'){onRename(val||name);setEditing(false);}if(e.key==='Escape')setEditing(false);}}
+      style={{fontSize:12,fontWeight:600,border:'none',borderBottom:'1px solid #4f6ef7',outline:'none',width:120,background:'transparent'}} />
+  );
+  return <div onClick={()=>setEditing(true)} style={{fontSize:12,fontWeight:600,color:'#3a3f5a',cursor:'text',flex:1}}>{name}</div>;
 }
 
 export default function PaymentsPage({ currentUser }) {
