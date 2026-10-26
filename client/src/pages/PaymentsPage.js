@@ -110,8 +110,13 @@ function ReceiptCell({ payment, type, onUpdate }) {
     <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
       {receipts.map((r,i) => (
         <div key={i} style={{position:'relative',display:'inline-block'}}>
-          <a href={r.url} target="_blank" rel="noreferrer">
-            <img src={r.url} alt="чек" style={{width:44,height:44,objectFit:'cover',borderRadius:4,border:'1px solid #e2e6ef',cursor:'pointer',opacity:deleting===r.public_id?0.5:1}} />
+          <a href={r.url} target="_blank" rel="noreferrer"
+            style={{display:'flex',alignItems:'center',justifyContent:'center',width:44,height:44,borderRadius:4,border:'1px solid #e2e6ef',overflow:'hidden',background:'#f8f9fb',flexShrink:0}}>
+            <img src={r.url} alt="чек"
+              style={{width:44,height:44,objectFit:'cover',opacity:deleting===r.public_id?0.5:1}}
+              onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}
+            />
+            <span style={{display:'none',fontSize:20,alignItems:'center',justifyContent:'center',width:'100%',height:'100%'}}>🧾</span>
           </a>
           <span onClick={()=>handleDelete(r.public_id)}
             style={{position:'absolute',top:-4,right:-4,background:'#dc2626',color:'#fff',borderRadius:'50%',width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,cursor:'pointer',lineHeight:1}}>
