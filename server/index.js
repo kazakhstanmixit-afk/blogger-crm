@@ -1629,6 +1629,7 @@ app.put('/api/payments/:id', auth, (req, res) => {
     if (kaspi !== undefined) updates.kaspi = kaspi;
   if (req.body.approval_url !== undefined) updates.approval_url = req.body.approval_url;
   if (req.body.manager_name !== undefined && req.user.role === 'admin') updates.manager_name = req.body.manager_name;
+  if (req.body.linked_payment_id !== undefined) updates.linked_payment_id = req.body.linked_payment_id || null;
   if (req.body.amount_video !== undefined) updates.amount_video = req.body.amount_video ? Number(req.body.amount_video) : null;
   if (req.body.amount_product !== undefined) updates.amount_product = req.body.amount_product ? Number(req.body.amount_product) : null;
   if (updates.amount_video !== undefined || updates.amount_product !== undefined) { const v = updates.amount_video ?? existing.amount_video ?? 0; const p = updates.amount_product ?? existing.amount_product ?? 0; updates.amount = Number(v) + Number(p) || existing.amount || 0; }

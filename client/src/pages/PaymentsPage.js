@@ -425,6 +425,49 @@ function ManagerCell({ payment, managers, onUpdate }) {
   );
 }
 
+function LinkedPaymentCell({ payment, payments, onUpdate }) {
+  const [picking, setPicking] = React.useState(false);
+  const linked = payment.linked_payment_id ? payments.find(p => p.id === payment.linked_payment_id) : null;
+
+  const handleLink = async (id) => {
+    setPicking(false);
+    await apiFetch(`/api/payments/${payment.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ linked_payment_id: id || null }),
+    });
+    onUpdate();
+  };
+
+  if (payment.status !== 'refunded') return null;
+
+  if (picking) return (
+    <select autoFocus onChange={e=>handleLink(e.target.value)} onBlur={()=>setPicking(false)}
+      style={{fontSize:11,padding:'2px 6px',border:'1px solid #fb923c',borderRadius:4,outline:'none',background:'#fff',maxWidth:150}}>
+      <option value="">— выбрать —</option>
+      {payments.filter(p=>p.id!==payment.id && p.status!=='refunded').map(p=>(
+        <option key={p.id} value={p.id}>{p.blogger_name} · {(p.amount||0).toLocaleString('ru')} ₸</option>
+      ))}
+    </select>
+  );
+
+  if (linked) return (
+    <div style={{fontSize:11,display:'flex',alignItems:'center',gap:4}}>
+      <span style={{color:'#9ba3be'}}>→</span>
+      <span style={{color:'#4f6ef7',fontWeight:500,cursor:'pointer'}} onClick={()=>setPicking(true)} title="Изменить связь">
+        {linked.blogger_name}
+      </span>
+      <button onClick={()=>handleLink(null)} style={{background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}}>×</button>
+    </div>
+  );
+
+  return (
+    <button onClick={()=>setPicking(true)}
+      style={{fontSize:10,padding:'2px 6px',border:'1px dashed #fb923c',borderRadius:4,color:'#9a3412',background:'#fff7ed',cursor:'pointer',whiteSpace:'nowrap'}}>
+      + куда перенесли?
+    </button>
+  );
+}
+
 function BucketTitle({ name, onRename, onHeaderClick }) {
   const [editing, setEditing] = React.useState(false);
   const [val, setVal] = React.useState(name);
@@ -970,7 +1013,14 @@ export default function PaymentsPage({ currentUser }) {
                   )}
                 </td>
                 <td><StatusBadge status={p.status} /></td>
-                <td style={{maxWidth:180,fontSize:12,color:p.notes?'#1a1d2e':'#9ba3be',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{p.notes||'—'}</td>
+                <td style={{maxWidth:180,fontSize:12,color:p.notes?'#1a1d2e':'#9ba3be',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+                  {p.notes||'—'}
+                  {p.status==='refunded' && (
+                    <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
+                      <LinkedPaymentCell payment={p} payments={payments} onUpdate={fetchPayments} />
+                    </div>
+                  )}
+                </td>
                 <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
@@ -983,6 +1033,7 @@ export default function PaymentsPage({ currentUser }) {
                       </>}
                       {p.status==='submitted' && <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleStatusChange(p.id,'paid')}>Оплачено</button>}
                       {p.status==='rejected' && <button className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>handleStatusChange(p.id,'pending')}>Вернуть</button>}
+                      {p.status==='paid' && <button className="btn btn-sm" style={{background:'#ffedd5',color:'#9a3412',border:'1px solid #fed7aa'}} onClick={()=>handleStatusChange(p.id,'refunded')}>Возврат</button>}
                       <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(p.id)}>🗑</button>
                     </div>
                   </td>
