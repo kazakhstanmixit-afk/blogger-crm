@@ -1555,24 +1555,29 @@ app.get('/api/payments', auth, (req, res) => {
 app.post('/api/payments', auth, (req, res) => {
   try {
     console.log('PAYMENT POST body:', JSON.stringify(req.body));
-    const { blogger_id, recipient_name, iin, payment_name, amount, amount_video, amount_product, notes, kaspi, approval_url } = req.body;
+    const { blogger_id, recipient_name, iin, payment_name, amount, amount_video, amount_product, notes, kaspi, approval_url, is_ip } = req.body;
 
     if (!blogger_id) return res.status(400).json({ error: 'Не указан блогер' });
     if (!recipient_name) return res.status(400).json({ error: 'Укажите ФИО получателя' });
-    if (!iin) return res.status(400).json({ error: 'Укажите ИИН' });
     if (!amount) return res.status(400).json({ error: 'Укажите сумму' });
-    if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+    if (!is_ip) {
+      if (!iin) return res.status(400).json({ error: 'Укажите ИИН' });
+      if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
+    }
 
     const payment = {
       id: uuidv4(),
       blogger_id,
       manager_id: req.user.id,
       recipient_name,
-      iin,
+      iin: iin || null,
       payment_name: payment_name || recipient_name,
       amount: Number(amount),
+      amount_video: amount_video ? Number(amount_video) : null,
+      amount_product: amount_product ? Number(amount_product) : null,
       notes: notes || null,
       kaspi: kaspi || null,
+      is_ip: !!is_ip,
       status: 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

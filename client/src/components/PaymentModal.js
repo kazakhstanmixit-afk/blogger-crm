@@ -170,7 +170,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
 
           <div className="field">
             <label
-              onClick={() => set('is_ip', !form.is_ip)}
+              onClick={() => { const next = !form.is_ip; set('is_ip', next); if (next) { set('iin', ''); set('kaspi', ''); } }}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
                 padding: '8px 14px', borderRadius: 8,
