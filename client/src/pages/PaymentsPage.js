@@ -361,6 +361,38 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
   );
 }
 
+function ManagerCell({ payment, managers, onUpdate }) {
+  const [editing, setEditing] = React.useState(false);
+
+  const handleChange = async (managerName) => {
+    setEditing(false);
+    if (managerName === payment.manager_name) return;
+    await apiFetch(`/api/payments/${payment.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ manager_name: managerName }),
+    });
+    onUpdate();
+  };
+
+  if (editing) return (
+    <div style={{position:'relative'}}>
+      <select autoFocus value={payment.manager_name||''} onChange={e=>handleChange(e.target.value)}
+        onBlur={()=>setEditing(false)}
+        style={{fontSize:11,padding:'2px 6px',border:'1px solid #4f6ef7',borderRadius:4,outline:'none',background:'#fff'}}>
+        {managers.map(m=><option key={m} value={m}>{m}</option>)}
+      </select>
+    </div>
+  );
+
+  return (
+    <span className="tag" onClick={()=>setEditing(true)}
+      style={{cursor:'pointer',borderBottom:'1px dashed #c8cfe0',paddingBottom:1}}
+      title="Нажми чтобы изменить менеджера">
+      {payment.manager_name||'—'}
+    </span>
+  );
+}
+
 function BucketTitle({ name, onRename }) {
   const [editing, setEditing] = React.useState(false);
   const [val, setVal] = React.useState(name);
@@ -851,7 +883,13 @@ export default function PaymentsPage({ currentUser }) {
               <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.is_ip?'#dcfce7':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
-                {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && <td><span className="tag">{p.manager_name||'—'}</span></td>}
+                {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && (
+                  <td onClick={e=>e.stopPropagation()}>
+                    {currentUser.role==='admin'
+                      ? <ManagerCell payment={p} managers={managers} onUpdate={fetchPayments} />
+                      : <span className="tag">{p.manager_name||'—'}</span>}
+                  </td>
+                )}
                 <td style={{fontWeight:500}}>
                   {p.blogger_name||'—'}
                   {p.is_ip && <span style={{marginLeft:5,fontSize:10,fontWeight:600,background:'#dcfce7',color:'#15803d',border:'1px solid #86efac',borderRadius:4,padding:'1px 5px'}}>ИП</span>}
