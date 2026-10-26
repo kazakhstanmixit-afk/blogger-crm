@@ -87,28 +87,25 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
             />
           </div>
 
-          <div className="field">
-            <label>
-              ИИН {form.is_ip ? <span style={{ color: '#9ba3be', fontSize: 10 }}>(необязательно для ИП)</span> : '*'}
-              {!form.is_ip && <span style={{ marginLeft: 8, fontSize: 10, color: iinLen === 0 ? '#9ba3be' : iinValid ? '#16a34a' : '#dc2626' }}>
-                {iinLen}/12 {iinValid ? '✓' : ''}
-              </span>}
-            </label>
-            <input
-              value={form.iin}
-              onChange={e => set('iin', e.target.value.replace(/\D/g, '').slice(0, 12))}
-              placeholder={form.is_ip ? 'Необязательно' : '123456789012'}
-              style={{
-                letterSpacing: 2,
-                fontFamily: 'monospace',
-                borderColor: !form.is_ip && iinLen === 12 ? (iinValid ? '#16a34a' : '#dc2626') : undefined,
-                opacity: form.is_ip ? 0.6 : 1,
-              }}
-            />
-            {!form.is_ip && iinLen === 12 && !iinValid && (
-              <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>Некорректный ИИН</div>
-            )}
-          </div>
+          {!form.is_ip && (
+            <div className="field">
+              <label>
+                ИИН *
+                <span style={{ marginLeft: 8, fontSize: 10, color: iinLen === 0 ? '#9ba3be' : iinValid ? '#16a34a' : '#dc2626' }}>
+                  {iinLen}/12 {iinValid ? '✓' : ''}
+                </span>
+              </label>
+              <input
+                value={form.iin}
+                onChange={e => set('iin', e.target.value.replace(/\D/g, '').slice(0, 12))}
+                placeholder="123456789012"
+                style={{ letterSpacing: 2, fontFamily: 'monospace', borderColor: iinLen === 12 ? (iinValid ? '#16a34a' : '#dc2626') : undefined }}
+              />
+              {iinLen === 12 && !iinValid && (
+                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>Некорректный ИИН</div>
+              )}
+            </div>
+          )}
 
           <div className="field">
             <label>ФИО при пополнении (для банка)</label>
