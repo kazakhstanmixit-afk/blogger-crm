@@ -12,6 +12,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
     amount_product: '',
     approval_url: '',
     notes: '',
+    is_ip: false,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -36,6 +37,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
         amount: Number(form.amount),
         kaspi: form.kaspi || null,
         notes: form.notes || null,
+        is_ip: form.is_ip,
       };
 
       const res = await apiFetch('/api/payments', {
@@ -164,6 +166,29 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
               onChange={e => set('kaspi', e.target.value.replace(/\D/g, '').slice(0, 11))}
               placeholder="77001234567"
             />
+          </div>
+
+          <div className="field">
+            <label
+              onClick={() => set('is_ip', !form.is_ip)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                padding: '8px 14px', borderRadius: 8,
+                background: form.is_ip ? '#dcfce7' : '#f8f9fb',
+                border: `1px solid ${form.is_ip ? '#86efac' : '#e2e6ef'}`,
+                transition: 'all 0.15s', userSelect: 'none',
+              }}>
+              <span style={{
+                width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                background: form.is_ip ? '#16a34a' : '#fff',
+                border: `2px solid ${form.is_ip ? '#16a34a' : '#c8cfe0'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, color: '#fff', transition: 'all 0.15s',
+              }}>{form.is_ip ? '✓' : ''}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: form.is_ip ? '#15803d' : '#5a6380' }}>
+                Оплата по ИП
+              </span>
+            </label>
           </div>
 
           <div className="field">
