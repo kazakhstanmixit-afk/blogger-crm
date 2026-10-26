@@ -162,6 +162,114 @@ function KaspiCell({ payment, onUpdate }) {
   );
 }
 
+function GroupCard({ g, isActive, onClick, groupColors, setGroupColor }) {
+  const color = groupColors[g.url] || '';
+  const C = color === 'green'
+    ? {bg:'#dcfce7',border:'#86efac',text:'#15803d',accent:'#16a34a'}
+    : color === 'red'
+    ? {bg:'#fee2e2',border:'#fca5a5',text:'#991b1b',accent:'#dc2626'}
+    : color === 'blue'
+    ? {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',accent:'#2563eb'}
+    : {bg:'#f8f9fb',border:'#e2e6ef',text:'#3a3f5a',accent:'#4f6ef7'};
+  const GROUP_LABELS = { blue: 'Счёт на оплату / ИП' };
+  const label = g.url.replace(/https?:\/\//,'').replace(/\?.*/,'');
+  const shortLabel = label.length > 40 ? label.slice(0,40)+'…' : label;
+  return (
+    <div onClick={onClick} style={{
+      cursor:'pointer',padding:'8px 14px',borderRadius:8,flexShrink:0,
+      border:isActive?`2px solid ${C.accent}`:`1px solid ${C.border}`,
+      background:C.bg,
+      boxShadow:isActive?`0 0 0 3px ${C.border}60`:'0 1px 3px rgba(0,0,0,.06)',
+      display:'flex',flexDirection:'column',gap:3,width:200,
+      transform:isActive?'scale(1.02)':'scale(1)',
+      transition:'all .15s',
+    }}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:10,color:C.text,opacity:.7,marginBottom:1}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} зая.</div>
+          {GROUP_LABELS[color] && <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:1}}>{GROUP_LABELS[color]}</div>}
+          <div style={{fontSize:10,color:C.text,fontWeight:500,wordBreak:'break-all'}} title={g.url}>{shortLabel}</div>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent,marginTop:2}}>{g.total.toLocaleString('ru')} ₸</div>
+        </div>
+        <div onClick={e=>e.stopPropagation()} style={{display:'flex',flexDirection:'column',gap:4,paddingTop:2,flexShrink:0}}>
+          <button onClick={()=>setGroupColor(g.url, color==='green'?'':'green')}
+            style={{width:20,height:20,borderRadius:'50%',border:color==='green'?'3px solid #15803d':'2px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0}} />
+          <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')}
+            style={{width:20,height:20,borderRadius:'50%',border:color==='red'?'3px solid #991b1b':'2px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0}} />
+          <button onClick={()=>setGroupColor(g.url, color==='blue'?'':'blue')}
+            style={{width:20,height:20,borderRadius:'50%',border:color==='blue'?'3px solid #1e40af':'2px solid #93c5fd',background:'#dbeafe',cursor:'pointer',padding:0}} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DraggableScroll({ children }) {
+  const ref = React.useRef(null);
+  const down = React.useRef(false);
+  const startX = React.useRef(0);
+  const scrollLeft = React.useRef(0);
+
+  const onMouseDown = (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    down.current = true;
+    startX.current = e.pageX - ref.current.offsetLeft;
+    scrollLeft.current = ref.current.scrollLeft;
+    ref.current.style.cursor = 'grabbing';
+  };
+  const onMouseUp = () => { down.current = false; if (ref.current) ref.current.style.cursor = 'grab'; };
+  const onMouseMove = (e) => {
+    if (!down.current) return;
+    e.preventDefault();
+    const x = e.pageX - ref.current.offsetLeft;
+    ref.current.scrollLeft = scrollLeft.current - (x - startX.current);
+  };
+
+  return (
+    <div ref={ref}
+      onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseMove={onMouseMove}
+      style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:6,cursor:'grab',userSelect:'none',
+        scrollbarWidth:'thin',scrollbarColor:'#e2e6ef transparent'}}>
+      {children}
+    </div>
+  );
+}
+
+function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilter, groupColors, setGroupColor }) {
+  const byMonth = React.useMemo(() => {
+    const map = {};
+    approvalGroups.forEach(g => {
+      const d = new Date(g.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = d.toLocaleDateString('ru', { month: 'long', year: 'numeric' });
+      if (!map[key]) map[key] = { key, label, groups: [] };
+      map[key].groups.push(g);
+    });
+    return Object.values(map).sort((a,b) => b.key.localeCompare(a.key));
+  }, [approvalGroups]);
+
+  return (
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Группы по согласованию</div>
+      {byMonth.map(({ key, label, groups }) => (
+        <div key={key} style={{marginBottom:10}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#5a6380',marginBottom:5,display:'flex',alignItems:'center',gap:6}}>
+            <span style={{background:'#f0f2f7',borderRadius:4,padding:'1px 8px'}}>{label}</span>
+            <span style={{color:'#9ba3be',fontWeight:400}}>{groups.length} групп · {groups.reduce((s,g)=>s+g.total,0).toLocaleString('ru')} ₸</span>
+          </div>
+          <DraggableScroll>
+            {groups.map((g, i) => (
+              <GroupCard key={i} g={g} isActive={approvalFilter===g.url}
+                onClick={() => setApprovalFilter(approvalFilter===g.url ? '' : g.url)}
+                groupColors={groupColors} setGroupColor={setGroupColor} />
+            ))}
+          </DraggableScroll>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -580,55 +688,13 @@ export default function PaymentsPage({ currentUser }) {
       </div>
 
       {currentUser.role==='admin' && approvalGroups.length > 0 && (
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Группы по согласованию</div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {approvalGroups.map((g, i) => {
-              const isActive = approvalFilter === g.url;
-              const label = g.url.replace(/https?:\/\//,'').replace(/\?.*/,'');
-              const shortLabel = label.length > 40 ? label.slice(0,40)+'…' : label;
-              const color = groupColors[g.url] || '';
-              const C = color === 'green'
-                ? {bg:'#dcfce7',border:'#86efac',text:'#15803d',accent:'#16a34a'}
-                : color === 'red'
-                ? {bg:'#fee2e2',border:'#fca5a5',text:'#991b1b',accent:'#dc2626'}
-                : color === 'blue'
-                ? {bg:'#dbeafe',border:'#93c5fd',text:'#1e40af',accent:'#2563eb'}
-                : {bg:'#f8f9fb',border:'#e2e6ef',text:'#3a3f5a',accent:'#4f6ef7'};
-              const GROUP_LABELS = { green: '', red: '', blue: 'Счёт на оплату / ИП' };
-              return (
-                <div key={i}
-                  onClick={() => setApprovalFilter(isActive ? '' : g.url)}
-                  style={{
-                    cursor:'pointer',padding:'8px 14px',borderRadius:8,
-                    border:isActive?`2px solid ${C.accent}`:`1px solid ${C.border}`,
-                    background:C.bg,
-                    boxShadow:isActive?`0 0 0 3px ${C.border}60`:'0 1px 3px rgba(0,0,0,.06)',
-                    display:'flex',flexDirection:'column',gap:3,minWidth:180,maxWidth:280,
-                    transform:isActive?'scale(1.02)':'scale(1)',
-                    transition:'all .15s',
-                  }}>
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4}}>
-                    <div>
-                      <div style={{fontSize:10,color:C.text,opacity:.7,marginBottom:1}}>{new Date(g.date).toLocaleDateString('ru',{day:'numeric',month:'short'})} · {g.payments.length} зая.</div>
-                      {GROUP_LABELS[color] && <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:1}}>{GROUP_LABELS[color]}</div>}
-                      <div style={{fontSize:10,color:C.text,fontWeight:500,wordBreak:'break-all',maxWidth:110}} title={g.url}>{shortLabel}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:C.accent,marginTop:2}}>{g.total.toLocaleString('ru')} ₸</div>
-                    </div>
-                    <div onClick={e=>e.stopPropagation()} style={{display:'flex',flexDirection:'column',gap:4,paddingTop:2,flexShrink:0}}>
-                      <button onClick={()=>setGroupColor(g.url, color==='green'?'':'green')}
-                        style={{width:20,height:20,borderRadius:'50%',border:color==='green'?'3px solid #15803d':'2px solid #86efac',background:'#dcfce7',cursor:'pointer',padding:0,display:'block'}} />
-                      <button onClick={()=>setGroupColor(g.url, color==='red'?'':'red')}
-                        style={{width:20,height:20,borderRadius:'50%',border:color==='red'?'3px solid #991b1b':'2px solid #fca5a5',background:'#fee2e2',cursor:'pointer',padding:0,display:'block'}} />
-                      <button onClick={()=>setGroupColor(g.url, color==='blue'?'':'blue')}
-                        style={{width:20,height:20,borderRadius:'50%',border:color==='blue'?'3px solid #1e40af':'2px solid #93c5fd',background:'#dbeafe',cursor:'pointer',padding:0,display:'block'}} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ApprovalGroupsSection
+          approvalGroups={approvalGroups}
+          approvalFilter={approvalFilter}
+          setApprovalFilter={setApprovalFilter}
+          groupColors={groupColors}
+          setGroupColor={setGroupColor}
+        />
       )}
 
       {selected.size > 0 && (
