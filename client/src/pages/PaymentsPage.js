@@ -427,10 +427,11 @@ function ManagerCell({ payment, managers, onUpdate }) {
 
 function LinkedPaymentCell({ payment, payments, onUpdate }) {
   const [picking, setPicking] = React.useState(false);
+  const [q, setQ] = React.useState('');
   const linked = payment.linked_payment_id ? payments.find(p => p.id === payment.linked_payment_id) : null;
 
   const handleLink = async (id) => {
-    setPicking(false);
+    setPicking(false); setQ('');
     await apiFetch(`/api/payments/${payment.id}`, {
       method: 'PUT',
       body: JSON.stringify({ linked_payment_id: id || null }),
@@ -440,15 +441,37 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
 
   if (payment.status !== 'refunded') return null;
 
-  if (picking) return (
-    <select autoFocus onChange={e=>handleLink(e.target.value)} onBlur={()=>setPicking(false)}
-      style={{fontSize:11,padding:'2px 6px',border:'1px solid #fb923c',borderRadius:4,outline:'none',background:'#fff',maxWidth:150}}>
-      <option value="">— выбрать —</option>
-      {payments.filter(p=>p.id!==payment.id && p.status!=='refunded').map(p=>(
-        <option key={p.id} value={p.id}>{p.blogger_name} · {(p.amount||0).toLocaleString('ru')} ₸</option>
-      ))}
-    </select>
-  );
+  if (picking) {
+    const candidates = payments.filter(p => p.id !== payment.id && p.status !== 'refunded');
+    const filtered = q.trim()
+      ? candidates.filter(p => (p.blogger_name||'').toLowerCase().includes(q.toLowerCase()) || (p.recipient_name||'').toLowerCase().includes(q.toLowerCase()))
+      : candidates.slice(0, 8);
+    return (
+      <div style={{position:'relative',zIndex:100}}>
+        <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
+          onBlur={e=>{ if (!e.relatedTarget?.dataset?.linkid) { setPicking(false); setQ(''); } }}
+          placeholder="Поиск блогера..."
+          style={{fontSize:11,padding:'3px 7px',border:'1px solid #fb923c',borderRadius:4,outline:'none',width:160}} />
+        {filtered.length > 0 && (
+          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:200,maxHeight:200,overflowY:'auto',zIndex:200}}>
+            {filtered.map(p=>(
+              <div key={p.id} data-linkid={p.id} tabIndex={0}
+                onMouseDown={()=>handleLink(p.id)}
+                style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:'1px solid #f1f5f9'}}
+                onMouseEnter={e=>e.currentTarget.style.background='#f8f9fb'}
+                onMouseLeave={e=>e.currentTarget.style.background=''}>
+                <span style={{fontWeight:500,color:'#1a1d2e'}}>{p.blogger_name}</span>
+                <span style={{color:'#9ba3be',marginLeft:6}}>{(p.amount||0).toLocaleString('ru')} ₸</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {q && filtered.length === 0 && (
+          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,padding:'8px 10px',fontSize:11,color:'#9ba3be',zIndex:200}}>Не найдено</div>
+        )}
+      </div>
+    );
+  }
 
   if (linked) return (
     <div style={{fontSize:11,display:'flex',alignItems:'center',gap:4}}>
