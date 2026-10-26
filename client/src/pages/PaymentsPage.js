@@ -236,36 +236,16 @@ function DraggableScroll({ children }) {
 }
 
 function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilter, groupColors, setGroupColor }) {
-  const byMonth = React.useMemo(() => {
-    const map = {};
-    approvalGroups.forEach(g => {
-      const d = new Date(g.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      const label = d.toLocaleDateString('ru', { month: 'long', year: 'numeric' });
-      if (!map[key]) map[key] = { key, label, groups: [] };
-      map[key].groups.push(g);
-    });
-    return Object.values(map).sort((a,b) => b.key.localeCompare(a.key));
-  }, [approvalGroups]);
-
   return (
     <div style={{marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Группы по согласованию</div>
-      {byMonth.map(({ key, label, groups }) => (
-        <div key={key} style={{marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:600,color:'#5a6380',marginBottom:5,display:'flex',alignItems:'center',gap:6}}>
-            <span style={{background:'#f0f2f7',borderRadius:4,padding:'1px 8px'}}>{label}</span>
-            <span style={{color:'#9ba3be',fontWeight:400}}>{groups.length} групп · {groups.reduce((s,g)=>s+g.total,0).toLocaleString('ru')} ₸</span>
-          </div>
-          <DraggableScroll>
-            {groups.map((g, i) => (
-              <GroupCard key={i} g={g} isActive={approvalFilter===g.url}
-                onClick={() => setApprovalFilter(approvalFilter===g.url ? '' : g.url)}
-                groupColors={groupColors} setGroupColor={setGroupColor} />
-            ))}
-          </DraggableScroll>
-        </div>
-      ))}
+      <DraggableScroll>
+        {approvalGroups.map((g, i) => (
+          <GroupCard key={i} g={g} isActive={approvalFilter===g.url}
+            onClick={() => setApprovalFilter(approvalFilter===g.url ? '' : g.url)}
+            groupColors={groupColors} setGroupColor={setGroupColor} />
+        ))}
+      </DraggableScroll>
     </div>
   );
 }
