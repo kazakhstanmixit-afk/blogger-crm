@@ -679,7 +679,7 @@ export default function PaymentsPage({ currentUser }) {
             ) : filteredPayments.length===0 ? (
               <tr><td colSpan={12}><div className="empty-state"><div style={{fontSize:36}}>💳</div><p>Заявок пока нет</p></div></td></tr>
             ) : pagedPayments.map(p=>(
-              <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.is_ip?'#f0fdf4':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
+              <tr key={p.id} style={{background:selected.has(p.id)?'#eef1fe':p.is_ip?'#dcfce7':p.status==='paid'?'#f0fdf4':p.status==='rejected'?'#fff5f5':undefined}}>
                 {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} /></td>}
                 <td style={{fontSize:11,color:'#9ba3be',whiteSpace:'nowrap'}}>{new Date(p.created_at).toLocaleDateString('ru')}</td>
                 {(currentUser.role==='admin' || currentUser.can_view_users?.length > 0) && <td><span className="tag">{p.manager_name||'—'}</span></td>}

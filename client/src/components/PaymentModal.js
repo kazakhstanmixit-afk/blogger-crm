@@ -24,7 +24,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
     setError('');
 
     if (!form.recipient_name.trim()) { setError('Укажите ФИО получателя'); return; }
-    if (!/^\d{12}$/.test(form.iin)) { setError('ИИН должен содержать ровно 12 цифр'); return; }
+    if (!form.is_ip && !/^\d{12}$/.test(form.iin)) { setError('ИИН должен содержать ровно 12 цифр'); return; }
     if (!form.amount || Number(form.amount) <= 0) { setError('Укажите сумму'); return; }
 
     setSaving(true);
@@ -89,22 +89,23 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
 
           <div className="field">
             <label>
-              ИИН *
-              <span style={{ marginLeft: 8, fontSize: 10, color: iinLen === 0 ? '#9ba3be' : iinValid ? '#16a34a' : '#dc2626' }}>
+              ИИН {form.is_ip ? <span style={{ color: '#9ba3be', fontSize: 10 }}>(необязательно для ИП)</span> : '*'}
+              {!form.is_ip && <span style={{ marginLeft: 8, fontSize: 10, color: iinLen === 0 ? '#9ba3be' : iinValid ? '#16a34a' : '#dc2626' }}>
                 {iinLen}/12 {iinValid ? '✓' : ''}
-              </span>
+              </span>}
             </label>
             <input
               value={form.iin}
               onChange={e => set('iin', e.target.value.replace(/\D/g, '').slice(0, 12))}
-              placeholder="123456789012"
+              placeholder={form.is_ip ? 'Необязательно' : '123456789012'}
               style={{
                 letterSpacing: 2,
                 fontFamily: 'monospace',
-                borderColor: iinLen === 12 ? (iinValid ? '#16a34a' : '#dc2626') : undefined
+                borderColor: !form.is_ip && iinLen === 12 ? (iinValid ? '#16a34a' : '#dc2626') : undefined,
+                opacity: form.is_ip ? 0.6 : 1,
               }}
             />
-            {iinLen === 12 && !iinValid && (
+            {!form.is_ip && iinLen === 12 && !iinValid && (
               <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>Некорректный ИИН</div>
             )}
           </div>
@@ -159,14 +160,16 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
             <label>Стоимость товара (₸)</label>
             <input type="number" value={form.amount_product} onChange={e=>{set('amount_product',e.target.value);set('amount', String(Number(form.amount_video||0)+Number(e.target.value||0)));}} placeholder="0" />
           </div>
-          <div className="field">
-            <label>Номер Каспи <span style={{ color: '#9ba3be', fontSize: 10 }}>(необязательно)</span></label>
-            <input
-              value={form.kaspi}
-              onChange={e => set('kaspi', e.target.value.replace(/\D/g, '').slice(0, 11))}
-              placeholder="77001234567"
-            />
-          </div>
+          {!form.is_ip && (
+            <div className="field">
+              <label>Номер Каспи <span style={{ color: '#9ba3be', fontSize: 10 }}>(необязательно)</span></label>
+              <input
+                value={form.kaspi}
+                onChange={e => set('kaspi', e.target.value.replace(/\D/g, '').slice(0, 11))}
+                placeholder="77001234567"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label
@@ -204,7 +207,7 @@ export default function PaymentModal({ blogger, onClose, onSave }) {
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
-            <button type="submit" className="btn btn-primary" disabled={saving || (iinLen === 12 && !iinValid)}>
+            <button type="submit" className="btn btn-primary" disabled={saving || (!form.is_ip && iinLen === 12 && !iinValid)}>
               {saving ? 'Отправляем...' : 'Подать заявку'}
             </button>
           </div>
