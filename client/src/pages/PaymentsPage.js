@@ -275,10 +275,43 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
     save(buckets.map(b => b.id === bucketId ? {...b, urls: b.urls.filter(u => u !== url)} : b));
   };
 
-  const colStyle = (isOver) => ({
-    minWidth: 220, maxWidth: 260, borderRadius: 10, border: isOver ? '2px dashed #4f6ef7' : '1px dashed #e2e6ef',
-    background: isOver ? '#eef1fe' : '#f8f9fb', padding: '8px 10px', flexShrink: 0,
+  const [collapsed, setCollapsed] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('approvalBucketsCollapsed') || '{}'); } catch { return {}; }
   });
+  const toggleCollapse = (id) => {
+    const next = {...collapsed, [id]: !collapsed[id]};
+    setCollapsed(next);
+    localStorage.setItem('approvalBucketsCollapsed', JSON.stringify(next));
+  };
+
+  const colStyle = (isOver, isCollapsed) => ({
+    borderRadius: 10,
+    border: isOver ? '2px dashed #4f6ef7' : '1px solid #e2e6ef',
+    background: isOver ? '#eef1fe' : '#f8f9fb',
+    padding: '6px 10px',
+    flexShrink: 0,
+    transition: 'all .15s',
+    width: isCollapsed ? 'auto' : 'auto',
+  });
+
+  const renderCards = (cards, bucketId) => (
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+      {cards.map((g,i)=>(
+        <div key={i} draggable
+          onDragStart={()=>setDragging(g.url)}
+          onDragEnd={()=>{setDragging(null);setOver(null);}}
+          style={{position:'relative',cursor:'grab'}}>
+          <GroupCard g={g} isActive={approvalFilter===g.url}
+            onClick={()=>setApprovalFilter(approvalFilter===g.url?'':g.url)}
+            groupColors={groupColors} setGroupColor={setGroupColor} />
+          {bucketId && <button onClick={e=>{e.stopPropagation();removeFromBucket(bucketId,g.url);}}
+            title="Убрать из группы"
+            style={{position:'absolute',top:2,right:2,background:'rgba(255,255,255,.85)',border:'none',borderRadius:'50%',width:16,height:16,fontSize:10,cursor:'pointer',color:'#9ba3be',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}
+        </div>
+      ))}
+      {cards.length===0 && <div style={{fontSize:11,color:'#c8cfe0',padding:'8px 12px'}}>перетащи сюда</div>}
+    </div>
+  );
 
   return (
     <div style={{marginBottom:16}}>
@@ -297,62 +330,49 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
         )}
       </div>
 
-      <div style={{display:'flex',gap:10,overflowX:'auto',paddingBottom:8,alignItems:'flex-start'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
         {/* Unassigned pool */}
-        <div style={{...colStyle(over==='__pool__'),minWidth:240}}
-          onDragOver={e=>{e.preventDefault();setOver('__pool__');}}
-          onDragLeave={()=>setOver(null)}
-          onDrop={()=>{
-            if(!dragging) return;
-            save(buckets.map(b=>({...b,urls:b.urls.filter(u=>u!==dragging)})));
-            setDragging(null);setOver(null);
-          }}>
-          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',marginBottom:6}}>Без группы · {unassigned.length}</div>
-          <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:40}}>
-            {unassigned.map((g,i)=>(
-              <div key={i} draggable
-                onDragStart={()=>setDragging(g.url)}
-                onDragEnd={()=>{setDragging(null);setOver(null);}}
-                style={{cursor:'grab'}}>
-                <GroupCard g={g} isActive={approvalFilter===g.url}
-                  onClick={()=>setApprovalFilter(approvalFilter===g.url?'':g.url)}
-                  groupColors={groupColors} setGroupColor={setGroupColor} />
+        {(() => {
+          const isCollapsed = collapsed['__pool__'];
+          const isOver = over === '__pool__';
+          return (
+            <div style={colStyle(isOver, isCollapsed)}
+              onDragOver={e=>{e.preventDefault();setOver('__pool__');}}
+              onDragLeave={()=>setOver(null)}
+              onDrop={()=>{
+                if(!dragging) return;
+                save(buckets.map(b=>({...b,urls:b.urls.filter(u=>u!==dragging)})));
+                setDragging(null);setOver(null);
+              }}>
+              <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none'}}
+                onClick={()=>toggleCollapse('__pool__')}>
+                <span style={{fontSize:12,color:'#9ba3be'}}>{isCollapsed ? '▶' : '▼'}</span>
+                <span style={{fontSize:12,fontWeight:600,color:'#5a6380'}}>Без группы</span>
+                <span style={{fontSize:11,color:'#9ba3be'}}>{unassigned.length}</span>
               </div>
-            ))}
-          </div>
-        </div>
+              {!isCollapsed && renderCards(unassigned, null)}
+            </div>
+          );
+        })()}
 
         {/* User buckets */}
         {buckets.map(bucket => {
           const cards = bucket.urls.map(url => approvalGroups.find(g=>g.url===url)).filter(Boolean);
           const isOver = over === bucket.id;
+          const isCollapsed = collapsed[bucket.id];
           return (
-            <div key={bucket.id} style={colStyle(isOver)}
+            <div key={bucket.id} style={colStyle(isOver, isCollapsed)}
               onDragOver={e=>{e.preventDefault();setOver(bucket.id);}}
               onDragLeave={()=>setOver(null)}
               onDrop={()=>dropIntoBucket(bucket.id)}>
-              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:6}}>
-                <BucketTitle name={bucket.name} onRename={name=>renameBucket(bucket.id,name)} />
-                <span style={{color:'#9ba3be',fontSize:11,marginLeft:2}}>{cards.length}</span>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:12,color:'#9ba3be',cursor:'pointer'}} onClick={()=>toggleCollapse(bucket.id)}>{isCollapsed ? '▶' : '▼'}</span>
+                <BucketTitle name={bucket.name} onRename={name=>renameBucket(bucket.id,name)} onHeaderClick={()=>toggleCollapse(bucket.id)} />
+                <span style={{fontSize:11,color:'#9ba3be'}}>{cards.length}</span>
                 {cards.length===0 && <button onClick={()=>removeBucket(bucket.id)}
-                  style={{marginLeft:'auto',background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>}
+                  style={{marginLeft:'auto',background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:14}}>×</button>}
               </div>
-              <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:40}}>
-                {cards.map((g,i)=>(
-                  <div key={i} draggable
-                    onDragStart={()=>setDragging(g.url)}
-                    onDragEnd={()=>{setDragging(null);setOver(null);}}
-                    style={{position:'relative',cursor:'grab'}}>
-                    <GroupCard g={g} isActive={approvalFilter===g.url}
-                      onClick={()=>setApprovalFilter(approvalFilter===g.url?'':g.url)}
-                      groupColors={groupColors} setGroupColor={setGroupColor} />
-                    <button onClick={e=>{e.stopPropagation();removeFromBucket(bucket.id,g.url);}}
-                      title="Убрать из группы"
-                      style={{position:'absolute',top:2,right:2,background:'rgba(255,255,255,.8)',border:'none',borderRadius:'50%',width:16,height:16,fontSize:10,cursor:'pointer',color:'#9ba3be',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
-                  </div>
-                ))}
-                {cards.length===0 && <div style={{fontSize:11,color:'#c8cfe0',textAlign:'center',paddingTop:8}}>перетащи сюда</div>}
-              </div>
+              {!isCollapsed && renderCards(cards, bucket.id)}
             </div>
           );
         })}
@@ -393,7 +413,7 @@ function ManagerCell({ payment, managers, onUpdate }) {
   );
 }
 
-function BucketTitle({ name, onRename }) {
+function BucketTitle({ name, onRename, onHeaderClick }) {
   const [editing, setEditing] = React.useState(false);
   const [val, setVal] = React.useState(name);
   if (editing) return (
@@ -402,7 +422,10 @@ function BucketTitle({ name, onRename }) {
       onKeyDown={e=>{if(e.key==='Enter'){onRename(val||name);setEditing(false);}if(e.key==='Escape')setEditing(false);}}
       style={{fontSize:12,fontWeight:600,border:'none',borderBottom:'1px solid #4f6ef7',outline:'none',width:120,background:'transparent'}} />
   );
-  return <div onClick={()=>setEditing(true)} style={{fontSize:12,fontWeight:600,color:'#3a3f5a',cursor:'text',flex:1}}>{name}</div>;
+  return <div
+    onClick={onHeaderClick}
+    onDoubleClick={e=>{e.stopPropagation();setEditing(true);}}
+    style={{fontSize:12,fontWeight:600,color:'#3a3f5a',cursor:'pointer',flex:1}}>{name}</div>;
 }
 
 export default function PaymentsPage({ currentUser }) {
