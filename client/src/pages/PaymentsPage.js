@@ -114,6 +114,7 @@ function ReceiptCell({ payment, type, onUpdate }) {
             style={{display:'flex',alignItems:'center',justifyContent:'center',width:44,height:44,borderRadius:4,border:'1px solid #e2e6ef',overflow:'hidden',background:'#f8f9fb',flexShrink:0}}>
             <img src={r.url} alt="чек"
               style={{width:44,height:44,objectFit:'cover',opacity:deleting===r.public_id?0.5:1}}
+              loading="lazy"
               onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}
             />
             <span style={{display:'none',fontSize:20,alignItems:'center',justifyContent:'center',width:'100%',height:'100%'}}>🧾</span>
