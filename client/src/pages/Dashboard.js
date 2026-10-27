@@ -9,6 +9,7 @@ import TzRequestsPage from './TzRequestsPage';
 import ExclusivePage from './ExclusivePage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
+import TrendsPage from './TrendsPage';
 
 export default function Dashboard({ user, onLogout }) {
   const [page, setPage] = useState('bloggers');
@@ -21,6 +22,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'stats', icon:'📊', label:'Аналитика' },
     { id:'payments', icon:'💳', label:'Оплаты' },
     { id:'products', icon:'📦', label:'Товары и ТЗ' },
+    { id:'trends', icon:'🔥', label:'Тренды' },
     { id:'expenses', icon:'💸', label:'Расходы' },
     { id:'regulations', icon:'📋', label:'Регламенты' },
     { id:'barter', icon:'🎁', label:'Бартер' },
@@ -53,6 +55,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='stats' && <StatsPage currentUser={user} />}
         {page==='payments' && <PaymentsPage currentUser={user} />}
         {page==='products' && <ProductsPage currentUser={user} />}
+        {page==='trends' && !isOperator && <TrendsPage currentUser={user} />}
         {page==='expenses' && <ExpensesPage currentUser={user} />}
         {page==='regulations' && <RegulationsPage currentUser={user} />}
         {page==='barter' && <BarterPage currentUser={user} />}
