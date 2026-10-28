@@ -1236,10 +1236,25 @@ app.post('/api/bloggers/bulk-status', auth, (req, res) => {
 app.post('/api/bloggers/distribute', auth, (req, res) => {
   const { blogger_ids, manager_ids } = req.body;
   if (!blogger_ids?.length || !manager_ids?.length) return res.status(400).json({ error: 'Нужны блогеры и менеджеры' });
-  blogger_ids.forEach((bid, i) => {
-    const mgr = manager_ids[i % manager_ids.length];
-    db.get('bloggers').find({ id: bid }).assign({ assigned_manager_id: mgr, in_work: true, status: 'transferred', updated_at: new Date().toISOString() }).write();
-  });
+  const now = new Date().toISOString();
+  const idSet = new Set(blogger_ids);
+  const users = db.get('users').value();
+  // Обновляем всё в памяти, одно write в конце
+  db.get('bloggers')
+    .filter(b => idSet.has(b.id))
+    .each((b, idx) => {
+      const mgr = manager_ids[blogger_ids.indexOf(b.id) % manager_ids.length];
+      const mgrUser = users.find(u => u.id === mgr);
+      Object.assign(b, {
+        assigned_manager_id: mgr,
+        manager_name: mgrUser ? mgrUser.username : b.manager_name,
+        in_work: true,
+        status: 'transferred',
+        updated_at: now,
+      });
+    })
+    .value();
+  db.write();
   res.json({ ok: true, distributed: blogger_ids.length });
 });
 
@@ -1255,7 +1270,8 @@ app.post('/api/bloggers/bulk-delete', auth, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для админа' });
   const { ids } = req.body;
   if (!ids?.length) return res.status(400).json({ error: 'Нет ID' });
-  ids.forEach(id => db.get('bloggers').remove({ id }).write());
+  const idSet = new Set(ids);
+  db.get('bloggers').remove(b => idSet.has(b.id)).write();
   res.json({ ok: true, deleted: ids.length });
 });
 
