@@ -832,7 +832,15 @@ export default function BloggerList({ currentUser }) {
         <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowDistribute(false)}>
           <div className="modal" style={{maxWidth:520}}>
             <div className="modal-header"><div className="modal-title">Распределить {selected.size} блогеров</div><button className="modal-close" onClick={()=>setShowDistribute(false)}>×</button></div>
-            <DistributeForm users={users} totalCount={selected.size} selectedBloggers={bloggers.filter(b=>selected.has(b.id))} onDistribute={handleDistribute} onClose={()=>setShowDistribute(false)} />
+            <DistributeForm
+              users={users}
+              totalCount={selected.size}
+              allTotal={total}
+              selectedBloggers={bloggers.filter(b=>selected.has(b.id))}
+              onSelectAll={async () => { await selectAllFiltered(); }}
+              onDistribute={handleDistribute}
+              onClose={()=>setShowDistribute(false)}
+            />
           </div>
         </div>
       )}
@@ -840,7 +848,7 @@ export default function BloggerList({ currentUser }) {
   );
 }
 
-function DistributeForm({ users, totalCount, selectedBloggers, onDistribute, onClose }) {
+function DistributeForm({ users, totalCount, allTotal, selectedBloggers, onSelectAll, onDistribute, onClose }) {
   const managers = users.filter(u => u.role === 'manager' || u.role === 'admin');
   const [pickedIds, setPickedIds] = useState(new Set(managers.map(u=>u.id)));
   const toggle = (id) => setPickedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
@@ -863,6 +871,18 @@ function DistributeForm({ users, totalCount, selectedBloggers, onDistribute, onC
 
   return (
     <>
+      {/* Баннер "выбрана только страница" */}
+      {allTotal > totalCount && (
+        <div style={{background:'#fef3c7',border:'1px solid #fde68a',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+          <span style={{fontSize:12,color:'#92400e'}}>
+            ⚠️ Выбрано <b>{totalCount}</b> из <b>{allTotal}</b> — только текущая страница
+          </span>
+          <button onClick={async()=>{ await onSelectAll(); }}
+            style={{fontSize:11,fontWeight:600,color:'#92400e',background:'#fde68a',border:'none',borderRadius:5,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>
+            Выбрать все {allTotal}
+          </button>
+        </div>
+      )}
       <div style={{marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
           <span style={{fontSize:12,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.04em'}}>Менеджеры</span>
