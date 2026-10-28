@@ -832,7 +832,7 @@ export default function BloggerList({ currentUser }) {
         <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowDistribute(false)}>
           <div className="modal" style={{maxWidth:520}}>
             <div className="modal-header"><div className="modal-title">Распределить {selected.size} блогеров</div><button className="modal-close" onClick={()=>setShowDistribute(false)}>×</button></div>
-            <DistributeForm users={users} selectedBloggers={bloggers.filter(b=>selected.has(b.id))} onDistribute={handleDistribute} onClose={()=>setShowDistribute(false)} />
+            <DistributeForm users={users} totalCount={selected.size} selectedBloggers={bloggers.filter(b=>selected.has(b.id))} onDistribute={handleDistribute} onClose={()=>setShowDistribute(false)} />
           </div>
         </div>
       )}
@@ -840,25 +840,29 @@ export default function BloggerList({ currentUser }) {
   );
 }
 
-function DistributeForm({ users, selectedBloggers, onDistribute, onClose }) {
+function DistributeForm({ users, totalCount, selectedBloggers, onDistribute, onClose }) {
   const managers = users.filter(u => u.role === 'manager' || u.role === 'admin');
-  const [pickedIds, setPickedIds] = useState(new Set(managers.map(u=>u.id))); // все по умолчанию
+  const [pickedIds, setPickedIds] = useState(new Set(managers.map(u=>u.id)));
   const toggle = (id) => setPickedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const allOn = pickedIds.size === managers.length;
 
-  // Распределение: перемешиваем блогеров и раскладываем по менеджерам
+  // Сколько примерно получит каждый (точное распределение делает сервер)
+  const perManager = pickedIds.size > 0 ? Math.ceil(totalCount / pickedIds.size) : 0;
+
+  // Предпросмотр только если видимых блогеров == всего выбранных (одна страница)
+  const canPreview = selectedBloggers.length === totalCount && totalCount <= 200;
   const preview = React.useMemo(() => {
+    if (!canPreview) return {};
     const ids = Array.from(pickedIds);
     if (!ids.length) return {};
     const result = {};
     ids.forEach(id => result[id] = []);
     selectedBloggers.forEach((b, i) => { result[ids[i % ids.length]].push(b); });
     return result;
-  }, [pickedIds, selectedBloggers]);
+  }, [pickedIds, selectedBloggers, canPreview]);
 
   return (
     <>
-      {/* Выбор менеджеров */}
       <div style={{marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
           <span style={{fontSize:12,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.04em'}}>Менеджеры</span>
@@ -870,34 +874,38 @@ function DistributeForm({ users, selectedBloggers, onDistribute, onClose }) {
         <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
           {managers.map(u=>{
             const on = pickedIds.has(u.id);
-            const cnt = preview[u.id]?.length || 0;
             return (
               <div key={u.id} onClick={()=>toggle(u.id)}
                 style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',border:`1px solid ${on?'#4f6ef7':'#e2e6ef'}`,borderRadius:20,cursor:'pointer',background:on?'#eef1fe':'#f8f9fb',transition:'all .12s'}}>
                 <div style={{width:22,height:22,borderRadius:'50%',background:on?'#4f6ef7':'#e2e6ef',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:on?'#fff':'#9ba3be'}}>{u.username.slice(0,2).toUpperCase()}</div>
                 <span style={{fontSize:12,fontWeight:500,color:on?'#3730a3':'#5a6380'}}>{u.username}</span>
-                {on && <span style={{fontSize:11,color:'#4f6ef7',fontWeight:600}}>{cnt}</span>}
+                {on && <span style={{fontSize:11,color:'#4f6ef7',fontWeight:600}}>~{perManager}</span>}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Предпросмотр */}
       {pickedIds.size > 0 && (
-        <div style={{background:'#f8f9fb',borderRadius:10,padding:'10px 12px',marginBottom:16,maxHeight:240,overflowY:'auto'}}>
-          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Предпросмотр распределения</div>
+        <div style={{background:'#f8f9fb',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#5a6380'}}>
+          {totalCount} блогеров → {pickedIds.size} менеджер(а) ≈ {perManager} каждому
+        </div>
+      )}
+
+      {/* Детальный предпросмотр только для малых выборок */}
+      {canPreview && pickedIds.size > 0 && (
+        <div style={{background:'#fff',border:'1px solid #e2e6ef',borderRadius:10,padding:'10px 12px',marginBottom:16,maxHeight:200,overflowY:'auto'}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#9ba3be',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Предпросмотр</div>
           {Array.from(pickedIds).map(mid => {
             const u = managers.find(m=>m.id===mid);
             const list = preview[mid] || [];
             return (
-              <div key={mid} style={{marginBottom:10}}>
-                <div style={{fontSize:12,fontWeight:600,color:'#3730a3',marginBottom:3}}>
-                  {u?.username} <span style={{fontWeight:400,color:'#9ba3be'}}>({list.length} блог.)</span>
-                </div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              <div key={mid} style={{marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:600,color:'#3730a3'}}>{u?.username}</span>
+                <span style={{fontSize:11,color:'#9ba3be',marginLeft:6}}>{list.length} блог.</span>
+                <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:3}}>
                   {list.map(b=>(
-                    <span key={b.id} style={{fontSize:10,padding:'2px 7px',background:'#eef1fe',color:'#4f6ef7',borderRadius:4,whiteSpace:'nowrap'}}>
+                    <span key={b.id} style={{fontSize:10,padding:'1px 6px',background:'#eef1fe',color:'#4f6ef7',borderRadius:4}}>
                       {b.name||b.instagram_url||b.id}
                     </span>
                   ))}
@@ -912,7 +920,7 @@ function DistributeForm({ users, selectedBloggers, onDistribute, onClose }) {
         <button className="btn btn-secondary" onClick={onClose}>Отмена</button>
         <button className="btn btn-primary" disabled={pickedIds.size===0}
           onClick={()=>onDistribute(Array.from(pickedIds))}>
-          Распределить {selectedBloggers.length} блогеров
+          Распределить {totalCount} блогеров
         </button>
       </div>
     </>
