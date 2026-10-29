@@ -429,35 +429,60 @@ function ManagerCell({ payment, managers, onUpdate }) {
 function LinkedPaymentCell({ payment, payments, onUpdate }) {
   const [picking, setPicking] = React.useState(false);
   const [q, setQ] = React.useState('');
-  const linked = payment.linked_payment_id ? payments.find(p => p.id === payment.linked_payment_id) : null;
 
-  const handleLink = async (id) => {
-    setPicking(false); setQ('');
+  // Поддержка и старого (linked_payment_id) и нового (linked_payment_ids) формата
+  const linkedIds = payment.linked_payment_ids
+    ? (Array.isArray(payment.linked_payment_ids) ? payment.linked_payment_ids : [payment.linked_payment_ids])
+    : (payment.linked_payment_id ? [payment.linked_payment_id] : []);
+  const linkedPayments = linkedIds.map(id => payments.find(p => p.id === id)).filter(Boolean);
+
+  const saveIds = async (ids) => {
     await apiFetch(`/api/payments/${payment.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ linked_payment_id: id || null }),
+      body: JSON.stringify({ linked_payment_ids: ids, linked_payment_id: ids[0] || null }),
     });
     onUpdate();
   };
 
+  const handleAdd = async (id) => {
+    setPicking(false); setQ('');
+    if (!linkedIds.includes(id)) await saveIds([...linkedIds, id]);
+  };
+
+  const handleRemove = async (id) => {
+    await saveIds(linkedIds.filter(x => x !== id));
+  };
+
   if (payment.status !== 'refunded') return null;
 
-  if (picking) {
-    const candidates = payments.filter(p => p.id !== payment.id && p.status !== 'refunded');
-    const filtered = q.trim()
-      ? candidates.filter(p => (p.blogger_name||'').toLowerCase().includes(q.toLowerCase()) || (p.recipient_name||'').toLowerCase().includes(q.toLowerCase()))
-      : candidates.slice(0, 8);
-    return (
-      <div style={{position:'relative',zIndex:100}}>
-        <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
-          onBlur={e=>{ if (!e.relatedTarget?.dataset?.linkid) { setPicking(false); setQ(''); } }}
-          placeholder="Поиск блогера..."
-          style={{fontSize:11,padding:'3px 7px',border:'1px solid #fb923c',borderRadius:4,outline:'none',width:160}} />
-        {filtered.length > 0 && (
-          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:200,maxHeight:200,overflowY:'auto',zIndex:200}}>
-            {filtered.map(p=>(
+  const candidates = payments.filter(p => p.id !== payment.id && p.status !== 'refunded' && !linkedIds.includes(p.id));
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:3}}>
+      {/* Уже выбранные */}
+      {linkedPayments.map(lp => (
+        <div key={lp.id} style={{fontSize:11,display:'flex',alignItems:'center',gap:3}}>
+          <span style={{color:'#9ba3be'}}>→</span>
+          <span style={{color:'#4f6ef7',fontWeight:500}}>{lp.blogger_name}</span>
+          <span style={{color:'#9ba3be'}}>{(lp.amount||0).toLocaleString('ru')} ₸</span>
+          <button onClick={()=>handleRemove(lp.id)} style={{background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}} title="Убрать">×</button>
+        </div>
+      ))}
+
+      {/* Кнопка добавить ещё */}
+      {picking ? (
+        <div style={{position:'relative',zIndex:100}}>
+          <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
+            onBlur={e=>{ if (!e.relatedTarget?.dataset?.linkid) { setPicking(false); setQ(''); } }}
+            placeholder="Поиск блогера..."
+            style={{fontSize:11,padding:'3px 7px',border:'1px solid #fb923c',borderRadius:4,outline:'none',width:150}} />
+          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:210,maxHeight:180,overflowY:'auto',zIndex:200}}>
+            {(q.trim()
+              ? candidates.filter(p => (p.blogger_name||'').toLowerCase().includes(q.toLowerCase()) || (p.recipient_name||'').toLowerCase().includes(q.toLowerCase()))
+              : candidates.slice(0, 8)
+            ).map(p => (
               <div key={p.id} data-linkid={p.id} tabIndex={0}
-                onMouseDown={()=>handleLink(p.id)}
+                onMouseDown={()=>handleAdd(p.id)}
                 style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:'1px solid #f1f5f9'}}
                 onMouseEnter={e=>e.currentTarget.style.background='#f8f9fb'}
                 onMouseLeave={e=>e.currentTarget.style.background=''}>
@@ -465,30 +490,18 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
                 <span style={{color:'#9ba3be',marginLeft:6}}>{(p.amount||0).toLocaleString('ru')} ₸</span>
               </div>
             ))}
+            {q && candidates.filter(p=>(p.blogger_name||'').toLowerCase().includes(q.toLowerCase())).length===0 && (
+              <div style={{padding:'8px 10px',fontSize:11,color:'#9ba3be'}}>Не найдено</div>
+            )}
           </div>
-        )}
-        {q && filtered.length === 0 && (
-          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,padding:'8px 10px',fontSize:11,color:'#9ba3be',zIndex:200}}>Не найдено</div>
-        )}
-      </div>
-    );
-  }
-
-  if (linked) return (
-    <div style={{fontSize:11,display:'flex',alignItems:'center',gap:4}}>
-      <span style={{color:'#9ba3be'}}>→</span>
-      <span style={{color:'#4f6ef7',fontWeight:500,cursor:'pointer'}} onClick={()=>setPicking(true)} title="Изменить связь">
-        {linked.blogger_name}
-      </span>
-      <button onClick={()=>handleLink(null)} style={{background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}}>×</button>
+        </div>
+      ) : (
+        <button onClick={()=>setPicking(true)}
+          style={{fontSize:10,padding:'2px 6px',border:'1px dashed #fb923c',borderRadius:4,color:'#9a3412',background:'#fff7ed',cursor:'pointer',whiteSpace:'nowrap',alignSelf:'flex-start'}}>
+          {linkedPayments.length ? '+ ещё' : '+ куда перенесли?'}
+        </button>
+      )}
     </div>
-  );
-
-  return (
-    <button onClick={()=>setPicking(true)}
-      style={{fontSize:10,padding:'2px 6px',border:'1px dashed #fb923c',borderRadius:4,color:'#9a3412',background:'#fff7ed',cursor:'pointer',whiteSpace:'nowrap'}}>
-      + куда перенесли?
-    </button>
   );
 }
 
