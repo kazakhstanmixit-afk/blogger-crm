@@ -515,10 +515,10 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
             onBlur={()=>{ setTimeout(()=>{ setPicking(false); setQ(''); }, 150); }}
             placeholder="Поиск блогера..."
             style={{fontSize:11,padding:'3px 7px',border:'1px solid #fb923c',borderRadius:4,outline:'none',width:150}} />
-          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:210,maxHeight:180,overflowY:'auto',zIndex:200}}>
+          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:240,maxHeight:260,overflowY:'scroll',zIndex:200}}>
             {(q.trim()
               ? candidates.filter(p => (p.blogger_name||'').toLowerCase().includes(q.toLowerCase()) || (p.recipient_name||'').toLowerCase().includes(q.toLowerCase()))
-              : candidates.slice(0, 8)
+              : candidates
             ).map(p => (
               <div key={p.id}
                 onMouseDown={()=>handleAdd(p.id)}
