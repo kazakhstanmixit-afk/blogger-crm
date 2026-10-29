@@ -55,26 +55,34 @@ module.exports = function bitrixWebhookModule(app, db) {
 
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const data = parseMaybeJson(body.data || {});
-      const params = (data && typeof data === 'object' && data.PARAMS) || {};
+      const dataObject = data && typeof data === 'object' ? data : {};
+      // Supported shapes:
+      // 1) ONIMBOTV2MESSAGEADD: data.chat + data.message
+      // 2) ONOPENLINEMESSAGEADD: data.DATA[0].chat/message/connector
+      // 3) Legacy nested PARAMS payloads (kept for compatibility).
+      const lineItem = Array.isArray(dataObject.DATA) ? (dataObject.DATA[0] || {}) : {};
+      const messageObject = dataObject.message || lineItem.message || {};
+      const chatObject = dataObject.chat || lineItem.chat || {};
+      const connectorObject = dataObject.connector || lineItem.connector || {};
+      const params = dataObject.PARAMS || {};
+
       const eventName = String(body.event || body.EVENT || 'UNKNOWN').slice(0, 120);
-      const messageId = getValue(body, [
-        'data.PARAMS.MESSAGE_ID', 'data.PARAMS.ID', 'data.MESSAGE_ID',
-        'data.message_id', 'data.PARAMS.MESSAGE_ID_ORIGINAL'
-      ]) || getValue(data, [
-        'PARAMS.MESSAGE_ID', 'PARAMS.ID', 'MESSAGE_ID', 'message_id'
-      ]);
-      const chatId = getValue(body, [
-        'data.PARAMS.CHAT_ID', 'data.PARAMS.TO_CHAT_ID', 'data.CHAT_ID'
-      ]) || getValue(params, ['CHAT_ID', 'TO_CHAT_ID', 'chat_id']);
-      const senderId = getValue(body, [
-        'data.PARAMS.FROM_USER_ID', 'data.PARAMS.AUTHOR_ID', 'data.FROM_USER_ID'
-      ]) || getValue(params, ['FROM_USER_ID', 'AUTHOR_ID', 'from_user_id']);
-      const messageText = getValue(body, [
-        'data.PARAMS.MESSAGE', 'data.MESSAGE', 'message'
-      ]) || getValue(params, ['MESSAGE', 'message', 'TEXT']);
-      const lineId = getValue(body, [
-        'data.PARAMS.LINE_ID', 'data.LINE_ID', 'data.PARAMS.OPENLINE_ID'
-      ]) || getValue(params, ['LINE_ID', 'OPENLINE_ID', 'line_id']);
+      const messageId = getValue(messageObject, ['id', 'message_id']) ||
+        getValue(lineItem, ['message.id', 'MESSAGE_ID', 'ID']) ||
+        getValue(dataObject, ['PARAMS.MESSAGE_ID', 'PARAMS.ID', 'MESSAGE_ID', 'message_id']);
+      const chatId = getValue(chatObject, ['id', 'chat_id']) ||
+        getValue(connectorObject, ['chat_id', 'CHAT_ID']) ||
+        getValue(params, ['CHAT_ID', 'TO_CHAT_ID', 'chat_id']);
+      const senderId = getValue(messageObject, ['user_id', 'author_id']) ||
+        getValue(chatObject, ['user_id', 'USER_ID']) ||
+        getValue(connectorObject, ['user_id', 'USER_ID']) ||
+        getValue(params, ['FROM_USER_ID', 'AUTHOR_ID', 'from_user_id']);
+      const messageText = getValue(messageObject, ['text', 'TEXT']) ||
+        getValue(lineItem, ['MESSAGE', 'message_text']) ||
+        getValue(params, ['MESSAGE', 'message', 'TEXT']);
+      const lineId = getValue(connectorObject, ['line_id', 'LINE_ID']) ||
+        getValue(dataObject, ['LINE', 'LINE_ID', 'PARAMS.LINE_ID', 'PARAMS.OPENLINE_ID']) ||
+        getValue(params, ['LINE_ID', 'OPENLINE_ID', 'line_id']);
 
       const eventKey = messageId
         ? `${eventName}:${String(messageId)}`
