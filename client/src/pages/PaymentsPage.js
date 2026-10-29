@@ -1315,30 +1315,32 @@ export default function PaymentsPage({ currentUser }) {
                       <button className="btn btn-secondary btn-sm" onClick={()=>setEditingId(null)}>×</button>
                     </div>
                   ) : (
-                    <span onClick={()=>{if(currentUser.role==='admin'){setEditingId(p.id);setEditAmount(p.amount);}}}
-                      style={{cursor:currentUser.role==='admin'?'pointer':'default',borderBottom:currentUser.role==='admin'?'1px dashed #c8cfe0':'none',paddingBottom:1}}>
-                      {(p.amount||0).toLocaleString('ru')} ₸
-                    </span>
-                    {/* Пометка «из возврата» если эта заявка упомянута в чьём-то возврате */}
-                    {(() => {
-                      const refundSources = payments.filter(r => {
-                        if (r.status !== 'refunded') return false;
-                        const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : (r.linked_payment_id ? [r.linked_payment_id] : []);
-                        return ids.some(l => (typeof l === 'object' ? l.id : l) === p.id);
-                      });
-                      if (!refundSources.length) return null;
-                      const transferred = refundSources.reduce((sum, r) => {
-                        const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : [];
-                        const link = ids.find(l => (typeof l === 'object' ? l.id : l) === p.id);
-                        const amt = typeof link === 'object' ? link.transferred_amount : null;
-                        return sum + (amt != null ? amt : (p.amount || 0));
-                      }, 0);
-                      return (
-                        <div style={{fontSize:10,marginTop:2,color:'#d97706',fontWeight:600}}>
-                          ↩ из возврата: {transferred.toLocaleString('ru')} ₸
-                        </div>
-                      );
-                    })()}
+                    <>
+                      <span onClick={()=>{if(currentUser.role==='admin'){setEditingId(p.id);setEditAmount(p.amount);}}}
+                        style={{cursor:currentUser.role==='admin'?'pointer':'default',borderBottom:currentUser.role==='admin'?'1px dashed #c8cfe0':'none',paddingBottom:1}}>
+                        {(p.amount||0).toLocaleString('ru')} ₸
+                      </span>
+                      {/* Пометка «из возврата» если эта заявка упомянута в чьём-то возврате */}
+                      {(() => {
+                        const refundSources = payments.filter(r => {
+                          if (r.status !== 'refunded') return false;
+                          const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : (r.linked_payment_id ? [r.linked_payment_id] : []);
+                          return ids.some(l => (typeof l === 'object' ? l.id : l) === p.id);
+                        });
+                        if (!refundSources.length) return null;
+                        const transferred = refundSources.reduce((sum, r) => {
+                          const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : [];
+                          const link = ids.find(l => (typeof l === 'object' ? l.id : l) === p.id);
+                          const amt = typeof link === 'object' ? link.transferred_amount : null;
+                          return sum + (amt != null ? amt : (p.amount || 0));
+                        }, 0);
+                        return (
+                          <div style={{fontSize:10,marginTop:2,color:'#d97706',fontWeight:600}}>
+                            ↩ из возврата: {transferred.toLocaleString('ru')} ₸
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </td>
                 <td><StatusBadge status={p.status} /></td>
