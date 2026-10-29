@@ -14,7 +14,7 @@ const pgPool = new Pool({
 });
 
 // ── MY SUPABASE (backup) ───────────────────────────────────
-const mySupabaseUrl = 'postgresql://postgres.aponjetlwtorjhavtudv:AdminMarkt123!@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+const mySupabaseUrl = 'postgresql://postgres.aponjetlwtorjhavtudv:AdminMarkt123!@aws-0-eu-central-1.pooler.supabase.com:5432/postgres';
 const myPool = mySupabaseUrl ? new Pool({
   connectionString: mySupabaseUrl,
   ssl: { rejectUnauthorized: false },
