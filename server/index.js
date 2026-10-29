@@ -2792,6 +2792,9 @@ app.get('/mcp/stats', mcpAuth, (req, res) => {
   });
 });
 
+// ── BITRIX24 WEBHOOK (receive-only, Stage 1) ──
+require('./bitrix-webhook')(app, db);
+
 // ── ТРЕНДЫ (вирусные ролики → ТЗ для блогеров) ──
 require('./trends')(app, db, auth, uuidv4);
 
