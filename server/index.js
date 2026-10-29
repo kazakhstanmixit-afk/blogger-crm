@@ -1841,8 +1841,15 @@ app.post('/api/payments/match-excel', auth, (req, res) => {
       const rowIin    = String(row.iin || '').trim().replace(/\D/g, '');
       const rowAmount = parseFloat(String(row.amount || '').replace(/[^\d.]/g, '')) || 0;
       const rowName   = String(row.recipient_name || row.fio || '').trim().toLowerCase();
+      // Дата из Excel — нормализуем к YYYY-MM-DD для сравнения
+      const rowDateRaw = String(row.date || row.дата || '').trim();
+      const rowDate = rowDateRaw ? (() => {
+        // Поддерживаем форматы: DD.MM.YYYY, YYYY-MM-DD, MM/DD/YYYY
+        const d = rowDateRaw.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (d) return `${d[3]}-${d[2]}-${d[1]}`;
+        return rowDateRaw.slice(0, 10);
+      })() : null;
 
-      // Ищем совпадение: ИИН + сумма (точное), или ИИН + имя, или только ИИН
       let best = null;
       let bestScore = 0;
 
@@ -1851,9 +1858,12 @@ app.post('/api/payments/match-excel', auth, (req, res) => {
         const pIin    = String(p.iin || '').trim();
         const pAmount = parseFloat(p.amount) || 0;
         const pName   = String(p.recipient_name || '').trim().toLowerCase();
+        const pDate   = p.created_at ? String(p.created_at).slice(0, 10) : null;
 
         if (rowIin && pIin && rowIin === pIin) score += 3;
         if (rowAmount && pAmount && Math.abs(rowAmount - pAmount) < 0.01) score += 2;
+        // Дата совпадает — +3 балла (решающий tie-breaker при одинаковых ИИН+сумма)
+        if (rowDate && pDate && rowDate === pDate) score += 3;
         if (rowName && pName && rowName === pName) score += 1;
 
         if (score > bestScore) { bestScore = score; best = p; }
@@ -1862,10 +1872,10 @@ app.post('/api/payments/match-excel', auth, (req, res) => {
       return {
         row_index: idx,
         row,
-        match: best ? { id: best.id, blogger_name: best.blogger_name || best.blogger_id, recipient_name: best.recipient_name, iin: best.iin, amount: best.amount, status: best.status, approval_url: best.approval_url } : null,
+        match: best ? { id: best.id, blogger_name: best.blogger_name || best.blogger_id, recipient_name: best.recipient_name, iin: best.iin, amount: best.amount, status: best.status, approval_url: best.approval_url, created_at: best.created_at } : null,
         score: bestScore,
-        // Совпадение считается надёжным если нашли хотя бы ИИН + сумму (score >= 5)
-        confident: bestScore >= 5,
+        // Надёжное совпадение: ИИН + сумма + дата (score >= 8) или ИИН + дата (>= 6)
+        confident: bestScore >= 6,
       };
     });
 

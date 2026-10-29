@@ -532,6 +532,7 @@ function ExcelMatchModal({ onClose, onConfirmed }) {
       rows = json.map(r => ({
         iin: String(r['ИИН'] || r['iin'] || '').trim().replace(/\D/g, ''),
         amount: parseFloat(String(r['Сумма (₸)'] || r['Сумма'] || r['amount'] || '0').replace(/[^\d.]/g, '')) || 0,
+        date: String(r['Дата'] || r['date'] || '').trim(),
         recipient_name: String(r['ФИО получателя'] || r['recipient_name'] || '').trim(),
         blogger_name: String(r['Блогер'] || r['blogger_name'] || '').trim(),
         manager_name: String(r['Менеджер'] || r['manager_name'] || '').trim(),
@@ -672,12 +673,14 @@ function ExcelMatchModal({ onClose, onConfirmed }) {
                       <td style={{padding:'8px 6px'}}>
                         <div style={{fontWeight:500,color:'#1a1d2e'}}>{r.row.recipient_name || r.row.blogger_name || '—'}</div>
                         <div style={{color:'#9ba3be',fontFamily:'monospace'}}>{r.row.iin} · {(r.row.amount||0).toLocaleString('ru')} ₸</div>
+                        {r.row.date && <div style={{color:'#b0b8d4',fontSize:11}}>{r.row.date}</div>}
                       </td>
                       <td style={{padding:'8px 6px'}}>
                         {r.match ? (
                           <>
                             <div style={{fontWeight:500,color:'#1a1d2e'}}>{r.match.recipient_name}</div>
                             <div style={{color:'#9ba3be',fontFamily:'monospace'}}>{r.match.iin} · {(r.match.amount||0).toLocaleString('ru')} ₸</div>
+                            {r.match.created_at && <div style={{color:'#b0b8d4',fontSize:11}}>{new Date(r.match.created_at).toLocaleDateString('ru')}</div>}
                             {r.match.blogger_name && <div style={{color:'#6d7aad',fontSize:11}}>{r.match.blogger_name}</div>}
                           </>
                         ) : <span style={{color:'#fca5a5',fontSize:11}}>Не найдено</span>}
