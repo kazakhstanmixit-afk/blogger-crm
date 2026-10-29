@@ -10,6 +10,7 @@ import ExclusivePage from './ExclusivePage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
 import TrendsPage from './TrendsPage';
+import AgentPage from './AgentPage';
 
 export default function Dashboard({ user, onLogout }) {
   const [page, setPage] = useState('bloggers');
@@ -23,6 +24,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'payments', icon:'💳', label:'Оплаты' },
     { id:'products', icon:'📦', label:'Товары и ТЗ' },
     { id:'trends', icon:'🔥', label:'Тренды' },
+    { id:'agent', icon:'🤖', label:'AI Агент' },
     { id:'expenses', icon:'💸', label:'Расходы' },
     { id:'regulations', icon:'📋', label:'Регламенты' },
     { id:'barter', icon:'🎁', label:'Бартер' },
@@ -61,6 +63,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='barter' && <BarterPage currentUser={user} />}
         {page==='tz' && <TzRequestsPage currentUser={user} />}
         {page==='exclusive' && <ExclusivePage currentUser={user} />}
+        {page==='agent' && <AgentPage token={localStorage.getItem('token')} user={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>

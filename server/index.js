@@ -2786,6 +2786,9 @@ app.get('/mcp/stats', mcpAuth, (req, res) => {
 // ── ТРЕНДЫ (вирусные ролики → ТЗ для блогеров) ──
 require('./trends')(app, db, auth, uuidv4);
 
+// ── AI АГЕНТ ───────────────────────────────────────────────
+require('./agent')(app, db, auth);
+
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req,res) => res.sendFile(path.join(__dirname,'../client/build/index.html')));
 }
