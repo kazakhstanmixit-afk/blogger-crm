@@ -429,28 +429,43 @@ function ManagerCell({ payment, managers, onUpdate }) {
 function LinkedPaymentCell({ payment, payments, onUpdate }) {
   const [picking, setPicking] = React.useState(false);
   const [q, setQ] = React.useState('');
+  // editingAmount: { id, value } — инлайн-редактирование суммы перевода
+  const [editingAmount, setEditingAmount] = React.useState(null);
 
-  // Поддержка и старого (linked_payment_id) и нового (linked_payment_ids) формата
-  const linkedIds = payment.linked_payment_ids
+  // linked_payment_ids: массив объектов { id, transferred_amount } или просто строк (старый формат)
+  const rawLinks = payment.linked_payment_ids
     ? (Array.isArray(payment.linked_payment_ids) ? payment.linked_payment_ids : [payment.linked_payment_ids])
     : (payment.linked_payment_id ? [payment.linked_payment_id] : []);
-  const linkedPayments = linkedIds.map(id => payments.find(p => p.id === id)).filter(Boolean);
 
-  const saveIds = async (ids) => {
+  // Нормализуем к { id, transferred_amount }
+  const links = rawLinks.map(l => typeof l === 'object' ? l : { id: l, transferred_amount: null });
+  const linkedIds = links.map(l => l.id);
+  const linkedPayments = links.map(l => ({ ...l, payment: payments.find(p => p.id === l.id) })).filter(l => l.payment);
+
+  const saveLinks = async (newLinks) => {
     await apiFetch(`/api/payments/${payment.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ linked_payment_ids: ids, linked_payment_id: ids[0] || null }),
+      body: JSON.stringify({
+        linked_payment_ids: newLinks,
+        linked_payment_id: newLinks[0]?.id || null,
+      }),
     });
     onUpdate();
   };
 
   const handleAdd = async (id) => {
     setPicking(false); setQ('');
-    if (!linkedIds.includes(id)) await saveIds([...linkedIds, id]);
+    if (!linkedIds.includes(id)) await saveLinks([...links, { id, transferred_amount: null }]);
   };
 
   const handleRemove = async (id) => {
-    await saveIds(linkedIds.filter(x => x !== id));
+    await saveLinks(links.filter(l => l.id !== id));
+  };
+
+  const handleAmountSave = async (id, val) => {
+    setEditingAmount(null);
+    const amount = val === '' ? null : (parseFloat(String(val).replace(/[^\d.]/g,'')) || null);
+    await saveLinks(links.map(l => l.id === id ? { ...l, transferred_amount: amount } : l));
   };
 
   if (payment.status !== 'refunded') return null;
@@ -458,18 +473,40 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
   const candidates = payments.filter(p => p.id !== payment.id && p.status !== 'refunded' && !linkedIds.includes(p.id));
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:3}}>
-      {/* Уже выбранные */}
-      {linkedPayments.map(lp => (
-        <div key={lp.id} style={{fontSize:11,display:'flex',alignItems:'center',gap:3}}>
+    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+      {linkedPayments.map(({ id, transferred_amount, payment: lp }) => (
+        <div key={id} style={{fontSize:11,display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
           <span style={{color:'#9ba3be'}}>→</span>
           <span style={{color:'#4f6ef7',fontWeight:500}}>{lp.blogger_name}</span>
-          <span style={{color:'#9ba3be'}}>{(lp.amount||0).toLocaleString('ru')} ₸</span>
-          <button onClick={()=>handleRemove(lp.id)} style={{background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}} title="Убрать">×</button>
+
+          {/* Сумма перевода — кликабельная */}
+          {editingAmount?.id === id ? (
+            <input
+              autoFocus
+              defaultValue={editingAmount.value ?? ''}
+              onBlur={e => handleAmountSave(id, e.target.value)}
+              onKeyDown={e => { if (e.key==='Enter') e.target.blur(); if (e.key==='Escape') setEditingAmount(null); }}
+              style={{width:80,fontSize:11,padding:'1px 5px',border:'1px solid #fb923c',borderRadius:4,outline:'none'}}
+              placeholder="сумма ₸"
+            />
+          ) : (
+            <span
+              onClick={() => setEditingAmount({ id, value: transferred_amount })}
+              title="Нажми чтобы указать сумму перевода"
+              style={{
+                color: transferred_amount ? '#15803d' : '#d1d5db',
+                cursor:'pointer',
+                borderBottom: '1px dashed currentColor',
+                fontFamily:'monospace',
+              }}>
+              {transferred_amount ? transferred_amount.toLocaleString('ru') + ' ₸' : '—'}
+            </span>
+          )}
+
+          <button onClick={()=>handleRemove(id)} style={{background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:12,padding:0,lineHeight:1}} title="Убрать">×</button>
         </div>
       ))}
 
-      {/* Кнопка добавить ещё */}
       {picking ? (
         <div style={{position:'relative',zIndex:100}}>
           <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
