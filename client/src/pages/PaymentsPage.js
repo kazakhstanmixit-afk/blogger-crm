@@ -479,7 +479,7 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
           <span style={{color:'#9ba3be'}}>→</span>
           <span style={{color:'#4f6ef7',fontWeight:500}}>{lp.blogger_name}</span>
 
-          {/* Сумма перевода — кликабельная */}
+          {/* Сумма перевода — по умолчанию сумма заявки, можно переопределить */}
           {editingAmount?.id === id ? (
             <input
               autoFocus
@@ -487,19 +487,21 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
               onBlur={e => handleAmountSave(id, e.target.value)}
               onKeyDown={e => { if (e.key==='Enter') e.target.blur(); if (e.key==='Escape') setEditingAmount(null); }}
               style={{width:80,fontSize:11,padding:'1px 5px',border:'1px solid #fb923c',borderRadius:4,outline:'none'}}
-              placeholder="сумма ₸"
+              placeholder={String(lp.amount||0)}
             />
           ) : (
             <span
               onClick={() => setEditingAmount({ id, value: transferred_amount })}
-              title="Нажми чтобы указать сумму перевода"
+              title="Нажми чтобы изменить сумму перевода"
               style={{
-                color: transferred_amount ? '#15803d' : '#d1d5db',
+                color: transferred_amount != null ? '#15803d' : '#9ba3be',
                 cursor:'pointer',
                 borderBottom: '1px dashed currentColor',
                 fontFamily:'monospace',
               }}>
-              {transferred_amount ? transferred_amount.toLocaleString('ru') + ' ₸' : '—'}
+              {transferred_amount != null
+                ? transferred_amount.toLocaleString('ru') + ' ₸'
+                : (lp.amount||0).toLocaleString('ru') + ' ₸'}
             </span>
           )}
 
@@ -1317,6 +1319,26 @@ export default function PaymentsPage({ currentUser }) {
                       style={{cursor:currentUser.role==='admin'?'pointer':'default',borderBottom:currentUser.role==='admin'?'1px dashed #c8cfe0':'none',paddingBottom:1}}>
                       {(p.amount||0).toLocaleString('ru')} ₸
                     </span>
+                    {/* Пометка «из возврата» если эта заявка упомянута в чьём-то возврате */}
+                    {(() => {
+                      const refundSources = payments.filter(r => {
+                        if (r.status !== 'refunded') return false;
+                        const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : (r.linked_payment_id ? [r.linked_payment_id] : []);
+                        return ids.some(l => (typeof l === 'object' ? l.id : l) === p.id);
+                      });
+                      if (!refundSources.length) return null;
+                      const transferred = refundSources.reduce((sum, r) => {
+                        const ids = Array.isArray(r.linked_payment_ids) ? r.linked_payment_ids : [];
+                        const link = ids.find(l => (typeof l === 'object' ? l.id : l) === p.id);
+                        const amt = typeof link === 'object' ? link.transferred_amount : null;
+                        return sum + (amt != null ? amt : (p.amount || 0));
+                      }, 0);
+                      return (
+                        <div style={{fontSize:10,marginTop:2,color:'#d97706',fontWeight:600}}>
+                          ↩ из возврата: {transferred.toLocaleString('ru')} ₸
+                        </div>
+                      );
+                    })()}
                   )}
                 </td>
                 <td><StatusBadge status={p.status} /></td>
