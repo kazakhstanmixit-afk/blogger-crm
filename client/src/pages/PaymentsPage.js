@@ -429,8 +429,8 @@ function ManagerCell({ payment, managers, onUpdate }) {
 function LinkedPaymentCell({ payment, payments, onUpdate }) {
   const [picking, setPicking] = React.useState(false);
   const [q, setQ] = React.useState('');
-  // editingAmount: { id, value } — инлайн-редактирование суммы перевода
   const [editingAmount, setEditingAmount] = React.useState(null);
+  const mouseDownInDropdown = React.useRef(false);
 
   // linked_payment_ids: массив объектов { id, transferred_amount } или просто строк (старый формат)
   const rawLinks = payment.linked_payment_ids
@@ -512,16 +512,21 @@ function LinkedPaymentCell({ payment, payments, onUpdate }) {
       {picking ? (
         <div style={{position:'relative',zIndex:100}}>
           <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
-            onBlur={()=>{ setTimeout(()=>{ setPicking(false); setQ(''); }, 150); }}
+            onBlur={()=>{
+              if (!mouseDownInDropdown.current) { setPicking(false); setQ(''); }
+              mouseDownInDropdown.current = false;
+            }}
             placeholder="Поиск блогера..."
             style={{fontSize:11,padding:'3px 7px',border:'1px solid #fb923c',borderRadius:4,outline:'none',width:150}} />
-          <div style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:240,maxHeight:260,overflowY:'scroll',zIndex:200}}>
+          <div
+            onMouseDown={()=>{ mouseDownInDropdown.current = true; }}
+            style={{position:'absolute',top:'100%',left:0,background:'#fff',border:'1px solid #e2e6ef',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.1)',minWidth:240,maxHeight:300,overflowY:'auto',zIndex:9999}}>
             {(q.trim()
               ? candidates.filter(p => (p.blogger_name||'').toLowerCase().includes(q.toLowerCase()) || (p.recipient_name||'').toLowerCase().includes(q.toLowerCase()))
               : candidates
             ).map(p => (
               <div key={p.id}
-                onMouseDown={()=>handleAdd(p.id)}
+                onMouseDown={e=>{ e.preventDefault(); handleAdd(p.id); }}
                 style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:'1px solid #f1f5f9'}}
                 onMouseEnter={e=>e.currentTarget.style.background='#f8f9fb'}
                 onMouseLeave={e=>e.currentTarget.style.background=''}>
