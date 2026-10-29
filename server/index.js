@@ -14,13 +14,7 @@ const pgPool = new Pool({
 });
 
 // ── MY SUPABASE (backup) ───────────────────────────────────
-// Use transaction pooler URL if direct connection fails
-const mySupabaseUrl = process.env.NEW_SUPABASE_URL
-  ? process.env.NEW_SUPABASE_URL.replace(
-      'db.aponjetlwtorjhavtudv.supabase.co:5432',
-      'aws-0-eu-central-1.pooler.supabase.com:6543'
-    ).replace('postgresql://postgres:', 'postgresql://postgres.aponjetlwtorjhavtudv:')
-  : null;
+const mySupabaseUrl = 'postgresql://postgres.aponjetlwtorjhavtudv:AdminMarkt123!@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
 const myPool = mySupabaseUrl ? new Pool({
   connectionString: mySupabaseUrl,
   ssl: { rejectUnauthorized: false },
