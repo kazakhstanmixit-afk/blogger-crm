@@ -136,7 +136,6 @@ async function initSupabase() {
   if (!pgPool) { console.log('Shared Supabase not configured, skipping init'); return; }
   try {
     const client = await pgPool.connect();
-    await client.query(`DROP TABLE IF EXISTS crm_blogers.bloggers CASCADE`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS crm_blogers.bloggers (
         id TEXT PRIMARY KEY,
@@ -333,10 +332,13 @@ async function syncPaymentToSupabase(payment, bloggerName, managerName) {
 
 const cloudinary = require('cloudinary').v2;
 cloudinary.config({
-  cloud_name: 'rpedxzyp',
-  api_key: '327183645456621',
-  api_secret: '1N8bOnHoWWWYaq6VSgRLzlNOLQg',
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_SECRET) {
+  console.warn('[WARN] Cloudinary env vars not set — file uploads will fail');
+}
 
 
 const { parse } = require('csv-parse/sync');
