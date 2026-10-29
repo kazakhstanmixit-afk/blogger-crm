@@ -1828,6 +1828,81 @@ app.post('/api/payments/export-selected', auth, (req, res) => {
 });
 
 
+// ── Bulk match Excel → payments ───────────────────────────────────────────────
+// POST /api/payments/match-excel  { rows: [{iin, amount, ...}] }
+// Returns matched payment IDs with confidence
+app.post('/api/payments/match-excel', auth, (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'Нет строк' });
+    const payments = db.get('payments').value() || [];
+
+    const results = rows.map((row, idx) => {
+      const rowIin    = String(row.iin || '').trim().replace(/\D/g, '');
+      const rowAmount = parseFloat(String(row.amount || '').replace(/[^\d.]/g, '')) || 0;
+      const rowName   = String(row.recipient_name || row.fio || '').trim().toLowerCase();
+
+      // Ищем совпадение: ИИН + сумма (точное), или ИИН + имя, или только ИИН
+      let best = null;
+      let bestScore = 0;
+
+      for (const p of payments) {
+        let score = 0;
+        const pIin    = String(p.iin || '').trim();
+        const pAmount = parseFloat(p.amount) || 0;
+        const pName   = String(p.recipient_name || '').trim().toLowerCase();
+
+        if (rowIin && pIin && rowIin === pIin) score += 3;
+        if (rowAmount && pAmount && Math.abs(rowAmount - pAmount) < 0.01) score += 2;
+        if (rowName && pName && rowName === pName) score += 1;
+
+        if (score > bestScore) { bestScore = score; best = p; }
+      }
+
+      return {
+        row_index: idx,
+        row,
+        match: best ? { id: best.id, blogger_name: best.blogger_name || best.blogger_id, recipient_name: best.recipient_name, iin: best.iin, amount: best.amount, status: best.status, approval_url: best.approval_url } : null,
+        score: bestScore,
+        // Совпадение считается надёжным если нашли хотя бы ИИН + сумму (score >= 5)
+        confident: bestScore >= 5,
+      };
+    });
+
+    res.json({ ok: true, results, total: rows.length, matched: results.filter(r => r.match).length, confident: results.filter(r => r.confident).length });
+  } catch (e) {
+    console.error('match-excel error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/payments/bulk-confirm  { ids: [...], approval_url: '...' }
+// Меняет статус → paid и записывает ссылку на согласование
+app.post('/api/payments/bulk-confirm', auth, (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Только для admin' });
+    const { ids, approval_url } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Нет ID' });
+
+    const now = new Date().toISOString();
+    let updated = 0;
+    for (const id of ids) {
+      const p = db.get('payments').find({ id }).value();
+      if (!p) continue;
+      const upd = { status: 'paid', updated_at: now };
+      if (approval_url) upd.approval_url = approval_url;
+      db.get('payments').find({ id }).assign(upd).write();
+      // Обновляем статус блогера
+      if (p.blogger_id) db.get('bloggers').find({ id: p.blogger_id }).assign({ status: 'paid', updated_at: now }).write();
+      updated++;
+    }
+    res.json({ ok: true, updated });
+  } catch (e) {
+    console.error('bulk-confirm error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Upload receipt photo
 app.post('/api/payments/:id/receipt', auth, (req, res) => {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single('file');

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../App';
 import Toast from '../components/Toast';
+import * as XLSX from 'xlsx';
 
 const PAYMENT_STATUS = {
   pending: { label: 'К оплате', color: '#92400e', bg: '#fef3c7', border: '#fde68a' },
@@ -506,6 +507,234 @@ function BucketTitle({ name, onRename, onHeaderClick }) {
     style={{fontSize:12,fontWeight:600,color:'#3a3f5a',cursor:'pointer',flex:1}}>{name}</div>;
 }
 
+function ExcelMatchModal({ onClose, onConfirmed }) {
+  const [step, setStep] = useState('upload'); // upload | review | done
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState(new Set());
+  const [approvalUrl, setApprovalUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const fileRef = React.useRef();
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLoading(true);
+
+    // Читаем Excel через SheetJS (уже есть в window через CDN или используем динамический импорт)
+    const arrayBuffer = await file.arrayBuffer();
+
+    let rows = [];
+    try {
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      rows = json.map(r => ({
+        iin: String(r['ИИН'] || r['iin'] || '').trim().replace(/\D/g, ''),
+        amount: parseFloat(String(r['Сумма (₸)'] || r['Сумма'] || r['amount'] || '0').replace(/[^\d.]/g, '')) || 0,
+        recipient_name: String(r['ФИО получателя'] || r['recipient_name'] || '').trim(),
+        blogger_name: String(r['Блогер'] || r['blogger_name'] || '').trim(),
+        manager_name: String(r['Менеджер'] || r['manager_name'] || '').trim(),
+        kaspi: String(r['Номер Каспи'] || r['kaspi'] || '').trim(),
+      })).filter(r => r.iin || r.amount);
+    } catch(err) {
+      console.error('XLSX parse error', err);
+    }
+
+    if (!rows.length) {
+      alert('Не удалось прочитать файл или файл пустой');
+      setLoading(false);
+      return;
+    }
+
+    // Отправляем на бэкенд для матчинга
+    try {
+      const res = await apiFetch('/api/payments/match-excel', {
+        method: 'POST',
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || 'Ошибка'); setLoading(false); return; }
+      setResults(data.results);
+      // Авто-выбираем все уверенные совпадения
+      setSelected(new Set(data.results.filter(r => r.confident && r.match).map(r => r.match.id)));
+      setSummary({ total: data.total, matched: data.matched, confident: data.confident });
+      setStep('review');
+    } catch(err) {
+      alert('Ошибка соединения: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleConfirm = async () => {
+    if (!selected.size) return;
+    if (!window.confirm(`Отметить ${selected.size} оплат как «Оплачено»?`)) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/payments/bulk-confirm', {
+        method: 'POST',
+        body: JSON.stringify({ ids: Array.from(selected), approval_url: approvalUrl || null }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setStep('done');
+        onConfirmed(data.updated);
+      } else {
+        alert(data.error || 'Ошибка');
+      }
+    } catch(err) {
+      alert('Ошибка: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#fff',borderRadius:12,width:'100%',maxWidth:780,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
+
+        {/* Header */}
+        <div style={{padding:'16px 20px',borderBottom:'1px solid #e2e6ef',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:16,color:'#1a1d2e'}}>📂 Загрузить Excel для подтверждения оплат</div>
+            {step === 'review' && summary && (
+              <div style={{fontSize:12,color:'#9ba3be',marginTop:2}}>
+                Найдено совпадений: <b style={{color:'#15803d'}}>{summary.confident}</b> уверенных из {summary.matched} / {summary.total} строк в файле
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ba3be',lineHeight:1}}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{flex:1,overflow:'auto',padding:20}}>
+
+          {step === 'upload' && (
+            <div style={{textAlign:'center',padding:'40px 20px'}}>
+              <div style={{fontSize:48,marginBottom:12}}>📊</div>
+              <div style={{fontSize:15,fontWeight:600,color:'#1a1d2e',marginBottom:6}}>Выберите файл Excel</div>
+              <div style={{fontSize:13,color:'#9ba3be',marginBottom:24}}>
+                Тот же файл, который вы выгрузили из CRM.<br/>
+                Совпадения ищутся по ИИН и сумме.
+              </div>
+              {loading ? (
+                <div style={{color:'#4f6ef7',fontSize:14}}>⏳ Обрабатываю файл…</div>
+              ) : (
+                <label style={{display:'inline-block',padding:'10px 24px',background:'#4f6ef7',color:'#fff',borderRadius:8,cursor:'pointer',fontSize:14,fontWeight:600}}>
+                  Выбрать файл (.xlsx)
+                  <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleFile} />
+                </label>
+              )}
+            </div>
+          )}
+
+          {step === 'review' && (
+            <div>
+              {/* Ссылка на согласование */}
+              <div style={{background:'#eef1fe',borderRadius:8,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
+                <span style={{fontSize:13,fontWeight:600,color:'#4f6ef7',whiteSpace:'nowrap'}}>🔗 Ссылка на согласование</span>
+                <input
+                  value={approvalUrl}
+                  onChange={e => setApprovalUrl(e.target.value)}
+                  placeholder="https://... (необязательно)"
+                  style={{flex:1,padding:'6px 10px',border:'1px solid #c7d2fe',borderRadius:6,fontSize:13,outline:'none'}}
+                />
+              </div>
+
+              {/* Таблица совпадений */}
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr style={{background:'#f8f9fb'}}>
+                    <th style={{padding:'8px 6px',textAlign:'left',width:28}}>
+                      <input type="checkbox"
+                        checked={results.filter(r=>r.match).every(r=>selected.has(r.match.id))}
+                        onChange={() => {
+                          const all = results.filter(r=>r.match).map(r=>r.match.id);
+                          const allSel = all.every(id=>selected.has(id));
+                          setSelected(allSel ? new Set() : new Set(all));
+                        }} />
+                    </th>
+                    <th style={{padding:'8px 6px',textAlign:'left',color:'#9ba3be',fontWeight:600}}>Из файла</th>
+                    <th style={{padding:'8px 6px',textAlign:'left',color:'#9ba3be',fontWeight:600}}>Найдено в CRM</th>
+                    <th style={{padding:'8px 6px',textAlign:'center',color:'#9ba3be',fontWeight:600}}>Статус</th>
+                    <th style={{padding:'8px 6px',textAlign:'center',color:'#9ba3be',fontWeight:600}}>Совпадение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r, i) => (
+                    <tr key={i} style={{borderTop:'1px solid #f0f2f7',background:r.match && selected.has(r.match.id) ? '#f0fdf4' : 'transparent'}}>
+                      <td style={{padding:'8px 6px'}}>
+                        {r.match ? (
+                          <input type="checkbox" checked={selected.has(r.match.id)} onChange={() => toggle(r.match.id)} />
+                        ) : <span style={{color:'#fca5a5'}}>—</span>}
+                      </td>
+                      <td style={{padding:'8px 6px'}}>
+                        <div style={{fontWeight:500,color:'#1a1d2e'}}>{r.row.recipient_name || r.row.blogger_name || '—'}</div>
+                        <div style={{color:'#9ba3be',fontFamily:'monospace'}}>{r.row.iin} · {(r.row.amount||0).toLocaleString('ru')} ₸</div>
+                      </td>
+                      <td style={{padding:'8px 6px'}}>
+                        {r.match ? (
+                          <>
+                            <div style={{fontWeight:500,color:'#1a1d2e'}}>{r.match.recipient_name}</div>
+                            <div style={{color:'#9ba3be',fontFamily:'monospace'}}>{r.match.iin} · {(r.match.amount||0).toLocaleString('ru')} ₸</div>
+                            {r.match.blogger_name && <div style={{color:'#6d7aad',fontSize:11}}>{r.match.blogger_name}</div>}
+                          </>
+                        ) : <span style={{color:'#fca5a5',fontSize:11}}>Не найдено</span>}
+                      </td>
+                      <td style={{padding:'8px 6px',textAlign:'center'}}>
+                        {r.match && <StatusBadge status={r.match.status} />}
+                      </td>
+                      <td style={{padding:'8px 6px',textAlign:'center'}}>
+                        {r.match ? (
+                          <span style={{fontSize:11,fontWeight:600,color:r.confident?'#15803d':'#d97706'}}>
+                            {r.confident ? '✓ Точное' : '~ Частичное'}
+                          </span>
+                        ) : <span style={{color:'#fca5a5',fontSize:11}}>✗</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {step === 'done' && (
+            <div style={{textAlign:'center',padding:'40px 20px'}}>
+              <div style={{fontSize:48,marginBottom:12}}>✅</div>
+              <div style={{fontSize:16,fontWeight:700,color:'#15803d',marginBottom:6}}>Готово!</div>
+              <div style={{fontSize:13,color:'#9ba3be'}}>Статусы обновлены, ссылка на согласование добавлена.</div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {step === 'review' && (
+          <div style={{padding:'12px 20px',borderTop:'1px solid #e2e6ef',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <div style={{fontSize:13,color:'#9ba3be'}}>
+              Выбрано: <b style={{color:'#1a1d2e'}}>{selected.size}</b> оплат
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={onClose} style={{padding:'8px 16px',border:'1px solid #e2e6ef',borderRadius:8,background:'#f8f9fb',cursor:'pointer',fontSize:13}}>Отмена</button>
+              <button
+                onClick={handleConfirm}
+                disabled={!selected.size || loading}
+                style={{padding:'8px 20px',background:selected.size?'#15803d':'#9ba3be',color:'#fff',border:'none',borderRadius:8,cursor:selected.size?'pointer':'not-allowed',fontSize:13,fontWeight:600}}>
+                {loading ? '⏳ Сохраняю…' : `✓ Подтвердить оплату (${selected.size})`}
+              </button>
+            </div>
+          </div>
+        )}
+        {step === 'done' && (
+          <div style={{padding:'12px 20px',borderTop:'1px solid #e2e6ef',textAlign:'right'}}>
+            <button onClick={onClose} style={{padding:'8px 20px',background:'#4f6ef7',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600}}>Закрыть</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PaymentsPage({ currentUser }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -527,6 +756,7 @@ export default function PaymentsPage({ currentUser }) {
   const [editingId, setEditingId] = useState(null);
   const [editAmount, setEditAmount] = useState('');
   const [allUsers, setAllUsers] = useState([]);
+  const [showExcelModal, setShowExcelModal] = useState(false);
 
   useEffect(() => {
     if (currentUser?.role === 'admin') {
@@ -884,6 +1114,7 @@ export default function PaymentsPage({ currentUser }) {
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExport}>📊 Excel</button>}
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handlePDFReport}>📄 Отчёт PDF</button>}
           {currentUser.role==='admin' && <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>📄 PDF</button>}
+          {currentUser.role==='admin' && <button className="btn btn-sm" style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontWeight:600,fontSize:13}} onClick={() => setShowExcelModal(true)}>📥 Импорт оплат</button>}
         </div>
       </div>
 
@@ -1087,6 +1318,20 @@ export default function PaymentsPage({ currentUser }) {
             {(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filteredPayments.length)} из {filteredPayments.length}
           </span>
         </div>
+      )}
+
+      {showExcelModal && (
+        <ExcelMatchModal
+          onClose={() => setShowExcelModal(false)}
+          onConfirmed={(count) => {
+            setShowExcelModal(false);
+            setToast({ type: 'success', msg: `✅ Обновлено ${count} оплат` });
+            // Перезагружаем список
+            apiFetch('/api/payments').then(r => r.json()).then(data => {
+              if (data.payments) setPayments(data.payments);
+            }).catch(() => {});
+          }}
+        />
       )}
     </div>
   );
