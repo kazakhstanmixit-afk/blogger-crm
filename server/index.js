@@ -13,6 +13,123 @@ const pgPool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
+// ── MY SUPABASE (backup) ───────────────────────────────────
+const mySupabaseUrl = process.env.NEW_SUPABASE_URL || null;
+const myPool = mySupabaseUrl ? new Pool({
+  connectionString: mySupabaseUrl,
+  ssl: { rejectUnauthorized: false },
+  max: 3,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+}) : null;
+
+async function syncToMySupabase(bloggersRaw, paymentsRaw, users) {
+  if (!myPool) return;
+  let client;
+  try {
+    client = await myPool.connect();
+    // Ensure tables exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bloggers (
+        id TEXT PRIMARY KEY, name TEXT, instagram_url TEXT, tiktok_url TEXT,
+        instagram_followers NUMERIC, tiktok_followers NUMERIC,
+        instagram_avg_reach NUMERIC, tiktok_avg_reach NUMERIC,
+        price_reels NUMERIC, price_tiktok NUMERIC, price_both NUMERIC, price_stories NUMERIC,
+        cpv_reels NUMERIC, cpv_tiktok NUMERIC, cpv_both NUMERIC,
+        status TEXT, category TEXT, manager_name TEXT, assigned_manager_id TEXT,
+        manager_instagram TEXT, last_comment TEXT, notes TEXT,
+        in_work BOOLEAN DEFAULT false, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY, blogger_id TEXT, blogger_name TEXT,
+        manager_id TEXT, manager_name TEXT, recipient_name TEXT, iin TEXT,
+        payment_name TEXT, kaspi TEXT, amount NUMERIC, amount_video NUMERIC,
+        amount_product NUMERIC, status TEXT, approval_url TEXT, notes TEXT,
+        linked_payment_id TEXT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
+        password_hash TEXT, role TEXT DEFAULT 'manager',
+        instagram TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    const mgrName = id => (users.find(u => u.id === id) || {}).username || null;
+    const bloggerName = id => (bloggersRaw.find(b => b.id === id) || {}).name || null;
+
+    // Sync bloggers
+    for (const ch of chunk(bloggersRaw, 200)) {
+      for (const b of ch) {
+        await client.query(`
+          INSERT INTO bloggers (id,name,instagram_url,tiktok_url,
+            instagram_followers,tiktok_followers,instagram_avg_reach,tiktok_avg_reach,
+            price_reels,price_tiktok,price_both,price_stories,cpv_reels,cpv_tiktok,cpv_both,
+            status,category,manager_name,assigned_manager_id,manager_instagram,
+            last_comment,notes,in_work,created_at,updated_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+          ON CONFLICT (id) DO UPDATE SET
+            name=EXCLUDED.name,status=EXCLUDED.status,manager_name=EXCLUDED.manager_name,
+            assigned_manager_id=EXCLUDED.assigned_manager_id,notes=EXCLUDED.notes,
+            price_reels=EXCLUDED.price_reels,price_tiktok=EXCLUDED.price_tiktok,
+            price_both=EXCLUDED.price_both,price_stories=EXCLUDED.price_stories,
+            in_work=EXCLUDED.in_work,updated_at=EXCLUDED.updated_at
+        `, [
+          b.id, b.name, b.instagram_url||null, b.tiktok_url||null,
+          parseFloat(b.instagram_followers)||null, parseFloat(b.tiktok_followers)||null,
+          parseFloat(b.instagram_avg_reach)||null, parseFloat(b.tiktok_avg_reach)||null,
+          parseFloat(b.price_reels)||null, parseFloat(b.price_tiktok)||null,
+          parseFloat(b.price_both)||null, parseFloat(b.price_stories)||null,
+          parseFloat(b.cpv_reels)||null, parseFloat(b.cpv_tiktok)||null, parseFloat(b.cpv_both)||null,
+          b.status||null, b.category||null, mgrName(b.assigned_manager_id),
+          b.assigned_manager_id||null, b.manager_instagram||null,
+          b.last_comment||null, b.notes||null,
+          b.in_work===true||b.in_work==='true'?true:false,
+          b.created_at||new Date().toISOString(), b.updated_at||new Date().toISOString()
+        ]);
+      }
+    }
+
+    // Sync payments
+    for (const p of paymentsRaw) {
+      await client.query(`
+        INSERT INTO payments (id,blogger_id,blogger_name,manager_id,manager_name,
+          recipient_name,iin,payment_name,kaspi,amount,amount_video,amount_product,
+          status,approval_url,notes,linked_payment_id,created_at,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        ON CONFLICT (id) DO UPDATE SET
+          status=EXCLUDED.status,amount=EXCLUDED.amount,notes=EXCLUDED.notes,
+          linked_payment_id=EXCLUDED.linked_payment_id,updated_at=EXCLUDED.updated_at
+      `, [
+        p.id, p.blogger_id||null, bloggerName(p.blogger_id),
+        p.manager_id||null, mgrName(p.manager_id),
+        p.recipient_name||null, p.iin||null, p.payment_name||null, p.kaspi||null,
+        parseFloat(p.amount)||null, parseFloat(p.amount_video)||null, parseFloat(p.amount_product)||null,
+        p.status||null, p.approval_url||null, p.notes||null, p.linked_payment_id||null,
+        p.created_at||new Date().toISOString(), p.updated_at||new Date().toISOString()
+      ]);
+    }
+
+    // Sync users (without passwords)
+    for (const u of users) {
+      await client.query(`
+        INSERT INTO users (id,username,password_hash,role,instagram,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (id) DO UPDATE SET username=EXCLUDED.username, role=EXCLUDED.role
+      `, [u.id, u.username, u.password||u.passwordHash||'', u.role||'manager', u.instagram||null, u.created_at||new Date().toISOString()]);
+    }
+
+    console.log(`My Supabase sync OK: ${bloggersRaw.length} bloggers, ${paymentsRaw.length} payments`);
+  } catch(e) {
+    console.error('My Supabase sync error:', e.message);
+  } finally {
+    if (client) client.release();
+  }
+}
+
 // Create tables in crm_blogers schema if not exist
 async function initSupabase() {
   try {
@@ -131,6 +248,8 @@ async function fullSyncToSupabase() {
     await client.query(`DELETE FROM crm_blogers.payments WHERE NOT (id = ANY($1::text[]))`, [pIds.length ? pIds : ['__none__']]);
     await client.query('COMMIT');
     console.log(`Supabase mirror OK: ${bloggerRows.length} bloggers, ${paymentRows.length} payments`);
+    // Also sync to my own Supabase
+    syncToMySupabase(bloggersRaw, paymentsRaw, users).catch(e => console.error('My Supabase sync failed:', e.message));
   } catch (e) {
     if (client) await client.query('ROLLBACK').catch(()=>{});
     console.error('Supabase full sync error:', e.message);
