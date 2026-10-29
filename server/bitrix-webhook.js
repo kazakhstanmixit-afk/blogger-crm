@@ -67,13 +67,13 @@ module.exports = function bitrixWebhookModule(app, db) {
       const params = dataObject.PARAMS || {};
 
       const eventName = String(body.event || body.EVENT || 'UNKNOWN').slice(0, 120);
-      const messageId = getValue(messageObject, ['id', 'message_id']) ||
+      const messageId = getValue(messageObject, ['id', 'message_id', 'messageId']) ||
         getValue(lineItem, ['message.id', 'MESSAGE_ID', 'ID']) ||
         getValue(dataObject, ['PARAMS.MESSAGE_ID', 'PARAMS.ID', 'MESSAGE_ID', 'message_id']);
-      const chatId = getValue(chatObject, ['id', 'chat_id']) ||
+      const chatId = getValue(chatObject, ['id', 'chat_id', 'chatId']) ||
         getValue(connectorObject, ['chat_id', 'CHAT_ID']) ||
         getValue(params, ['CHAT_ID', 'TO_CHAT_ID', 'chat_id']);
-      const senderId = getValue(messageObject, ['user_id', 'author_id']) ||
+      const senderId = getValue(messageObject, ['user_id', 'author_id', 'authorId', 'userId']) ||
         getValue(chatObject, ['user_id', 'USER_ID']) ||
         getValue(connectorObject, ['user_id', 'USER_ID']) ||
         getValue(params, ['FROM_USER_ID', 'AUTHOR_ID', 'from_user_id']);
