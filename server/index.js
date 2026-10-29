@@ -5,18 +5,19 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 // ── SUPABASE SYNC ──────────────────────────────────────────
 const { Pool } = require('pg');
-const pgPool = new Pool({
-  connectionString: 'postgresql://crm_nina.zwaynpogmedeqcyzriwi:TMxdRmisrSq6vs2tgmA82GDq@aws-0-eu-central-1.pooler.supabase.com:5432/postgres',
+if (!process.env.SUPABASE_URL) console.warn('[WARN] SUPABASE_URL env var not set — shared Supabase sync disabled');
+const pgPool = process.env.SUPABASE_URL ? new Pool({
+  connectionString: process.env.SUPABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 3,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-});
+}) : null;
 
 // ── MY SUPABASE (backup) ───────────────────────────────────
-const mySupabaseUrl = 'postgresql://postgres.aponjetlwtorjhavtudv:AdminMarkt123!@aws-0-eu-north-1.pooler.supabase.com:5432/postgres';
-const myPool = mySupabaseUrl ? new Pool({
-  connectionString: mySupabaseUrl,
+if (!process.env.MY_SUPABASE_URL) console.warn('[WARN] MY_SUPABASE_URL env var not set — backup Supabase sync disabled');
+const myPool = process.env.MY_SUPABASE_URL ? new Pool({
+  connectionString: process.env.MY_SUPABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 3,
   idleTimeoutMillis: 30000,
@@ -132,6 +133,7 @@ async function syncToMySupabase(bloggersRaw, paymentsRaw, users) {
 
 // Create tables in crm_blogers schema if not exist
 async function initSupabase() {
+  if (!pgPool) { console.log('Shared Supabase not configured, skipping init'); return; }
   try {
     const client = await pgPool.connect();
     await client.query(`DROP TABLE IF EXISTS crm_blogers.bloggers CASCADE`);
@@ -213,10 +215,12 @@ async function upsertBatch(client, table, cols, rows) {
 }
 
 async function fullSyncToSupabase() {
+  if (!pgPool && !myPool) return; // ни один Supabase не настроен
   if (syncing) { console.log('Supabase sync: предыдущий запуск ещё идёт, пропускаю'); return; }
   syncing = true;
   let client;
   try {
+    if (!pgPool) { syncing = false; syncToMySupabase(db.get('bloggers').value()||[], db.get('payments').value()||[], db.get('users').value()||[]).catch(()=>{}); return; }
     client = await pgPool.connect();
     const users = db.get('users').value();
     const bloggersRaw = db.get('bloggers').value();
@@ -269,6 +273,7 @@ initSupabase()
   .catch(e => console.error('initSupabase failed:', e.message));
 
 async function syncBloggerToSupabase(blogger, managerName) {
+  if (!pgPool) return;
   try {
     const client = await pgPool.connect();
     await client.query(`
@@ -301,6 +306,7 @@ async function syncBloggerToSupabase(blogger, managerName) {
 }
 
 async function syncPaymentToSupabase(payment, bloggerName, managerName) {
+  if (!pgPool) return;
   try {
     const client = await pgPool.connect();
     await client.query(`
@@ -342,6 +348,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+if (!process.env.JWT_SECRET) console.warn('[WARN] JWT_SECRET env var not set — using insecure default, set it on Render!');
 const JWT_SECRET = process.env.JWT_SECRET || 'blogger-crm-secret-key-2024';
 
 app.use(cors());

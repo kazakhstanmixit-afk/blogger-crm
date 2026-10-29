@@ -7,8 +7,11 @@ const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const { Pool } = require('pg');
 
-const NEW_DB_URL = process.env.NEW_SUPABASE_URL ||
-  'postgresql://postgres:AdminMarkt123!@db.aponjetlwtorjhavtudv.supabase.co:5432/postgres';
+const NEW_DB_URL = process.env.MY_SUPABASE_URL || process.env.NEW_SUPABASE_URL;
+if (!NEW_DB_URL) {
+  console.error('ERROR: Set MY_SUPABASE_URL environment variable before running');
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: NEW_DB_URL,
