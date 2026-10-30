@@ -331,12 +331,20 @@ async function syncPaymentToSupabase(payment, bloggerName, managerName) {
 
 
 const cloudinary = require('cloudinary').v2;
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_SECRET) {
+// Support both CLOUDINARY_URL and individual vars
+if (process.env.CLOUDINARY_URL) {
+  // CLOUDINARY_URL=cloudinary://key:secret@cloud_name — parsed automatically by SDK
+  cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL });
+} else {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+const cldCfg = cloudinary.config();
+console.log('[Cloudinary] cloud_name:', cldCfg.cloud_name, '| api_key:', cldCfg.api_key ? cldCfg.api_key.toString().slice(0,6)+'...' : 'MISSING', '| secret:', cldCfg.api_secret ? 'SET' : 'MISSING');
+if (!cldCfg.cloud_name || !cldCfg.api_secret) {
   console.warn('[WARN] Cloudinary env vars not set — file uploads will fail');
 }
 
