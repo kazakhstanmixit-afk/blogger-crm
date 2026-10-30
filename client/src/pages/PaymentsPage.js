@@ -81,18 +81,28 @@ function ReceiptCell({ payment, type, onUpdate }) {
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const token = localStorage.getItem('token');
-    const fd = new FormData();
-    fd.append('file', file);
-    const receiptType = type || 'general';
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt?receipt_type=${receiptType}`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token },
-      body: fd,
-    });
-    setUploading(false);
-    if (res.ok) onUpdate();
-    e.target.value = '';
+    try {
+      const token = localStorage.getItem('token');
+      const fd = new FormData();
+      fd.append('file', file);
+      const receiptType = type || 'general';
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + `/api/payments/${payment.id}/receipt?receipt_type=${receiptType}`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd,
+      });
+      if (res.ok) {
+        onUpdate();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert('Ошибка загрузки: ' + (data.error || res.status));
+      }
+    } catch(err) {
+      alert('Ошибка сети: ' + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
   };
 
   const handleDelete = async (public_id) => {

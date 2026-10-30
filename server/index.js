@@ -1925,7 +1925,7 @@ app.post('/api/payments/:id/receipt', auth, (req, res) => {
       const folder = receipt_type === 'video' ? 'blogger-crm/receipts-video' : receipt_type === 'product' ? 'blogger-crm/receipts-product' : 'blogger-crm/receipts';
       const result = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_stream(
-          { folder, resource_type: 'image' },
+          { folder, resource_type: 'auto' },
           (error, result) => error ? reject(error) : resolve(result)
         ).end(req.file.buffer);
       });
