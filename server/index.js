@@ -729,9 +729,12 @@ app.get('/api/barters', auth, (req, res) => {
   let list = db.get('barters').value() || [];
   if (req.user.role !== 'admin') {
     const me = users.find(u => u.id === req.user.id);
-    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
-    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-    list = list.filter(b => allowedIds.includes(b.user_id));
+    const canView = me?.can_view_users || [];
+    if (!canView.includes('*all*')) {
+      const allowedUsernames = [req.user.username, ...canView];
+      const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+      list = list.filter(b => allowedIds.includes(b.user_id));
+    }
   }
   const { status } = req.query;
   if (status) list = list.filter(b => b.status === status);
@@ -1680,9 +1683,12 @@ app.get('/api/payments', auth, (req, res) => {
 
     if (req.user.role !== 'admin') {
       const me = db.get('users').find({ id: req.user.id }).value();
-      const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
-      const allowedIds = db.get('users').value().filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-      list = list.filter(p => allowedIds.includes(p.manager_id));
+      const canView = me?.can_view_users || [];
+      if (!canView.includes('*all*')) {
+        const allowedUsernames = [req.user.username, ...canView];
+        const allowedIds = db.get('users').value().filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+        list = list.filter(p => allowedIds.includes(p.manager_id));
+      }
     }
 
     const { status } = req.query;
@@ -2404,9 +2410,12 @@ app.get('/api/barters', auth, (req, res) => {
   let list = db.get('barters').value() || [];
   if (req.user.role !== 'admin') {
     const me = users.find(u => u.id === req.user.id);
-    const allowedUsernames = [req.user.username, ...(me?.can_view_users || [])];
-    const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-    list = list.filter(b => allowedIds.includes(b.user_id));
+    const canView = me?.can_view_users || [];
+    if (!canView.includes('*all*')) {
+      const allowedUsernames = [req.user.username, ...canView];
+      const allowedIds = users.filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
+      list = list.filter(b => allowedIds.includes(b.user_id));
+    }
   }
   const { status } = req.query;
   if (status) list = list.filter(b => b.status === status);
