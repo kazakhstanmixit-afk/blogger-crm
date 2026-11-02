@@ -393,6 +393,7 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
         {/* User buckets */}
         {buckets.map(bucket => {
           const cards = bucket.urls.map(url => approvalGroups.find(g=>g.url===url)).filter(Boolean);
+          const bucketTotal = cards.reduce((s, g) => s + (g.total || 0), 0);
           const isOver = over === bucket.id;
           const isCollapsed = collapsed[bucket.id];
           return (
@@ -403,7 +404,8 @@ function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilt
               <div style={{display:'flex',alignItems:'center',gap:6}}>
                 <span style={{fontSize:12,color:'#9ba3be',cursor:'pointer'}} onClick={()=>toggleCollapse(bucket.id)}>{isCollapsed ? '▶' : '▼'}</span>
                 <BucketTitle name={bucket.name} onRename={name=>renameBucket(bucket.id,name)} onHeaderClick={()=>toggleCollapse(bucket.id)} />
-                <span style={{fontSize:11,color:'#9ba3be'}}>{cards.length}</span>
+                <span style={{fontSize:11,color:'#9ba3be'}}>{cards.length} зак.</span>
+                {bucketTotal > 0 && <span style={{fontSize:11,fontWeight:600,color:'#4f6ef7'}}>{bucketTotal.toLocaleString('ru')} ₸</span>}
                 {cards.length===0 && <button onClick={()=>removeBucket(bucket.id)}
                   style={{marginLeft:'auto',background:'none',border:'none',color:'#fca5a5',cursor:'pointer',fontSize:14}}>×</button>}
               </div>
@@ -1155,7 +1157,8 @@ export default function PaymentsPage({ currentUser }) {
         (p.recipient_name || '').toLowerCase().includes(q) ||
         (p.iin || '').includes(q) ||
         String(p.amount || '').includes(q) ||
-        (p.manager_name || '').toLowerCase().includes(q)
+        (p.manager_name || '').toLowerCase().includes(q) ||
+        (p.approval_url || '').toLowerCase().includes(q)
       );
     }
     return list;
