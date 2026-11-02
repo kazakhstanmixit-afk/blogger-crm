@@ -812,6 +812,7 @@ export default function PaymentsPage({ currentUser }) {
   const [approvalFilter, setApprovalFilter] = useState('');
   const [approvalExistsFilter, setApprovalExistsFilter] = useState(''); // 'yes' | 'no' | ''
   const [managerFilter, setManagerFilter] = useState('');
+  const [ipFilter, setIpFilter] = useState(''); // '' | 'ip' | 'not_ip'
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [groupColors, setGroupColors] = useState(() => {
@@ -1120,6 +1121,8 @@ export default function PaymentsPage({ currentUser }) {
     if (approvalExistsFilter === 'yes') list = list.filter(p => !!p.approval_url);
     if (approvalExistsFilter === 'no') list = list.filter(p => !p.approval_url);
     if (managerFilter) list = list.filter(p => p.manager_name === managerFilter);
+    if (ipFilter === 'ip') list = list.filter(p => !!p.is_ip);
+    if (ipFilter === 'not_ip') list = list.filter(p => !p.is_ip);
     if (dateFrom) list = list.filter(p => p.created_at && p.created_at.slice(0,10) >= dateFrom);
     if (dateTo) list = list.filter(p => p.created_at && p.created_at.slice(0,10) <= dateTo);
     if (search.trim()) {
@@ -1133,13 +1136,13 @@ export default function PaymentsPage({ currentUser }) {
       );
     }
     return list;
-  }, [payments, approvalFilter, approvalExistsFilter, managerFilter, dateFrom, dateTo, search]);
+  }, [payments, approvalFilter, approvalExistsFilter, managerFilter, ipFilter, dateFrom, dateTo, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE));
   const pagedPayments = filteredPayments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Сбрасываем страницу при изменении фильтров/поиска
-  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, managerFilter, dateFrom, dateTo, search]);
+  React.useEffect(() => { setPage(1); }, [statusFilter, approvalFilter, approvalExistsFilter, managerFilter, ipFilter, dateFrom, dateTo, search]);
 
   const setGroupColor = (url, color) => {
     const next = { ...groupColors, [url]: color };
@@ -1233,12 +1236,17 @@ export default function PaymentsPage({ currentUser }) {
             {managers.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         )}
+        <select className="select-filter" value={ipFilter} onChange={e=>setIpFilter(e.target.value)}>
+          <option value="">Все (ИП + физ)</option>
+          <option value="ip">Только ИП</option>
+          <option value="not_ip">Только физ. лица</option>
+        </select>
         <input type="date" className="select-filter" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
           style={{width:140}} title="Дата с" />
         <input type="date" className="select-filter" value={dateTo} onChange={e=>setDateTo(e.target.value)}
           style={{width:140}} title="Дата по" />
-        {(approvalFilter || approvalExistsFilter || managerFilter || dateFrom || dateTo) && (
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ setApprovalFilter(''); setApprovalExistsFilter(''); setManagerFilter(''); setDateFrom(''); setDateTo(''); }}>✕ Сбросить</button>
+        {(approvalFilter || approvalExistsFilter || managerFilter || ipFilter || dateFrom || dateTo) && (
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ setApprovalFilter(''); setApprovalExistsFilter(''); setManagerFilter(''); setIpFilter(''); setDateFrom(''); setDateTo(''); }}>✕ Сбросить</button>
         )}
       </div>
 
