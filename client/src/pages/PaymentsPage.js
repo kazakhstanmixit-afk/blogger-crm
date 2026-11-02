@@ -249,9 +249,32 @@ function DraggableScroll({ children }) {
 
 function ApprovalGroupsSection({ approvalGroups, approvalFilter, setApprovalFilter, groupColors, setGroupColor }) {
   const STORE_KEY = 'approvalBuckets';
+  const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  const autoGroupByMonth = (groups) => {
+    const byMonth = {};
+    groups.forEach(g => {
+      const d = new Date(g.date);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const label = `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}`;
+      if (!byMonth[key]) byMonth[key] = { id: key, name: label, urls: [], date: g.date };
+      byMonth[key].urls.push(g.url);
+    });
+    return Object.values(byMonth).sort((a,b) => new Date(b.date) - new Date(a.date));
+  };
+
   const [buckets, setBuckets] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { return []; }
   });
+
+  // Auto-fill buckets by month if empty
+  React.useEffect(() => {
+    if (buckets.length === 0 && approvalGroups.length > 0) {
+      const auto = autoGroupByMonth(approvalGroups);
+      setBuckets(auto);
+      localStorage.setItem(STORE_KEY, JSON.stringify(auto));
+    }
+  }, [approvalGroups]); // eslint-disable-line
   const [newName, setNewName] = React.useState('');
   const [adding, setAdding] = React.useState(false);
   const [dragging, setDragging] = React.useState(null); // url being dragged
