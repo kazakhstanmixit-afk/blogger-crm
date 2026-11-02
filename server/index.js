@@ -334,8 +334,8 @@ const cloudinary = require('cloudinary').v2;
 // Always use individual vars — ignore CLOUDINARY_URL to avoid SDK crash on wrong format
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'rpedxzyp',
-  api_key: process.env.CLOUDINARY_API_KEY || '659547867875357',
-  api_secret: process.env.CLOUDINARY_API_SECRET || '_bItnW4ez4RWzLqftnZf3WkzngI',
+  api_key: process.env.CLOUDINARY_API_KEY || '191615258892889',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'RDcKU_G1MhXnL698pDYnhQ19jt0',
 });
 const cldCfg = cloudinary.config();
 console.log('[Cloudinary] cloud_name:', cldCfg.cloud_name, '| api_key:', cldCfg.api_key ? String(cldCfg.api_key).slice(0,6)+'...' : 'MISSING', '| secret:', cldCfg.api_secret ? 'SET(len='+cldCfg.api_secret.length+')' : 'MISSING');
