@@ -346,6 +346,21 @@ if (!cldCfg.cloud_name || !cldCfg.api_secret) {
 
 const { parse } = require('csv-parse/sync');
 const XLSX = require('xlsx');
+
+// Temporary debug: show which Cloudinary credentials are actually being used
+app.get('/api/debug-cloudinary', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).end();
+  const cfg = cloudinary.config();
+  res.json({
+    cloud_name: cfg.cloud_name,
+    api_key: cfg.api_key,
+    secret_length: cfg.api_secret ? cfg.api_secret.length : 0,
+    secret_first3: cfg.api_secret ? cfg.api_secret.slice(0,3) : '',
+    env_cloud: process.env.CLOUDINARY_CLOUD_NAME || '(not set)',
+    env_key: process.env.CLOUDINARY_API_KEY || '(not set)',
+    env_secret_len: process.env.CLOUDINARY_API_SECRET ? process.env.CLOUDINARY_API_SECRET.length : 0,
+  });
+});
 const path = require('path');
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
