@@ -1745,6 +1745,26 @@ app.post('/api/payments', auth, (req, res) => {
   }
 });
 
+// One-time migration: fix manager_id on payments where it points to admin
+app.post('/api/admin/fix-payment-managers', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const users = db.get('users').value() || [];
+  const adminUser = users.find(u => u.role === 'admin');
+  const payments = db.get('payments').value() || [];
+  const bloggers = db.get('bloggers').value() || [];
+  let fixed = 0;
+  payments.forEach(p => {
+    if (p.manager_id === adminUser?.id) {
+      const blogger = bloggers.find(b => b.id === p.blogger_id);
+      if (blogger && blogger.assigned_manager_id) {
+        db.get('payments').find({ id: p.id }).assign({ manager_id: blogger.assigned_manager_id, updated_at: new Date().toISOString() }).write();
+        fixed++;
+      }
+    }
+  });
+  res.json({ ok: true, fixed, total: payments.length });
+});
+
 app.put('/api/payments/:id', auth, (req, res) => {
   try {
     // Managers can only update kaspi field
