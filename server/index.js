@@ -1724,9 +1724,11 @@ app.post('/api/payments', auth, (req, res) => {
       if (!/^\d{12}$/.test(iin)) return res.status(400).json({ error: 'ИИН должен содержать ровно 12 цифр' });
     }
 
-    // Use blogger's assigned manager, not the current user (admin may create on behalf)
+    // If manager submits — use their own id; if admin submits — use blogger's assigned manager
     const blogger = db.get('bloggers').find({ id: blogger_id }).value();
-    const effectiveManagerId = (blogger && blogger.assigned_manager_id) ? blogger.assigned_manager_id : req.user.id;
+    const effectiveManagerId = req.user.role === 'admin'
+      ? ((blogger && blogger.assigned_manager_id) ? blogger.assigned_manager_id : req.user.id)
+      : req.user.id;
 
     const payment = {
       id: uuidv4(),
