@@ -1687,7 +1687,8 @@ app.get('/api/payments', auth, (req, res) => {
       if (!canView.includes('*all*')) {
         const allowedUsernames = [req.user.username, ...canView];
         const allowedIds = db.get('users').value().filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-        list = list.filter(p => allowedIds.includes(p.manager_id));
+        // show if manager_id matches OR if this user created the payment
+        list = list.filter(p => allowedIds.includes(p.manager_id) || p.created_by === req.user.id);
       }
     }
 
@@ -1731,6 +1732,7 @@ app.post('/api/payments', auth, (req, res) => {
       id: uuidv4(),
       blogger_id,
       manager_id: effectiveManagerId,
+      created_by: req.user.id,
       recipient_name,
       iin: iin || null,
       payment_name: payment_name || recipient_name,
