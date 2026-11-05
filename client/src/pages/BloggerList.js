@@ -263,6 +263,106 @@ function Pagination({ page, pages, total, limit, onChange }) {
   );
 }
 
+function QuickTzModal({ blogger, onClose, onSave }) {
+  const [product, setProduct] = useState('');
+  const [format, setFormat] = useState('reels');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError('');
+    try {
+      const res = await apiFetch('/api/tz-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          nick: blogger.name,
+          instagram_url: blogger.instagram_url || '',
+          tiktok_url: blogger.tiktok_url || '',
+          product,
+          format,
+          videos: [],
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); setError(d.error || 'Ошибка'); setSaving(false); return; }
+      onSave();
+    } catch(err) { setError('Ошибка: ' + err.message); setSaving(false); }
+  };
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:420}}>
+        <div className="modal-header">
+          <div className="modal-title">Подать ТЗ — {blogger.name}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div style={{background:'#fee2e2',color:'#991b1b',padding:'8px 12px',borderRadius:6,marginBottom:12,fontSize:13}}>{error}</div>}
+          <div className="field"><label>Товар</label><input value={product} onChange={e=>setProduct(e.target.value)} placeholder="Название товара" /></div>
+          <div className="field"><label>Формат</label>
+            <select value={format} onChange={e=>setFormat(e.target.value)}>
+              <option value="reels">Reels</option>
+              <option value="tiktok">TikTok</option>
+              <option value="both">Reels + TikTok</option>
+              <option value="stories">Stories</option>
+            </select>
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:16}}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Сохраняю...':'Создать ТЗ'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function QuickBarterModal({ blogger, onClose, onSave }) {
+  const [product, setProduct] = useState('');
+  const [address, setAddress] = useState(blogger.address || '');
+  const [phone, setPhone] = useState(blogger.blogger_whatsapp || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError('');
+    try {
+      const res = await apiFetch('/api/barters', {
+        method: 'POST',
+        body: JSON.stringify({
+          nick: blogger.name,
+          url: blogger.instagram_url || blogger.tiktok_url || '',
+          product,
+          address,
+          phone,
+          items: [],
+          warehouse: 'almaty',
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); setError(d.error || 'Ошибка'); setSaving(false); return; }
+      onSave();
+    } catch(err) { setError('Ошибка: ' + err.message); setSaving(false); }
+  };
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:420}}>
+        <div className="modal-header">
+          <div className="modal-title">Бартер — {blogger.name}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div style={{background:'#fee2e2',color:'#991b1b',padding:'8px 12px',borderRadius:6,marginBottom:12,fontSize:13}}>{error}</div>}
+          <div className="field"><label>Товары</label><textarea value={product} onChange={e=>setProduct(e.target.value)} placeholder="Напр: тушь, палетка 3в1 02" /></div>
+          <div className="field"><label>Адрес доставки</label><input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Улица, дом..." /></div>
+          <div className="field"><label>Телефон</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7 700 000 0000" /></div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:16}}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Отмена</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Сохраняю...':'Создать бартер'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function BloggerList({ currentUser }) {
   const [bloggers, setBloggers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -306,6 +406,8 @@ export default function BloggerList({ currentUser }) {
   const [priceType, setPriceType] = useState("price_reels");
   const [showBulkStatus, setShowBulkStatus] = useState(false);
   const [visibleCols, setVisibleCols] = useState(new Set(ALL_COLUMNS.filter(c=>c.default).map(c=>c.key)));
+  const [quickBarterBlogger, setQuickBarterBlogger] = useState(null);
+  const [quickTzBlogger, setQuickTzBlogger] = useState(null);
   const timer = useRef(null);
 
   const show = (key) => visibleCols.has(key);
@@ -768,7 +870,11 @@ export default function BloggerList({ currentUser }) {
                   {show('price_stories') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_stories} type="number" suffix="₸" onSave={v=>patch(b.id,{price_stories:Number(v)})} /></td>}
                   {show('cpv_stories') && <td><span className={`cpv-badge ${cpvClass(b.cpv_stories)}`}>{b.cpv_stories?b.cpv_stories+'₸':'—'}</span></td>}
                   {show('added') && <td style={{fontSize:11,color:isFresh?'#4f6ef7':'#9ba3be',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>}
-                  <td onClick={e=>e.stopPropagation()}><button className="btn btn-danger btn-sm" onClick={()=>handleDelete(b.id)}>🗑</button></td>
+                  <td onClick={e=>e.stopPropagation()} style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-secondary btn-sm" title="Подать ТЗ" onClick={()=>setQuickTzBlogger(b)} style={{marginRight:4,padding:'2px 7px',fontSize:11}}>ТЗ</button>
+                    <button className="btn btn-secondary btn-sm" title="Подать бартер" onClick={()=>setQuickBarterBlogger(b)} style={{marginRight:4,padding:'2px 7px',fontSize:11}}>🎁</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(b.id)}>🗑</button>
+                  </td>
                 </tr>
               );
             })}
@@ -826,6 +932,14 @@ export default function BloggerList({ currentUser }) {
             </div>
           </div>
         </div>
+      )}
+
+      {quickTzBlogger && (
+        <QuickTzModal blogger={quickTzBlogger} onClose={()=>setQuickTzBlogger(null)} onSave={()=>setQuickTzBlogger(null)} />
+      )}
+
+      {quickBarterBlogger && (
+        <QuickBarterModal blogger={quickBarterBlogger} onClose={()=>setQuickBarterBlogger(null)} onSave={()=>setQuickBarterBlogger(null)} />
       )}
 
       {showDistribute && (

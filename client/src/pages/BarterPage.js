@@ -217,21 +217,29 @@ function BarterModal({ barter, inventory, onClose, onSave, isAdmin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nick) { setError('Укажите ник'); return; }
-    setSaving(true);
-    const res = await apiFetch(isEdit ? `/api/barters/${barter.id}` : '/api/barters', {
-      method: isEdit ? 'PUT' : 'POST',
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) { const d = await res.json(); setError(d.error); setSaving(false); return; }
-
-    // Decrease inventory if admin and new barter
-    if (!isEdit && isAdmin && form.items.length > 0) {
-      await apiFetch('/api/inventory/decrease', {
-        method: 'POST',
-        body: JSON.stringify({ items: form.items.map(i => ({ id: i.id, warehouse: form.warehouse, qty: i.qty })) }),
+    setSaving(true); setError('');
+    try {
+      const res = await apiFetch(isEdit ? `/api/barters/${barter.id}` : '/api/barters', {
+        method: isEdit ? 'PUT' : 'POST',
+        body: JSON.stringify(form),
       });
+      if (!res.ok) {
+        let msg = 'Ошибка сервера';
+        try { const d = await res.json(); msg = d.error || msg; } catch(e) {}
+        setError(msg); setSaving(false); return;
+      }
+      // Decrease inventory if admin and new barter
+      if (!isEdit && isAdmin && form.items.length > 0) {
+        await apiFetch('/api/inventory/decrease', {
+          method: 'POST',
+          body: JSON.stringify({ items: form.items.map(i => ({ id: i.id, warehouse: form.warehouse, qty: i.qty })) }),
+        });
+      }
+      onSave();
+    } catch(err) {
+      setError('Ошибка: ' + err.message);
+      setSaving(false);
     }
-    onSave();
   };
 
   return (

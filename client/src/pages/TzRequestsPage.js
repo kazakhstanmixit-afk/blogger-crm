@@ -94,14 +94,23 @@ function TzModal({ tz, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nick) { setError('Укажите ник'); return; }
-    setSaving(true);
-    const videos = form.videos.filter(v => v.url.trim());
-    const res = await apiFetch(isEdit ? `/api/tz-requests/${tz.id}` : '/api/tz-requests', {
-      method: isEdit ? 'PUT' : 'POST',
-      body: JSON.stringify({ ...form, videos, status: form.status, format: form.format, tz_url: form.tz_url || null }),
-    });
-    if (!res.ok) { const d = await res.json(); setError(d.error); setSaving(false); return; }
-    onSave();
+    setSaving(true); setError('');
+    try {
+      const videos = form.videos.filter(v => v.url.trim());
+      const res = await apiFetch(isEdit ? `/api/tz-requests/${tz.id}` : '/api/tz-requests', {
+        method: isEdit ? 'PUT' : 'POST',
+        body: JSON.stringify({ ...form, videos, status: form.status, format: form.format, tz_url: form.tz_url || null }),
+      });
+      if (!res.ok) {
+        let msg = 'Ошибка сервера';
+        try { const d = await res.json(); msg = d.error || msg; } catch(e) {}
+        setError(msg); setSaving(false); return;
+      }
+      onSave();
+    } catch(err) {
+      setError('Ошибка: ' + err.message);
+      setSaving(false);
+    }
   };
 
   return (
