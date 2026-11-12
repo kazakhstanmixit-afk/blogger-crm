@@ -760,7 +760,9 @@ app.post('/api/barters', auth, (req, res) => {
 app.put('/api/barters/:id', auth, (req, res) => {
   const existing = db.get('barters').find({ id: req.params.id }).value();
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const me = db.get('users').find({ id: req.user.id }).value();
+  const canViewAll = (me?.can_view_users || []).includes('*all*');
+  if (req.user.role !== 'admin' && !canViewAll && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, url, address, phone, product, notes, status } = req.body;
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
@@ -957,14 +959,14 @@ if (!db.get('users').find({ username: 'zarina1234' }).value()) {
 }
 
 // Always apply TZ visibility settings on startup
-{ const tzVisibility = { anastasiia: ['sabrina'], saya: ['*all*'], zara: ['*all*'], kamila: ['*all*'] };
+{ const tzVisibility = { anastasiia: [], saya: ['*all*'], zara: ['*all*'], kamila: ['*all*'] };
   Object.entries(tzVisibility).forEach(([username, canView]) => {
     const u = db.get('users').find({ username }).value();
     if (u) {
       db.get('users').find({ username }).assign({ can_view_users: canView }).write();
     }
   });
-  console.log('TZ visibility applied: anastasiia→sabrina, saya→*all*, zara→*all*, kamila→*all*');
+  console.log('TZ visibility applied: anastasiia→[] (own only), saya→*all*, zara→*all*, kamila→*all*');
 }
 
 // migration
@@ -2445,7 +2447,9 @@ app.post('/api/barters', auth, (req, res) => {
 app.put('/api/barters/:id', auth, (req, res) => {
   const existing = db.get('barters').find({ id: req.params.id }).value();
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  if (req.user.role !== 'admin' && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const me = db.get('users').find({ id: req.user.id }).value();
+  const canViewAll = (me?.can_view_users || []).includes('*all*');
+  if (req.user.role !== 'admin' && !canViewAll && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, url, address, phone, product, notes, status } = req.body;
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
