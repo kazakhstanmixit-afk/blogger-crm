@@ -1404,20 +1404,21 @@ export default function PaymentsPage({ currentUser }) {
                 <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
-                {currentUser.role==='admin' && (
-                  <td>
-                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {p.status==='pending' && <>
-                        <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1e40af',border:'1px solid #bfdbfe'}} onClick={()=>handleStatusChange(p.id,'submitted')}>Подано</button>
-                        <button className="btn btn-sm" style={{background:'#fee2e2',color:'#991b1b',border:'1px solid #fecaca'}} onClick={()=>handleStatusChange(p.id,'rejected')}>Отклонить</button>
-                      </>}
-                      {p.status==='submitted' && <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleStatusChange(p.id,'paid')}>Оплачено</button>}
-                      {p.status==='rejected' && <button className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>handleStatusChange(p.id,'pending')}>Вернуть</button>}
-                      {p.status==='paid' && <button className="btn btn-sm" style={{background:'#ffedd5',color:'#9a3412',border:'1px solid #fed7aa'}} onClick={()=>handleStatusChange(p.id,'refunded')}>Возврат</button>}
-                      <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(p.id)}>🗑</button>
-                    </div>
-                  </td>
-                )}
+                <td onClick={e=>e.stopPropagation()}>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                    {currentUser.role==='admin' && p.status==='pending' && <>
+                      <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1e40af',border:'1px solid #bfdbfe'}} onClick={()=>handleStatusChange(p.id,'submitted')}>Подано</button>
+                      <button className="btn btn-sm" style={{background:'#fee2e2',color:'#991b1b',border:'1px solid #fecaca'}} onClick={()=>handleStatusChange(p.id,'rejected')}>Отклонить</button>
+                    </>}
+                    {currentUser.role==='admin' && p.status==='submitted' && <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleStatusChange(p.id,'paid')}>Оплачено</button>}
+                    {currentUser.role==='admin' && p.status==='rejected' && <button className="btn btn-sm" style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a'}} onClick={()=>handleStatusChange(p.id,'pending')}>Вернуть</button>}
+                    {currentUser.role==='admin' && p.status==='paid' && <button className="btn btn-sm" style={{background:'#ffedd5',color:'#9a3412',border:'1px solid #fed7aa'}} onClick={()=>handleStatusChange(p.id,'refunded')}>Возврат</button>}
+                    {currentUser.role==='admin' && <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(p.id)}>🗑</button>}
+                    {currentUser.role!=='admin' && ['pending','submitted'].includes(p.status) && (
+                      <button className="btn btn-sm" style={{background:'#dcfce7',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>handleStatusChange(p.id,'paid')}>Оплачено</button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
