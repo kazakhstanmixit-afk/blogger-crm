@@ -1792,21 +1792,20 @@ app.post('/api/admin/fix-payment-managers', auth, (req, res) => {
 
 app.put('/api/payments/:id', auth, (req, res) => {
   try {
-    // Managers can update kaspi field OR set status to 'paid' only
+    // Managers: can mark any visible payment as paid, or update kaspi on own payments
     if (req.user.role !== 'admin') {
       const existing = db.get('payments').find({ id: req.params.id }).value();
       if (!existing) return res.status(404).json({ error: 'Not found' });
-      const me = db.get('users').find({ id: req.user.id }).value();
-      const canViewAllPayments = me?.can_view_all_payments === true;
-      if (!canViewAllPayments && existing.manager_id !== req.user.id && existing.created_by !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
-      if (req.body.kaspi !== undefined) {
-        db.get('payments').find({ id: req.params.id }).assign({ kaspi: req.body.kaspi || null, updated_at: new Date().toISOString() }).write();
-        return res.json({ ok: true });
-      }
-      // Allow manager to mark as paid only
-      if (req.body.status === 'paid' && Object.keys(req.body).filter(k => k !== 'status').length === 0) {
+      // Allow any manager to mark as paid
+      if (req.body.status === 'paid') {
         db.get('payments').find({ id: req.params.id }).assign({ status: 'paid', updated_at: new Date().toISOString() }).write();
         db.get('bloggers').find({ id: existing.blogger_id }).assign({ status: 'paid', updated_at: new Date().toISOString() }).write();
+        return res.json({ ok: true });
+      }
+      // Update kaspi only for own payments
+      const isOwn = existing.manager_id === req.user.id || existing.created_by === req.user.id;
+      if (req.body.kaspi !== undefined && isOwn) {
+        db.get('payments').find({ id: req.params.id }).assign({ kaspi: req.body.kaspi || null, updated_at: new Date().toISOString() }).write();
         return res.json({ ok: true });
       }
       return res.status(403).json({ error: 'Нет доступа' });
