@@ -880,9 +880,19 @@ export default function PaymentsPage({ currentUser }) {
   useEffect(() => { fetchPayments(); }, [statusFilter]);
 
   const handleStatusChange = async (id, status) => {
-    await apiFetch(`/api/payments/${id}`, { method:'PUT', body: JSON.stringify({ status }) });
-    fetchPayments();
-    setToast(`Статус изменён на «${PAYMENT_STATUS[status]?.label}»`);
+    try {
+      const res = await apiFetch(`/api/payments/${id}`, { method:'PUT', body: JSON.stringify({ status }) });
+      if (!res.ok) {
+        let msg = 'Ошибка';
+        try { const d = await res.json(); msg = d.error || msg; } catch(e) {}
+        alert('Не удалось изменить статус: ' + msg);
+        return;
+      }
+      fetchPayments();
+      setToast(`Статус изменён на «${PAYMENT_STATUS[status]?.label}»`);
+    } catch(e) {
+      alert('Ошибка: ' + e.message);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -1325,7 +1335,7 @@ export default function PaymentsPage({ currentUser }) {
               <th>Ссылка на согласование</th>
               <th>Чек оплаты</th>
               <th>Чек видео</th>
-              {currentUser.role==='admin' && <th>Действия</th>}
+              <th>Действия</th>
             </tr>
           </thead>
           <tbody>
