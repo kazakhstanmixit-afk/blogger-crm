@@ -965,7 +965,16 @@ if (!db.get('users').find({ username: 'zarina1234' }).value()) {
       db.get('users').find({ username }).assign({ can_view_users: canView }).write();
     }
   });
-  console.log('TZ visibility applied: anastasiia→[] (own only), saya→*all*, zara→*all*, kamila→*all*');
+  // can_view_all_payments: see all payments (saya, zara only — kamila sees own only)
+  ['saya', 'zara'].forEach(username => {
+    const u = db.get('users').find({ username }).value();
+    if (u) db.get('users').find({ username }).assign({ can_view_all_payments: true }).write();
+  });
+  ['anastasiia', 'kamila'].forEach(username => {
+    const u = db.get('users').find({ username }).value();
+    if (u) db.get('users').find({ username }).assign({ can_view_all_payments: false }).write();
+  });
+  console.log('TZ visibility applied: anastasiia→[] (own only), saya→*all*, zara→*all*, kamila→*all*; payments: saya/zara→all, kamila→own only');
 }
 
 // migration
@@ -1684,11 +1693,11 @@ app.get('/api/payments', auth, (req, res) => {
 
     if (req.user.role !== 'admin') {
       const me = db.get('users').find({ id: req.user.id }).value();
-      const canView = me?.can_view_users || [];
-      if (!canView.includes('*all*')) {
-        const allowedUsernames = [req.user.username, ...canView];
+      const canViewAllPayments = me?.can_view_all_payments === true;
+      if (!canViewAllPayments) {
+        const canView = me?.can_view_users || [];
+        const allowedUsernames = [req.user.username, ...canView.filter(u => u !== '*all*')];
         const allowedIds = db.get('users').value().filter(u => allowedUsernames.includes(u.username)).map(u => u.id);
-        // show if manager_id matches OR if this user created the payment
         list = list.filter(p => allowedIds.includes(p.manager_id) || p.created_by === req.user.id);
       }
     }
@@ -1788,8 +1797,8 @@ app.put('/api/payments/:id', auth, (req, res) => {
       const existing = db.get('payments').find({ id: req.params.id }).value();
       if (!existing) return res.status(404).json({ error: 'Not found' });
       const me = db.get('users').find({ id: req.user.id }).value();
-      const canViewAll = (me?.can_view_users || []).includes('*all*');
-      if (!canViewAll && existing.manager_id !== req.user.id && existing.created_by !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+      const canViewAllPayments = me?.can_view_all_payments === true;
+      if (!canViewAllPayments && existing.manager_id !== req.user.id && existing.created_by !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
       if (req.body.kaspi !== undefined) {
         db.get('payments').find({ id: req.params.id }).assign({ kaspi: req.body.kaspi || null, updated_at: new Date().toISOString() }).write();
         return res.json({ ok: true });
