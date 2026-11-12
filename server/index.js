@@ -760,9 +760,8 @@ app.post('/api/barters', auth, (req, res) => {
 app.put('/api/barters/:id', auth, (req, res) => {
   const existing = db.get('barters').find({ id: req.params.id }).value();
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  const me = db.get('users').find({ id: req.user.id }).value();
-  const canViewAll = (me?.can_view_users || []).includes('*all*');
-  if (req.user.role !== 'admin' && !canViewAll && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const canEditBarter = req.user.role === 'admin' || req.user.username === 'saya' || existing.user_id === req.user.id;
+  if (!canEditBarter) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, url, address, phone, product, notes, status } = req.body;
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
@@ -2447,9 +2446,8 @@ app.post('/api/barters', auth, (req, res) => {
 app.put('/api/barters/:id', auth, (req, res) => {
   const existing = db.get('barters').find({ id: req.params.id }).value();
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  const me = db.get('users').find({ id: req.user.id }).value();
-  const canViewAll = (me?.can_view_users || []).includes('*all*');
-  if (req.user.role !== 'admin' && !canViewAll && existing.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+  const canEditBarter = req.user.role === 'admin' || req.user.username === 'saya' || existing.user_id === req.user.id;
+  if (!canEditBarter) return res.status(403).json({ error: 'Нет доступа' });
   const { nick, url, address, phone, product, notes, status } = req.body;
   const updates = {};
   if (nick !== undefined) updates.nick = nick;
