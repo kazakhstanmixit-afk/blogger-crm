@@ -1787,7 +1787,9 @@ app.put('/api/payments/:id', auth, (req, res) => {
     if (req.user.role !== 'admin') {
       const existing = db.get('payments').find({ id: req.params.id }).value();
       if (!existing) return res.status(404).json({ error: 'Not found' });
-      if (existing.manager_id !== req.user.id && existing.created_by !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
+      const me = db.get('users').find({ id: req.user.id }).value();
+      const canViewAll = (me?.can_view_users || []).includes('*all*');
+      if (!canViewAll && existing.manager_id !== req.user.id && existing.created_by !== req.user.id) return res.status(403).json({ error: 'Нет доступа' });
       if (req.body.kaspi !== undefined) {
         db.get('payments').find({ id: req.params.id }).assign({ kaspi: req.body.kaspi || null, updated_at: new Date().toISOString() }).write();
         return res.json({ ok: true });
