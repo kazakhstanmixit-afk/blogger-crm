@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '../App';
+import { apiFetch, API } from '../App';
 import Toast from '../components/Toast';
 import * as XLSX from 'xlsx';
 
@@ -18,6 +18,14 @@ function StatusBadge({ status }) {
       {s.label}
     </span>
   );
+}
+
+function InvoiceControl({payment,onSave}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ if(!payment.is_ip)return null;
+ const upload=async e=>{const file=e.target.files[0];if(!file)return;if(!window.confirm('Подтверждаете, что это полученный и проверенный счёт ИП на сумму этой заявки?')){e.target.value='';return}setBusy(true);setError('');try{const body=new FormData();body.append('invoice',file);body.append('confirmed','true');const response=await fetch(API+'/api/payments/'+payment.id+'/invoice',{method:'POST',headers:{Authorization:'Bearer '+localStorage.getItem('token')},body});const data=await response.json();if(!response.ok)throw Error(data.error);onSave();}catch(e){setError(e.message)}finally{setBusy(false)}};
+ const statuses={queued:'В очереди Bitrix',submitted:'Передано в согласование',uncertain:'Нужна сверка Bitrix',failed:'Ошибка передачи',needs_review:'Найдены неоднозначные элементы'};
+ return <div style={{marginTop:6,fontSize:11}}><label style={{cursor:'pointer',color:'#4f6ef7'}}>{busy?'Загрузка…':payment.payment_invoice?'Прикрепить новый счёт':'Прикрепить счёт ИП'}<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onChange={upload} disabled={busy||['submitted','uncertain','sending'].includes(payment.bitrix_payment?.status)} /></label>{payment.payment_invoice&&<div>{payment.payment_invoice.name}</div>}{payment.bitrix_payment&&<div>{statuses[payment.bitrix_payment.status]||payment.bitrix_payment.status}</div>}{error&&<div style={{color:'#b42318'}}>{error}</div>}</div>;
 }
 
 function ApprovalCell({ payment, isAdmin, onSave }) {
@@ -1411,7 +1419,7 @@ export default function PaymentsPage({ currentUser }) {
                     </div>
                   )}
                 </td>
-                <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /></td>
+                <td onClick={e=>e.stopPropagation()}><ApprovalCell payment={p} isAdmin={currentUser.role==='admin'} onSave={fetchPayments} /><InvoiceControl payment={p} onSave={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="video" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}><ReceiptCell payment={p} type="product" onUpdate={fetchPayments} /></td>
                 <td onClick={e=>e.stopPropagation()}>

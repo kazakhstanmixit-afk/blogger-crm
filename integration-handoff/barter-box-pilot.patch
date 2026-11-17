@@ -442,7 +442,7 @@ index 0000000..c8ddc83
 +module.exports={mount};
 diff --git a/docs/automation-pilot.md b/docs/automation-pilot.md
 new file mode 100644
-index 0000000..3925c57
+index 0000000..87653ef
 --- /dev/null
 +++ b/docs/automation-pilot.md
 @@ -0,0 +1,62 @@
@@ -492,7 +492,7 @@ index 0000000..3925c57
 +
 +finance-client.js: одна подтверждённая сумма на выбранные видео → existing payments Blogger CRM → опрос статуса и чеков → отображение в интеграциях. FINANCE_BRIDGE_ENABLED, CRM_ORIGIN, FLOW_CRM_SECRET и FLOW_EMPLOYEE_CRM_MAP_JSON (имя Barter Box → точный ID сотрудника CRM). Никаких выплат и дублирования реестра. Без проверенной привязки блогера/сотрудника операция остановится.
 +
-+Конкретная отправка в Bitrix «Согласование оплаты», договорные шаблоны и АВР требуют существующего webhook/схемы/шаблонов; их здесь нет. Создавать обычные задачи вместо процесса запрещено и не реализовано.
++Обработчик передачи проверенного счёта в Bitrix добавлен в Blogger CRM; требуется точный действующий webhook и поля «Согласования оплаты». Обычные задачи вместо него не создаются. Юридические шаблоны договора и АВР по-прежнему нужны отдельно.
 +
 +## Общий webhook Wazzup
 +
@@ -539,7 +539,7 @@ index 0000000..764356c
 +CRM_COMMS_WEBHOOK_SECRET=
 diff --git a/finance-client.js b/finance-client.js
 new file mode 100644
-index 0000000..4bd25cb
+index 0000000..fcd1103
 --- /dev/null
 +++ b/finance-client.js
 @@ -0,0 +1,19 @@
@@ -558,7 +558,7 @@ index 0000000..4bd25cb
 +   for(const id of row.payload.integrationIds){const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===id);if(deal){deal.flowPaymentId=row.crmPaymentId;deal.flowPaymentStatus=row.status;deal.flowPaymentReceipts=row.receipts;if(row.status==='paid')deal.paymentStatus='оплачено';else if(deal.paymentStatus==='оплачено')deal.paymentStatus='к оплате';}}
 +  }catch(e){row.lastError=/^HTTP \d+$/.test(e.message)?e.message:'Не удалось сверить заявку с CRM';}row.nextAt=Date.now()+60000;persist();}
 + }finally{busy=false}}
-+ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;app.post('/api/automation/payment-request',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});try{res.json(request(req.body||{},req.session.name||'общий вход'));drain().catch(()=>{})}catch(e){res.status(409).json({error:e.message})}});app.get('/api/automation/payments',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});res.json({payments:records()})});const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();}
++ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;app.post('/api/automation/payment-request',requireAuth,async(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});try{const row=request(req.body||{},req.session.name||'общий вход');await drain();res.status(row.crmPaymentId?201:202).json(row)}catch(e){res.status(409).json({error:e.message})}});app.get('/api/automation/payments',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});res.json({payments:records()})});const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();}
 + return {request,drain,mount};
 +}
 +module.exports={createFinanceClient};
@@ -723,7 +723,7 @@ index 0000000..741a999
 + if(global)global.mountFlowProductPicker=mountFlowProductPicker;
 +})(typeof window!=='undefined'?window:null);
 diff --git a/public/index.html b/public/index.html
-index 4662a1e..2a7078b 100644
+index 4662a1e..65d2a20 100644
 --- a/public/index.html
 +++ b/public/index.html
 @@ -294,6 +294,7 @@ select.inline-edit-input{cursor:pointer}
@@ -772,7 +772,7 @@ index 4662a1e..2a7078b 100644
      </div>
    `);
    document.getElementById("mm-cancel").onclick = closeModal;
-+  if(isEdit&&existing.crmBloggerId&&DataManager.state.automationFlow){const pay=document.createElement('button');pay.className='btn btn-ghost';pay.textContent='Подать на оплату → CRM';pay.onclick=()=>{const rows=(DataManager.state.microInfluencerDeals||[]).filter(x=>x.crmBloggerId===existing.crmBloggerId);openModal(`<h3>Заявка в существующий реестр оплат CRM</h3><div class="field"><label>Общая сумма, ₸</label><input id="flow-pay-amount" type="number" step="0.01" min="0.01" value="${existing.cost||''}"></div><div class="field"><label>Получатель</label><input id="flow-pay-recipient"></div><div class="field"><label>Способ расчёта</label><select id="flow-pay-settlement"><option value="ip">ИП</option><option value="cash">Наличные</option></select></div><div class="field"><label>Этап оплаты</label><input id="flow-pay-stage" value="Окончательный расчёт"></div><div class="field"><label>Ссылка на полученный счёт, если есть</label><input id="flow-pay-invoice"></div><div class="field"><label>Видео в этой заявке</label>${rows.map(x=>`<label><input type="checkbox" class="flow-pay-deal" value="${x.id}" ${x.id===existing.id?'checked':''}> №${x.id} · ${escapeHtml(x.product||'')}</label>`).join('')}</div><div class="login-hint">Сумма общая для выбранных видео. Выплата не выполняется. Для ИП без счёта согласование Bitrix не запускается.</div><button class="btn btn-primary" id="flow-pay-submit">Подать заявку</button>`);document.getElementById('flow-pay-submit').onclick=async()=>{try{const response=await apiFetch('/api/automation/payment-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({integrationIds:[...document.querySelectorAll('.flow-pay-deal:checked')].map(x=>x.value),amountKzt:document.getElementById('flow-pay-amount').value,recipientName:document.getElementById('flow-pay-recipient').value,settlement:document.getElementById('flow-pay-settlement').value,stage:document.getElementById('flow-pay-stage').value,invoiceReference:document.getElementById('flow-pay-invoice').value})});const data=await response.json();if(!response.ok)throw Error(data.error);closeModal();toast('Заявка записана для передачи в реестр CRM');}catch(e){toast(e.message,true)}}};document.getElementById('mm-save').parentElement.prepend(pay);}
++  if(isEdit&&existing.crmBloggerId&&DataManager.state.automationFlow){const pay=document.createElement('button');pay.className='btn btn-ghost';pay.textContent='Подать на оплату → CRM';pay.onclick=()=>{const rows=(DataManager.state.microInfluencerDeals||[]).filter(x=>x.crmBloggerId===existing.crmBloggerId);openModal(`<h3>Заявка в существующий реестр оплат CRM</h3><div class="field"><label>Общая сумма, ₸</label><input id="flow-pay-amount" type="number" step="0.01" min="0.01" value="${existing.cost||''}"></div><div class="field"><label>Получатель</label><input id="flow-pay-recipient"></div><div class="field"><label>Способ расчёта</label><select id="flow-pay-settlement"><option value="ip">ИП</option><option value="cash">Наличные</option></select></div><div class="field"><label>Этап оплаты</label><input id="flow-pay-stage" value="Окончательный расчёт"></div><div class="field"><label>Ссылка на полученный счёт, если есть</label><input id="flow-pay-invoice"></div><div class="field"><label>Видео в этой заявке</label>${rows.map(x=>`<label><input type="checkbox" class="flow-pay-deal" value="${x.id}" ${x.id===existing.id?'checked':''}> №${x.id} · ${escapeHtml(x.product||'')}</label>`).join('')}</div><div class="login-hint">Сумма общая для выбранных видео. Выплата не выполняется. Для ИП без счёта согласование Bitrix не запускается.</div><button class="btn btn-primary" id="flow-pay-submit">Подать заявку</button>`);document.getElementById('flow-pay-submit').onclick=async()=>{try{const response=await apiFetch('/api/automation/payment-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({integrationIds:[...document.querySelectorAll('.flow-pay-deal:checked')].map(x=>x.value),amountKzt:document.getElementById('flow-pay-amount').value,recipientName:document.getElementById('flow-pay-recipient').value,settlement:document.getElementById('flow-pay-settlement').value,stage:document.getElementById('flow-pay-stage').value,invoiceReference:document.getElementById('flow-pay-invoice').value})});const data=await response.json();if(!response.ok)throw Error(data.error);closeModal();toast(data.crmPaymentId?'Заявка записана в CRM: '+data.crmPaymentId:'Заявка сохранена в очереди; CRM пока не подтвердила запись');}catch(e){toast(e.message,true)}}};document.getElementById('mm-save').parentElement.prepend(pay);}
 +
 +  if(isEdit&&(existing.flowBriefHistory||[]).length){
 +    const versions=existing.flowBriefHistory;const row=document.createElement('div');row.className='login-hint';

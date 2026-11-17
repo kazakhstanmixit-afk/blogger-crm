@@ -6,3 +6,9 @@ server/node_modules/
 build/
 client/build/
 server/db.json
+
+# Private browser sessions, screenshots and payment invoices
+instagram-worker/profiles/
+instagram-worker/screenshots/
+server/browser-screenshots/
+server/payment-invoices/

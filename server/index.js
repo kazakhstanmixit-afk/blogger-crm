@@ -1233,7 +1233,9 @@ app.get('/api/bloggers/duplicates', auth, (req, res) => {
 // Additive Apify discovery pilot; existing bloggers and auth are reused.
 require('./discovery').mount(app, {db, auth, parse, makeBlogger});
 require('./communication').createCommunication({db}).mount(app,auth);
+require('./browser-outbox').createBrowserOutbox({db}).mount(app,auth);
 require('./finance-bridge').createFinanceBridge({db}).mount(app);
+require('./bitrix-payments').createBitrixPayments({db}).mount(app,auth);
 require('./discovery-search').createSearch({db,makeBlogger}).mount(app,auth);
 require('./discovery-compose').createCompose({db}).mount(app,auth);
 

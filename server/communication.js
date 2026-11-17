@@ -12,7 +12,7 @@ function createCommunication({db,env=process.env,fetchImpl=fetch,clock=()=>new D
   const handle=String(b.instagram_url||'').split('instagram.com/')[1]?.split(/[/?#]/)[0];if(!/^[a-zA-Z0-9._]{1,30}$/.test(handle||''))throw Error('Проверьте Instagram-профиль');
   Object.assign(d,{status:'queued',channelId:env.INSTAGRAM_CHANNEL_ID,chatId:handle.toLowerCase(),queuedAt:new Date().toISOString()});db.write();return d;
  }
- async function drain(){if(busy||env.DISCOVERY_SEND_MODE!=='on')return;busy=true;try{
+ async function drain(){if(busy||env.INSTAGRAM_TRANSPORT!=='wazzup'||env.DISCOVERY_SEND_MODE!=='on')return;busy=true;try{
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit'}).format(clock());const hour=+new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Almaty',hour:'2-digit',hour12:false}).format(clock());if(hour<10||hour>=20)return;
   const cap=Math.max(1,Math.min(100,Number(env.DISCOVERY_DAILY_CAP)||10));
   for(const d of drafts().filter(x=>x.status==='queued').slice(0,1)){

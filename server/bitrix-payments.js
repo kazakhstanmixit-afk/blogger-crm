@@ -1,0 +1,34 @@
+'use strict';
+const crypto=require('crypto'),fs=require('fs'),path=require('path'),multer=require('multer');
+function createBitrixPayments({db,env=process.env,fetchImpl=fetch}){
+ let busy=false;const root=path.resolve(env.PAYMENT_INVOICE_DIR||path.join(path.dirname(env.DB_PATH||path.join(__dirname,'db.json')),'payment-invoices'));
+ function configure(){let params,fields;try{params=JSON.parse(env.BITRIX_PAYMENT_PARAMS_JSON||'{}');fields=JSON.parse(env.BITRIX_PAYMENT_FIELDS_JSON||'{}')}catch{throw Error('Проверьте схему финансового процесса Bitrix')}
+  const type=env.BITRIX_PAYMENT_OBJECT;if(!['smart','list'].includes(type)||env.BITRIX_PAYMENT_DESTINATION!=='Согласование оплаты')throw Error('Подтвердите существующий процесс «Согласование оплаты»');
+  if(type==='smart'&&!(Number(params.entityTypeId)>0)||type==='list'&&!(Number(params.IBLOCK_ID)>0&&params.IBLOCK_TYPE_ID))throw Error('Нужен точный ID существующего объекта Bitrix');
+  if(!fields.invoice||!fields.externalKey||!fields.amount||!fields.recipient)throw Error('Настройте поля счёта, суммы, получателя и внешнего ID');
+  const base=new URL(env.BITRIX_PAYMENT_WEBHOOK_BASE||'');if(base.protocol!=='https:'||!base.pathname.includes('/rest/'))throw Error('Нужен защищённый действующий REST-вебхук');return {type,params,fields,base};
+ }
+ function attach(paymentId,file,actor,confirmed){const p=db.get('payments').find({id:paymentId}).value();if(!p)throw Error('Заявка не найдена');if(!p.is_ip)throw Error('Этот маршрут только для оплаты ИП');if(!confirmed)throw Error('Подтвердите, что получен и проверен счёт ИП');if(p.bitrix_payment&&['sending','submitted','uncertain'].includes(p.bitrix_payment.status))throw Error('Заявка уже передана или требует сверки Bitrix');
+  if(!file||!file.buffer?.length||file.buffer.length>10*1024*1024)throw Error('Счёт должен быть до 10 МБ');const name=path.basename(file.originalname).replace(/[^\wа-яёА-ЯЁ .()-]/g,'_').slice(0,150);if(!/\.(pdf|docx|png|jpe?g)$/i.test(name))throw Error('Поддерживаются PDF, DOCX и изображения');
+  fs.mkdirSync(root,{recursive:true});const fileId=crypto.randomUUID()+path.extname(name).toLowerCase();fs.writeFileSync(path.join(root,fileId),file.buffer,{mode:0o600,flag:'wx'});
+  p.payment_invoice={fileId,name,sha256:crypto.createHash('sha256').update(file.buffer).digest('hex'),verifiedBy:actor,verifiedAt:new Date().toISOString()};p.bitrix_payment={status:'queued',externalKey:'mixit-payment:'+p.id};p.updated_at=new Date().toISOString();db.write();return {ok:true,invoiceName:name,bitrixStatus:'queued'};
+ }
+ async function call(c,method,body){const u=new URL(method+'.json',c.base.href.replace(/\/?$/,'/'));const r=await fetchImpl(u,{method:'POST',redirect:'error',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Bitrix HTTP '+r.status);const j=await r.json();if(j.error)throw Error('Bitrix отклонил запрос');return j.result;}
+ async function drain(){if(busy||env.BITRIX_PAYMENT_ENABLED!=='1')return;let c;try{c=configure()}catch{return}busy=true;try{
+  for(const p of db.get('payments').value().filter(p=>p.is_ip&&p.payment_invoice?.verifiedAt&&p.bitrix_payment?.status==='queued')){
+   const meta=p.bitrix_payment,invoice=p.payment_invoice;try{
+    const existing=await call(c,c.type==='smart'?'crm.item.list':'lists.element.get',{...c.params,[c.type==='smart'?'filter':'FILTER']:{[c.fields.externalKey]:meta.externalKey}});const items=c.type==='smart'?existing?.items:Object.values(existing||{});if(items?.length){if(items.length!==1){meta.status='needs_review';db.write();continue}meta.status='submitted';meta.itemId=items[0].id||items[0].ID;db.write();continue}
+    if(!/^[a-f0-9-]{36}\.[a-z0-9]+$/.test(invoice.fileId))throw Error('Неверный файл счёта');const bytes=fs.readFileSync(path.join(root,invoice.fileId));if(crypto.createHash('sha256').update(bytes).digest('hex')!==invoice.sha256)throw Error('Файл счёта изменился');
+    const fields={[c.fields.invoice]:[invoice.name,bytes.toString('base64')],[c.fields.externalKey]:meta.externalKey,[c.fields.amount]:p.amount,[c.fields.recipient]:p.recipient_name};if(c.fields.title)fields[c.fields.title]='Оплата блогеру: '+p.recipient_name;if(c.fields.manager)fields[c.fields.manager]=p.manager_id;if(c.fields.reason)fields[c.fields.reason]=p.notes||p.flow_stage||'Интеграция';
+    meta.status='sending';db.write();const result=await call(c,c.type==='smart'?'crm.item.add':'lists.element.add',{...c.params,[c.type==='smart'?'fields':'FIELDS']:fields,...(c.type==='list'?{ELEMENT_CODE:meta.externalKey}:{})});const id=c.type==='smart'?result?.item?.id:result;if(!id)throw Error('Bitrix не вернул ID');meta.status='submitted';meta.itemId=id;meta.submittedAt=new Date().toISOString();db.write();
+   }catch(e){meta.status=meta.status==='sending'?'uncertain':'failed';meta.lastError=meta.status==='uncertain'?'Проверьте существующий элемент Bitrix перед повтором':'Не удалось передать счёт; проверьте конфигурацию и файл';db.write();}
+  }
+ }finally{busy=false}}
+ function mount(app,auth){const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024}}).single('invoice');
+  app.post('/api/payments/:id/invoice',auth,(req,res,next)=>{const p=db.get('payments').find({id:req.params.id}).value();if(!p)return res.status(404).json({error:'Заявка не найдена'});if(req.user.role!=='admin'&&!(req.user.role==='manager'&&(p.manager_id===req.user.id||p.created_by===req.user.id)))return res.status(403).json({error:'Нет доступа'});next()},(req,res,next)=>upload(req,res,e=>e?res.status(400).json({error:'Не удалось загрузить счёт до 10 МБ'}):next()),(req,res)=>{try{res.json(attach(req.params.id,req.file,req.user.id,req.body.confirmed==='true'));drain().catch(()=>{})}catch(e){res.status(409).json({error:e.message})}});
+  app.get('/api/payments/:id/invoice',auth,(req,res)=>{const p=db.get('payments').find({id:req.params.id}).value();if(!p||!p.payment_invoice)return res.status(404).end();if(req.user.role!=='admin'&&p.manager_id!==req.user.id&&p.created_by!==req.user.id)return res.status(403).end();res.set('Cache-Control','no-store');res.download(path.join(root,p.payment_invoice.fileId),p.payment_invoice.name)});
+  for(const p of db.get('payments').value())if(p.bitrix_payment?.status==='sending')p.bitrix_payment.status='uncertain';db.write();const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();
+ }
+ return {attach,drain,mount,configure};
+}
+module.exports={createBitrixPayments};
