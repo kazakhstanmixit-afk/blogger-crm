@@ -442,10 +442,10 @@ index 0000000..c8ddc83
 +module.exports={mount};
 diff --git a/docs/automation-pilot.md b/docs/automation-pilot.md
 new file mode 100644
-index 0000000..87653ef
+index 0000000..aeca609
 --- /dev/null
 +++ b/docs/automation-pilot.md
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,76 @@
 +# MIXIT — связанный операционный цикл
 +
 +Код в ветке: существующие orders/microInfluencerDeals, основной интерфейс, общий вход и audit.js сохранены. Prod не развёрнут. Маршруты основного расширения включаются FLOW_LOGISTICS_ENABLED=1; отдельные внешние действия имеют собственные флаги.
@@ -508,6 +508,20 @@ index 0000000..87653ef
 +Вторая команда запускает настоящий Express server.js на временных синтетических данных без внешних ключей. Проверены auth, расчёт, общая посылка, повтор, сборка, передача, подтверждённая доставка и обратная смена статуса. Основные inline scripts проходят node --check. audit.js и attribution.js не изменены. Произвольный связный rollback всех новых бизнес-событий через старый журнал отдельно не проверялся.
 +
 +До включения: backup state.json/audit/uploads/защищённых видео → тестовый сервер → сверка активных баз Blogery Audit/CRM → настройка защищённых секретов и сотрудников → тестовые контакты → браузер и физический iPhone → отдельное разрешение на боевой запуск. Код и тесты не являются подтверждением prod-работы.
++
++## Доставка, оплаты и сроки контента
++
++`lifecycle.js` добавляет события в существующую интеграцию, не создаёт отдельный календарь. В карточке интеграции на компьютере: «Доставка и сроки +2 / +4»; на `/flow/` в интеграциях доступны сроки и стоимость доставки. Ожидаемая доставка создаёт предварительный план; подтверждение получения блогером — материал +2 календарных дня, публикация +4. Сообщение перевозчика само по себе не запускает срок съёмки. `publishDate` не меняется. Ручной план/факт публикации защищены: новый расчёт сохраняется в `suggestedPlan` для рассмотрения менеджером.
++
++Оплата сама по себе не запускает отсчёт. `FLOW_PAYMENT_PURPOSE_MAP_JSON` связывает фактические названия этапов CRM с `buyout`, `delivery`, `content`, например `{"выкуп":"buyout","доставка":"delivery","видео":"content"}`. При проверенном `paid` от CRM фиксируется назначение и создаётся один черновик сообщения; повторный опрос не дублирует сообщение. «Подано» не считается оплатой. Без сопоставления этапа уведомление не создаётся. Общий файловый процесс оплаты Нины не заменяется.
++
++Сообщения пока сохраняются как черновики внутри интеграции и показываются в разделе сроков. Автоматическая отправка этих новых уведомлений в WhatsApp не подключена; включение старых транспортов само по себе их не отправляет. Входящие ответы с датами нужно подтвердить через форму; автоматическое извлечение дат из WhatsApp в эти события ещё не связано.
++
++## Счёт подаётся из Barter Box
++
++В основной форме интеграции «Подать на оплату»: сумма, получатель, способ расчёта, этап, связанные видео и файл счёта ИП. Менеджер подтверждает проверку счёта. Файл сохраняется в приватном `FLOW_PAYMENT_INVOICE_DIR` (по умолчанию `DATA_DIR/payment-invoices`), затем платёж регистрируется в существующем реестре Blogger CRM, файл передаётся межсерверно и существующий адаптер CRM отправляет его в процесс Bitrix «Согласование оплаты». Менеджеру не нужно повторно прикреплять файл в CRM. CRM остаётся отчётностью и единой точкой технической отправки в Bitrix, ключ Bitrix в браузер не передаётся.
++
++Нужны FINANCE_BRIDGE_ENABLED на обоих сервисах, согласованный FLOW_CRM_SECRET, CRM_ORIGIN и сопоставление сотрудников, постоянные диски; в CRM точный вебхук, ID процесса и поля Bitrix плюс BITRIX_PAYMENT_ENABLED=1. Без реальной настройки статус не выдаётся за успешную подачу. «В CRM» и «Передано в Bitrix» показываются отдельно. Наличные не направляются в Bitrix этой веткой. Подано не означает оплачено. Повторная передача того же файла идемпотентна; другой файл для уже прикреплённого счёта отклоняется.
 diff --git a/docs/runtime-configuration.env.example b/docs/runtime-configuration.env.example
 new file mode 100644
 index 0000000..764356c
@@ -539,12 +553,12 @@ index 0000000..764356c
 +CRM_COMMS_WEBHOOK_SECRET=
 diff --git a/finance-client.js b/finance-client.js
 new file mode 100644
-index 0000000..fcd1103
+index 0000000..75fb21a
 --- /dev/null
 +++ b/finance-client.js
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,21 @@
 +'use strict';
-+const crypto=require('crypto');
++const crypto=require('crypto'),fs=require('fs'),path=require('path'),multer=require('multer');
 +function createFinanceClient({getState,persist,env=process.env,fetchImpl=fetch}){
 + let busy=false;const records=()=>getState().flowFinance||(getState().flowFinance=[]);
 + function request(raw,actor){const st=getState(),ids=[...new Set((raw.integrationIds||[]).map(String))];if(!ids.length)throw Error('Выберите интеграции');const deals=ids.map(id=>st.microInfluencerDeals.find(d=>String(d.id)===id));if(deals.some(d=>!d))throw Error('Интеграция не найдена');const bloggerId=deals[0].crmBloggerId;if(!bloggerId||deals.some(d=>d.crmBloggerId!==bloggerId))throw Error('Интеграции должны быть связаны с одним блогером CRM');
@@ -554,11 +568,13 @@ index 0000000..fcd1103
 +  const r={id:crypto.randomUUID(),status:'pending',requestedBy:actor,createdAt:new Date().toISOString(),nextAt:0,payload:{bloggerId,managerId,integrationIds:ids,stage,amountMinor:minor,settlement:raw.settlement,recipientName:String(raw.recipientName).slice(0,200),invoiceReference:String(raw.invoiceReference||'').slice(0,2000),notes:String(raw.notes||'').slice(0,3000)}};records().push(r);persist();return r;
 + }
 + async function drain(){if(busy||env.FINANCE_BRIDGE_ENABLED!=='1'||!env.CRM_ORIGIN||(env.FLOW_CRM_SECRET||'').length<32)return;busy=true;try{const origin=new URL(env.CRM_ORIGIN);if(origin.protocol!=='https:')return;
-+  for(const row of records().filter(r=>r.nextAt<=Date.now()).slice(0,20)){try{const endpoint=row.crmPaymentId?'/api/integrations/payments/'+encodeURIComponent(row.crmPaymentId):'/api/integrations/payments';const response=await fetchImpl(new URL(endpoint,origin),{method:row.crmPaymentId?'GET':'POST',redirect:'error',signal:AbortSignal.timeout(12000),headers:{Authorization:'Bearer '+env.FLOW_CRM_SECRET,'Content-Type':'application/json','Idempotency-Key':'payment:'+row.id},body:row.crmPaymentId?undefined:JSON.stringify(row.payload)});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data.crmPaymentId||data.amountMinor!==row.payload.amountMinor)throw Error('Не совпадает платёж CRM');row.crmPaymentId=data.crmPaymentId;row.status=data.status;row.receipts=data.receipts||[];row.lastError=null;row.updatedAt=new Date().toISOString();
-+   for(const id of row.payload.integrationIds){const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===id);if(deal){deal.flowPaymentId=row.crmPaymentId;deal.flowPaymentStatus=row.status;deal.flowPaymentReceipts=row.receipts;if(row.status==='paid')deal.paymentStatus='оплачено';else if(deal.paymentStatus==='оплачено')deal.paymentStatus='к оплате';}}
++  for(const row of records().filter(r=>r.nextAt<=Date.now()).slice(0,20)){try{const endpoint=row.crmPaymentId?'/api/integrations/payments/'+encodeURIComponent(row.crmPaymentId):'/api/integrations/payments';const response=await fetchImpl(new URL(endpoint,origin),{method:row.crmPaymentId?'GET':'POST',redirect:'error',signal:AbortSignal.timeout(12000),headers:{Authorization:'Bearer '+env.FLOW_CRM_SECRET,'Content-Type':'application/json','Idempotency-Key':'payment:'+row.id},body:row.crmPaymentId?undefined:JSON.stringify(row.payload)});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data.crmPaymentId||data.amountMinor!==row.payload.amountMinor)throw Error('Не совпадает платёж CRM');row.crmPaymentId=data.crmPaymentId;row.status=data.status;row.receipts=data.receipts||[];row.bitrixStatus=data.bitrixStatus||null;row.bitrixItemId=data.bitrixItemId||null;
++   if(row.invoice&&!row.invoiceUploaded){const f=row.invoice,form=new FormData();form.append('managerId',row.payload.managerId);form.append('confirmed','true');form.append('invoice',new Blob([fs.readFileSync(f.path)]),f.name);const uploaded=await fetchImpl(new URL('/api/integrations/payments/'+encodeURIComponent(row.crmPaymentId)+'/invoice',origin),{method:'POST',redirect:'error',signal:AbortSignal.timeout(30000),headers:{Authorization:'Bearer '+env.FLOW_CRM_SECRET},body:form});if(!uploaded.ok)throw Error('HTTP '+uploaded.status);const ack=await uploaded.json();if(ack.crmPaymentId!==row.crmPaymentId||ack.invoiceSha256!==f.sha256)throw Error('Не совпадает счёт');row.invoiceUploaded=true;row.bitrixStatus=ack.bitrixStatus;row.bitrixItemId=ack.bitrixItemId;}
++row.lastError=null;row.updatedAt=new Date().toISOString();
++   for(const id of row.payload.integrationIds){const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===id);if(deal){deal.flowPaymentId=row.crmPaymentId;deal.flowPaymentStatus=row.status;deal.flowPaymentReceipts=row.receipts;if(row.status==='paid'){deal.paymentStatus='оплачено';let purposes={};try{purposes=JSON.parse(env.FLOW_PAYMENT_PURPOSE_MAP_JSON||'{}')}catch{}const purpose=purposes[row.payload.stage];if(['buyout','delivery','content'].includes(purpose))require('./lifecycle').applyEvent(getState(),id,{type:'payment_paid',purpose,crmPaymentId:row.crmPaymentId,confirmed:true,key:'crm-paid:'+row.crmPaymentId+':'+purpose},'CRM');}else if(deal.paymentStatus==='оплачено')deal.paymentStatus='к оплате';}}
 +  }catch(e){row.lastError=/^HTTP \d+$/.test(e.message)?e.message:'Не удалось сверить заявку с CRM';}row.nextAt=Date.now()+60000;persist();}
 + }finally{busy=false}}
-+ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;app.post('/api/automation/payment-request',requireAuth,async(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});try{const row=request(req.body||{},req.session.name||'общий вход');await drain();res.status(row.crmPaymentId?201:202).json(row)}catch(e){res.status(409).json({error:e.message})}});app.get('/api/automation/payments',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});res.json({payments:records()})});const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();}
++ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024}}).single('invoice');app.post('/api/automation/payment-request',requireAuth,(req,res,next)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});next()},(req,res,next)=>upload(req,res,e=>e?res.status(400).json({error:'Не удалось загрузить счёт до 10 МБ'}):next()),async(req,res)=>{try{const raw=req.body.payload?JSON.parse(req.body.payload):req.body;if(raw.settlement==='ip'&&(!req.file||raw.invoiceConfirmed!==true))throw Error('Для ИП прикрепите и подтвердите полученный счёт');let invoice;if(req.file){if(raw.settlement!=='ip')throw Error('Счёт предназначен для заявки ИП');const name=path.basename(req.file.originalname).replace(/[^\wа-яёА-ЯЁ .()-]/g,'_').slice(0,150);if(!/\.(pdf|docx|png|jpe?g)$/i.test(name))throw Error('Счёт: PDF, DOCX, PNG, JPG');const sha256=crypto.createHash('sha256').update(req.file.buffer).digest('hex');const root=path.resolve(env.FLOW_PAYMENT_INVOICE_DIR||path.join((env.DATA_DIR||path.join(__dirname,'data')),'payment-invoices'));fs.mkdirSync(root,{recursive:true});const filePath=path.join(root,sha256+path.extname(name).toLowerCase());fs.writeFileSync(filePath,req.file.buffer,{mode:0o600});invoice={path:filePath,name,sha256};}const row=request(raw,req.session.name||'общий вход');if(invoice){if(row.invoice&&row.invoice.sha256!==invoice.sha256)throw Error('Этап уже подан с другим счётом');row.invoice=row.invoice||invoice;row.nextAt=0;persist();}await drain();const {invoice:privateFile,...view}=row;res.status(row.crmPaymentId?201:202).json(view)}catch(e){res.status(409).json({error:e.message})}});app.get('/api/automation/payments',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});res.json({payments:records().map(({invoice,...row})=>({...row,invoiceName:invoice?.name}))})});const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();}
 + return {request,drain,mount};
 +}
 +module.exports={createFinanceClient};
@@ -593,10 +609,10 @@ index 0000000..6fb1958
 +module.exports={createMedia};
 diff --git a/flow-mobile/app.js b/flow-mobile/app.js
 new file mode 100644
-index 0000000..aab379d
+index 0000000..16cc187
 --- /dev/null
 +++ b/flow-mobile/app.js
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,34 @@
 +'use strict';
 +const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 +const money=v=>new Intl.NumberFormat('ru-KZ',{style:'currency',currency:'KZT',maximumFractionDigits:2}).format(v/100);
@@ -612,9 +628,13 @@ index 0000000..aab379d
 +function login(){$('#app').innerHTML=`<div class="login panel"><div class="brand">MIXIT<span>Flow</span></div><h1>Доставки команды</h1><p>Используйте существующий вход Barter Box.</p><form id="login"><label>Роль</label><select name="role"><option value="marketer">Маркетолог</option><option value="manager">Менеджер / логист</option></select>${input('login','Логин')}${input('password','Пароль','','password')}<button class="primary">Войти</button></form><p><small>Новых обязательных персональных аккаунтов нет.</small></p></div>`;$('#login').onsubmit=async e=>{e.preventDefault();try{const data=Object.fromEntries(new FormData(e.target)),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),j=await r.json();if(!r.ok)throw Error(j.error);session={role:data.role,authToken:j.token,readOnly:!!j.readOnly};localStorage.setItem('barterBoxApp_session',JSON.stringify(session));await load()}catch(err){toast(err.message)}}}
 +async function load(){state=await api('/api/automation/state');const editing=await api('/api/automation/editing');editingTasks=editing.tasks;render()}
 +function render(){const active=state.orders.filter(o=>!['delivered','cancelled'].includes(o.status));$('#app').innerHTML=`<aside><div class="brand">MIXIT<span>Flow</span></div><div class="workspace-label">ДОСТАВКИ · BARTER BOX</div><nav>${btn('Очередь Саи','tab','orders',tab==='orders')}${btn('Интеграции','tab','deals',tab==='deals')}${btn('Справочник товаров','tab','catalog',tab==='catalog')}${btn('Входящие материалы','tab','incoming',tab==='incoming')}${btn('Монтаж','tab','editing',tab==='editing')}${btn('События','tab','events',tab==='events')}</nav><div class="aside-bottom"><p>Работаем с существующими orders и интеграциями.</p><a href="/">Открыть Barter Box ↗</a></div></aside><main><div class="topbar"><span>ЕДИНАЯ ЛОГИСТИКА</span><span>${esc(actor)}</span></div><div class="heading"><div><div class="eyebrow">Координатор — Сая</div><h1>${tab==='orders'?'Посылки под контролем':tab==='deals'?'Заявка из интеграции':tab==='catalog'?'Товары и себестоимость':tab==='editing'?'Задачи монтажёра':tab==='incoming'?'Привязать входящие материалы':'История мобильного процесса'}</h1><p class="muted">Без повторного ввода адресов и пересылки списков.</p></div>${btn('Указать своё имя','actor')}</div><div class="notice">Пилот под флагом FLOW_LOGISTICS_ENABLED. Внешние сообщения и выплаты не отправляются. Имя исполнителя указывается при общем входе.</div>${tab==='orders'?`<div class="stats"><div class="stat">На распределении<strong>${state.orders.filter(o=>o.fulfillment.stage==='distribution').length}</strong></div><div class="stat">На сборке<strong>${state.orders.filter(o=>o.fulfillment.stage==='assigned').length}</strong></div><div class="stat">В работе<strong>${active.length}</strong></div><div class="stat">Отправлено товаров<strong>${money(state.orders.filter(o=>['in_route','delivered'].includes(o.status)).reduce((s,o)=>s+o.fulfillment.costMinor,0))}</strong></div></div><div class="grid">${state.orders.map(o=>{const f=o.fulfillment,s=o.status==='delivered'?'delivered':o.status==='cancelled'?'cancelled':f.stage;return `<article class="card"><div class="card-top"><span class="badge">${esc(stages[s]||s)}</span><small>Заказ №${o.id}</small></div><h2>${esc(o.blogger)}</h2><p>${esc(o.city)} · ${esc(o.address)}</p><small>${esc(o.phone)}</small><div class="facts"><div>Склад<strong>${esc(f.warehouse||'—')}</strong></div><div>Сборщик<strong>${esc(f.assembler||'—')}</strong></div></div>${f.items.map(x=>`<p><small>${esc(x.name)} × ${x.qty}</small></p>`).join('')}<p><b>${money(f.costMinor)}</b> · ${o.dealIds.length} интеграций</p>${f.note?`<p class="notice">${esc(f.note)}</p>`:''}${f.tracking?`<p>${esc(f.carrier)} · ${esc(f.tracking)}</p>`:''}<div class="actions">${['distribution','assigned'].includes(s)?btn('Назначить сборщика','assign',o.id,true):''}${s==='assigned'?btn('Собрано','assembled',o.id)+btn('Нехватка','shortage',o.id):''}${s==='shortage'?btn('Вернуть на сборку','assigned',o.id):''}${s==='assembled'?btn('Передать в доставку','dispatched',o.id,true):''}${s==='dispatched'?btn('Фото: доставлено','delivered',o.id,true):''}${!['dispatched','delivered','cancelled'].includes(s)?btn('Отменить','cancelled',o.id):''}</div></article>`}).join('')||'<div class="empty">Оформите первую отправку из существующей интеграции.</div>'}</div>`:tab==='deals'?`<input id="search" placeholder="Поиск по блогеру или менеджеру"><div id="deals" class="grid actions">${dealCards(state.deals)}</div>`:tab==='catalog'?`<div class="actions">${btn('Загрузить нормализованный catalog.json','catalog_import','',true)}</div><p class="muted">Файл подготовлен из ваших Excel. Стоимость — в тенге. «В продаже» не считается складским остатком.</p><div class="panel table-wrap"><table><thead><tr><th>Товар</th><th>ШК</th><th>Себестоимость</th><th>Kaspi</th></tr></thead><tbody>${state.catalog.map(p=>`<tr><td>${esc(p.name)}<br><small>${esc(p.sku)}</small></td><td>${esc(p.barcode)}</td><td>${money(p.costMinor)}</td><td>${esc(p.kaspiArticle||'На сверку')}</td></tr>`).join('')}</tbody></table></div>`:tab==='incoming'?`<div class="grid">${(state.pendingMedia||[]).map(m=>`<article class="card"><span class="badge warn">Нужен выбор интеграции</span><p>${esc(m.text||m.type)}</p>${/^https:\/\//.test(m.url)?`<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">Открыть материал ↗</a>`:''}<div class="actions">${btn('Выбрать интеграцию','media_attach',m.messageId,true)}</div></article>`).join('')||'<div class="empty">Неоднозначных материалов нет.</div>'}</div>`:tab==='editing'?`<div class="grid">${editingTasks.map(t=>`<article class="card"><span class="badge">${esc(t.status)}</span><h2>${esc(t.blogger)}</h2><p>Исходник v${t.versionNumber||'—'}</p><p>${esc(t.note||'')}</p>${t.source?`<a href="${esc(t.source)}" target="_blank" rel="noopener noreferrer">Исходное видео ↗</a>`:''}<div class="actions">${t.status==='pending'?btn('Загрузить готовый монтаж','editing_upload',t.id,true):''}</div></article>`).join('')||'<div class="empty">Нет задач на монтаж.</div>'}</div>`:`<section class="panel">${state.events.map(e=>`<div class="list-row"><div><p>${esc(e.action)}</p><small>${esc(e.actor)} · ${esc(e.at)} · ${esc(e.entityId)}</small></div></div>`).join('')||'Событий пока нет.'}</section>`}</main>`;if($('#search'))$('#search').oninput=e=>{$('#deals').innerHTML=dealCards(state.deals.filter(d=>`${d.blogerName} ${d.responsible}`.toLowerCase().includes(e.target.value.toLowerCase())))};}
-+function dealCards(deals){return deals.map(d=>`<article class="card"><small>Интеграция №${d.id} · ${esc(d.responsible)}</small><h2>${esc(d.blogerName)}</h2><p>${esc(d.product||'Товары выбираются при заявке')}</p><small>План: ${esc(d.plannedDate||'—')} · ${esc(d.productStatus||'Нет статуса')}</small><div class="actions">${btn('Оформить отправку','request',d.id,true)}</div></article>`).join('')}
++function dealCards(deals){return deals.map(d=>`<article class="card"><small>Интеграция №${d.id} · ${esc(d.responsible)}</small><h2>${esc(d.blogerName)}</h2><p>${esc(d.product||'Товары выбираются при заявке')}</p><small>План: ${esc(d.plannedDate||'—')} · ${esc(d.productStatus||'Нет статуса')}</small><div class="actions">${btn('Оформить отправку','request',d.id,true)}${btn('Доставка и сроки','lifecycle',d.id)}${btn('Стоимость доставки','delivery_details',d.id)}</div></article>`).join('')}
 +function productLines(){const div=$('#product-lines');div.innerHTML=pendingItems.map((p,i)=>`<div class="itemline"><select data-product="${i}">${state.catalog.map(x=>`<option value="${esc(x.id)}" ${x.id===p.productId?'selected':''}>${esc(x.name)} · ${money(x.costMinor)}</option>`).join('')}</select><input type="number" aria-label="Количество" min="1" step="1" value="${p.qty}" data-qty="${i}" required><button type="button" data-remove="${i}">×</button></div>`).join('');function total(){$('#total').textContent='Себестоимость: '+money(pendingItems.reduce((s,p)=>s+(state.catalog.find(x=>x.id===p.productId)?.costMinor||0)*p.qty,0))}total();div.querySelectorAll('[data-product]').forEach(x=>x.onchange=()=>{pendingItems[+x.dataset.product].productId=x.value;total()});div.querySelectorAll('[data-qty]').forEach(x=>x.oninput=()=>{pendingItems[+x.dataset.qty].qty=+x.value;total()});div.querySelectorAll('[data-remove]').forEach(x=>x.onclick=()=>{pendingItems.splice(+x.dataset.remove,1);productLines()})}
 +async function action(a,id){
++ if(a==='delivery_details'){modal('Стоимость товара и доставки','<label>Получение</label><select name="mode"><option value="self_purchase">Самовыкуп</option><option value="courier">Наш курьер</option></select>'+input('goodsKzt','Стоимость товаров, ₸','0','number')+input('deliveryKzt','Стоимость доставки, ₸','0','number')+'<label>Адрес (если уже известен)</label><textarea name="address"></textarea>',v=>api('/api/automation/lifecycle/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...v,type:'delivery_details',key:crypto.randomUUID()})}));return}
++
++ if(a==='lifecycle'){const l=await api('/api/automation/lifecycle/'+encodeURIComponent(id));modal('Доставка и сроки',`<p>Материал: ${esc(l.materialDueDate||'—')} · План публикации: ${esc(l.plan?.publicationDate||'—')} ${l.plan?.tentative?'(предварительно)':''}</p>${l.suggestedPlan?'<p class="notice">Есть предложение переноса: '+esc(l.suggestedPlan.publicationDate)+'. Существующая дата сохранена.</p>':''}<label>Событие</label><select name="type"><option value="expected_delivery">Ожидаемая доставка</option><option value="received">Блогер подтвердил получение</option><option value="carrier_delivered">Перевозчик сообщил о доставке</option></select>${input('date','Дата','','date')}<p>Срок материала +2 дня, предварительный план публикации +4 дня. Согласованные и вручную заданные даты не перезаписываются.</p><h3>Сообщения — черновики</h3>${(l.messages||[]).map(m=>'<p>'+esc(m.text)+'</p>').join('')}`,v=>api('/api/automation/lifecycle/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...v,key:crypto.randomUUID()})}));return}
++
 + if(a==='tab'){tab=id;render();return}
 + if(a==='actor'){modal('Кто выполняет действие',input('name','Имя сотрудника',actor),async d=>{actor=d.name.trim();localStorage.setItem('mixitFlowActor',actor)});return}
 + if(a==='catalog_import'){modal('Импорт справочника',`<p>Выберите подготовленный catalog.json. Сначала проверка без записи.</p><input id="catalog-file" type="file" accept=".json" required><button type="button" id="check">Проверить</button><pre id="report"></pre>`,async()=>{const file=$('#catalog-file').files[0];if(!file)throw Error('Выберите файл');const items=JSON.parse(await file.text());await cmd('catalog_import',{items,dryRun:false})});$('#check').onclick=async()=>{try{const f=$('#catalog-file').files[0];if(!f)throw Error('Выберите файл');const items=JSON.parse(await f.text()),r=await cmd('catalog_import',{items,dryRun:true});$('#report').textContent=JSON.stringify(r,null,2)}catch(e){toast(e.message)}};return}
@@ -626,7 +646,7 @@ index 0000000..aab379d
 + if(a==='delivered'){modal('Подтверждённая доставка',`<p>Используется существующий маршрут доставки с обязательным фото. Все связанные интеграции обновятся.</p><label>Фото доставки</label><input id="photo" type="file" accept="image/*" required>${input('comment','Комментарий','Доставка подтверждена')}`,async v=>{const data=new FormData();data.append('photo',$('#photo').files[0]);data.append('comment',v.comment);await api('/api/orders/'+encodeURIComponent(id)+'/deliver',{method:'POST',body:data})});return}
 +}
 +document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b){b.disabled=true;Promise.resolve(action(b.dataset.action,b.dataset.id)).catch(e=>toast(e.message)).finally(()=>b.disabled=false)}});
-+if(session?.authToken)load().catch(e=>toast(e.message));else login();
++if(session?.authToken)load().then(()=>{const id=new URLSearchParams(location.search).get('lifecycle');if(id)return action('lifecycle',id)}).catch(e=>toast(e.message));else login();
 diff --git a/flow-mobile/icon.svg b/flow-mobile/icon.svg
 new file mode 100644
 index 0000000..1b97e21
@@ -655,6 +675,44 @@ index 0000000..cacf8ba
 +++ b/flow-mobile/style.css
 @@ -0,0 +1 @@
 +:root{font-family:Arial,Helvetica,sans-serif;color:#202d27;background:#f5f6f1;font-synthesis:none;--green:#1e3b2e;--muted:#707a72;--line:#e2e6dd;--lime:#d9edb3}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a,input,select{touch-action:manipulation}button{cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:11px 15px;background:white;color:var(--green);font-weight:600;min-height:44px}button:hover{background:#edf2e7}button.primary{background:var(--green);color:white;border-color:var(--green)}button.danger{color:#a14b36}button:disabled{opacity:.45;cursor:wait}a{color:var(--green)}input,select,textarea{width:100%;border:1px solid #d8dfd3;background:#fff;border-radius:9px;padding:12px;color:#202d27;font-size:16px}textarea{min-height:100px;resize:vertical}label{display:block;font-size:13px;font-weight:600;margin:16px 0 7px}small,.muted{color:var(--muted);line-height:1.5}h1,h2,h3,p{margin-top:0}h1{font-size:30px;letter-spacing:-1px;margin-bottom:8px}h2{font-size:20px;letter-spacing:-.5px}h3{font-size:16px;margin-bottom:9px}p{line-height:1.5}aside{position:fixed;inset:0 auto 0 0;width:224px;padding:30px 20px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:10}.brand{font-size:27px;letter-spacing:-1.5px;font-weight:900}.brand span{font-size:15px;letter-spacing:0;font-weight:400;margin-left:7px}.workspace-label{font-size:10px;letter-spacing:1.8px;color:var(--muted);margin:12px 0 35px}nav{display:flex;flex-direction:column;gap:6px}nav button{border:0;background:transparent;text-align:left;font-size:14px;font-weight:500}nav button.active{background:var(--green);color:white}nav button .num{float:right;opacity:.7}.aside-bottom{margin-top:auto;font-size:12px;padding-top:20px}.avatar{display:inline-grid;place-items:center;width:38px;height:38px;background:var(--lime);border-radius:50%;font-weight:bold;margin-right:9px}.person{display:flex;align-items:center;margin:18px 0}.person small{display:block}main{margin-left:224px;padding:28px 42px 70px;max-width:1560px}.topbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:30px;font-size:12px;color:var(--muted)}.badge{display:inline-block;font-size:11px;padding:6px 9px;border-radius:7px;background:#edf1e8;color:#4d6143;line-height:1.2}.badge.warn{background:#fff0d6;color:#926522}.badge.red{background:#fce9e3;color:#a14b36}.badge.green{background:#dff0d7;color:#325b28}.heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:25px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.7px;color:#61724f;margin-bottom:11px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:25px}.stat{background:white;border:1px solid var(--line);border-radius:14px;padding:20px}.stat strong{font-size:32px;display:block;letter-spacing:-1px;margin:12px 0}.stat small{font-size:12px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.split{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}.card,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;overflow-wrap:anywhere}.card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px}.profile{display:flex;gap:12px;align-items:center}.profile .avatar{border-radius:12px;width:46px;height:46px;flex-shrink:0}.profile p{margin-bottom:2px;font-weight:600}.profile a{font-size:12px;color:var(--muted)}.facts{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:15px;font-size:12px}.facts strong{display:block;font-size:15px;margin-top:4px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:17px}.actions button{font-size:12px;padding:9px 12px}.toolbar{display:flex;gap:12px;margin:0 0 22px}.toolbar input{max-width:420px}.toolbar select{max-width:210px}.empty{text-align:center;padding:38px 20px;color:var(--muted);border:1px dashed #ccd5c2;border-radius:12px;background:#fafbf8}.list-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}.list-row:last-child{border:0}.list-row p{margin-bottom:4px;font-size:14px}.list-row small{font-size:12px}.hero{background:var(--green);color:white;border-radius:15px;padding:25px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;gap:16px}.hero p{color:#c9d5c5;margin-bottom:0;font-size:13px}.hero button{background:var(--lime);border:0}.notice{background:#fff8e8;border:1px solid #efe3c2;color:#7b632d;padding:13px 16px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:20px}.total{padding:15px;background:#edf3e5;border-radius:10px;margin-top:16px;font-weight:700}.itemline{display:grid;grid-template-columns:1fr 75px 40px;gap:7px;margin:9px 0}.itemline select{font-size:13px}.itemline button{padding:5px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--muted);font-weight:500;padding:13px 10px;border-bottom:1px solid var(--line)}td{padding:14px 10px;border-bottom:1px solid var(--line);max-width:320px;overflow-wrap:anywhere}dialog{border:1px solid var(--line);border-radius:18px;padding:26px;width:min(620px,calc(100% - 24px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#14211788}.modal-head{display:flex;align-items:center;justify-content:space-between;gap:15px}.modal-head button{border:0}.login{max-width:440px;margin:9vh auto;padding:35px}.login .brand{margin-bottom:30px}.login button{width:100%;margin-top:23px}.login small{display:block;margin-top:20px}.loading{opacity:.5}#toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#1e3b2e;color:white;padding:14px 20px;border-radius:12px;z-index:100;display:none;max-width:90%;font-size:14px}#toast.error{background:#9f4834}.flow-step{border-left:2px solid #c8ddb4;padding:0 0 20px 20px;margin-left:8px}.flow-step h3{margin-bottom:5px}.flow-step p{font-size:13px;color:var(--muted)}.checkrow{display:flex;align-items:center;gap:9px;font-size:13px;margin:9px 0}.checkrow input{width:20px;min-height:20px}pre{white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto;background:#f6f7f2;padding:14px;border-radius:8px}.productname{max-width:330px}.nowrap{white-space:nowrap}@media(min-width:1600px){main{margin-right:auto}}@media(max-width:1100px){main{padding:25px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.split{grid-template-columns:1fr}.stats{gap:10px}.stat{padding:15px}}@media(max-width:760px){aside{position:sticky;top:0;width:100%;height:auto;padding:12px 16px;border-right:0;border-bottom:1px solid var(--line)}.brand{font-size:23px}.workspace-label,.aside-bottom{display:none}nav{flex-direction:row;overflow:auto;margin-top:11px;padding-bottom:3px;gap:5px}nav button{white-space:nowrap;font-size:12px;padding:9px 12px;min-height:38px}nav button .num{display:none}main{margin:0;padding:18px 15px 45px}.topbar{padding-bottom:14px;margin-bottom:20px}.heading{align-items:flex-start}.heading button{font-size:12px;padding:10px}.heading h1{font-size:25px}.heading p{font-size:12px}.stats{grid-template-columns:repeat(2,1fr)}.stat strong{font-size:28px}.stat{padding:15px}.grid{grid-template-columns:1fr}.hero{padding:20px;align-items:flex-start}.hero h2{font-size:18px}.hero button{font-size:12px;flex-shrink:0}.toolbar{flex-wrap:wrap}.toolbar input,.toolbar select{max-width:100%}.row2{grid-template-columns:1fr}.card{padding:18px}.login{margin:3vh auto;padding:23px}.itemline{grid-template-columns:minmax(0,1fr) 65px 35px}.modal-head h2{font-size:19px}.list-row{align-items:flex-start}.topbar span:last-child{max-width:45%;text-align:right}}
+diff --git a/lifecycle.js b/lifecycle.js
+new file mode 100644
+index 0000000..69a5a17
+--- /dev/null
++++ b/lifecycle.js
+@@ -0,0 +1,32 @@
++'use strict';
++const crypto=require('crypto');
++const validDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
++const plus=(s,n)=>{const d=new Date(s+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
++function applyEvent(state,id,input,actor){
++ const d=(state.microInfluencerDeals||[]).find(d=>String(d.id)===String(id));if(!d)throw Error('Интеграция не найдена');
++ if(!['expected_delivery','received','carrier_delivered','delivery_details','payment_paid'].includes(input.type))throw Error('Неизвестное событие');
++ const key=String(input.key||'');if(key.length<8||key.length>200)throw Error('Нужен постоянный ключ события');
++ const l=d.flowLifecycle||(d.flowLifecycle={events:[],messages:[],payments:{}}),fingerprint=JSON.stringify(input);const old=l.events.find(e=>e.key===key);if(old){if(old.fingerprint!==fingerprint)throw Error('Ключ использован для другого события');return l;}
++ if(['expected_delivery','received','carrier_delivered'].includes(input.type)&&!validDate(input.date))throw Error('Укажите корректную дату');
++ if(input.type==='payment_paid'&&(!['buyout','delivery','content'].includes(input.purpose)||!input.crmPaymentId||input.confirmed!==true))throw Error('Нужно подтверждение оплаты CRM и назначение');
++ if(input.type==='delivery_details'){for(const k of ['goodsKzt','deliveryKzt'])if(!Number.isSafeInteger(Number(input[k]))||Number(input[k])<0)throw Error('Проверьте стоимость');if(!['courier','self_purchase'].includes(input.mode))throw Error('Укажите способ получения');}
++ let text='';
++ if(input.type==='delivery_details'){l.delivery={mode:input.mode,goodsKzt:Number(input.goodsKzt),deliveryKzt:Number(input.deliveryKzt),address:String(input.address||'').slice(0,1000)};text=input.mode==='courier'?'Для курьерской доставки пришлите, пожалуйста, адрес, ФИО получателя и телефон.':'Подтвердите, пожалуйста, стоимость выбранных товаров и доставки отдельно.';}
++ if(input.type==='payment_paid'){const paymentKey=input.purpose+':'+input.crmPaymentId;if(!l.payments[paymentKey]){l.payments[paymentKey]={crmPaymentId:input.crmPaymentId,at:new Date().toISOString()};text=input.purpose==='buyout'?'Оплату за выкуп отправили. После оформления заказа пришлите, пожалуйста, ожидаемую дату доставки.':input.purpose==='delivery'?'Оплату доставки отправили. Подскажите, пожалуйста, ожидаемую дату получения товара.':'Оплата за контент подтверждена. Спасибо!';}}
++ if(input.type==='carrier_delivered')l.carrierDeliveredDate=input.date;
++ if(input.type==='expected_delivery')l.expectedDeliveryDate=input.date;
++ if(input.type==='received'){l.receivedDate=input.date;d.productStatus='товар доставлен';}
++ if(['expected_delivery','received'].includes(input.type)){
++  const base=l.receivedDate||input.date,proposal={baseDate:base,materialDueDate:plus(base,2),publicationDate:plus(base,4),tentative:!l.receivedDate};
++  const previous=l.plan;const protectedPlan=l.planConfirmed||d.publishDate||d.videoStatus==='опубликовано'||(d.plannedDate&&d.plannedDate!==previous?.publicationDate);
++  if(protectedPlan){l.suggestedPlan=proposal;}else{l.plan=proposal;d.plannedDate=proposal.publicationDate;l.materialDueDate=proposal.materialDueDate;delete l.suggestedPlan;}
++  if(input.type==='received')text=`Подтвердили получение товара. Подскажите, сможете прислать материал на согласование до ${proposal.materialDueDate}? Дату публикации согласуем после проверки.`;
++ }
++ if(text)l.messages.push({id:crypto.randomUUID(),eventKey:key,text,status:'draft',createdAt:new Date().toISOString()});
++ l.events.push({id:crypto.randomUUID(),key,fingerprint,type:input.type,date:input.date||null,actor,at:new Date().toISOString()});return l;
++}
++function mount(app,{getState,persist,requireAuth,env=process.env}){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;const guard=(req,res,next)=>['manager','marketer'].includes(req.session.role)?next():res.status(403).json({error:'Нет доступа'});
++ app.get('/api/automation/lifecycle/:id',requireAuth,guard,(req,res)=>{const d=getState().microInfluencerDeals.find(d=>String(d.id)===req.params.id);if(!d)return res.status(404).end();res.json(d.flowLifecycle||{events:[],messages:[],payments:{}})});
++ app.post('/api/automation/lifecycle/:id',requireAuth,guard,(req,res)=>{try{if(req.body.type==='payment_paid')throw Error('Оплата приходит только из CRM');const r=applyEvent(getState(),req.params.id,req.body,req.session.name||req.session.role);persist();res.json(r)}catch(e){res.status(409).json({error:e.message})}});
++}
++module.exports={applyEvent,mount,plus};
 diff --git a/logistics-digests.js b/logistics-digests.js
 new file mode 100644
 index 0000000..64f94a5
@@ -723,7 +781,7 @@ index 0000000..741a999
 + if(global)global.mountFlowProductPicker=mountFlowProductPicker;
 +})(typeof window!=='undefined'?window:null);
 diff --git a/public/index.html b/public/index.html
-index 4662a1e..65d2a20 100644
+index 4662a1e..9e788fb 100644
 --- a/public/index.html
 +++ b/public/index.html
 @@ -294,6 +294,7 @@ select.inline-edit-input{cursor:pointer}
@@ -760,7 +818,13 @@ index 4662a1e..65d2a20 100644
      <div class="field"><label>Условия</label><input id="mm-conditions" value="${escapeHtml(d.conditions||'')}"></div>
      <div class="form-row">
        <div class="field"><label>Товар</label><input id="mm-product" list="product-suggestions" placeholder="Название товара как в 1С" value="${escapeHtml(d.product||'')}"></div>
-@@ -7098,12 +7104,33 @@ function modalMicroDeal(existing, prefill){
+@@ -7093,17 +7099,39 @@ function modalMicroDeal(existing, prefill){
+       <div class="field"><label>Факт.охват TikTok</label><input id="mm-fact-reach-tt" type="number" value="${d.factReachTT||0}"></div>
+     </div>
+     <div class="form-row">
++      ${d.id ? `<div class="field"><a class="btn btn-ghost btn-sm" href="/flow/?lifecycle=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">Доставка и сроки +2 / +4 ↗</a></div>` : ""}
+       <div class="field"><label>Плановая дата публикации</label><input id="mm-planned-date" type="date" value="${d.plannedDate||''}"></div>
+       <div class="field"><label>Дата выкладки (факт)</label><input id="mm-publish-date" type="date" value="${d.publishDate||''}"></div>
      </div>
      <div class="login-hint">Плановая дата — чтобы интеграция сразу попала в нужный месяц фильтра/графика, даже если видео ещё не вышло. Как только появится факт-дата выкладки — используется она.</div>
      <div class="field"><label>Комментарий</label><textarea id="mm-notes">${escapeHtml(d.notes||"")}</textarea></div>
@@ -772,7 +836,7 @@ index 4662a1e..65d2a20 100644
      </div>
    `);
    document.getElementById("mm-cancel").onclick = closeModal;
-+  if(isEdit&&existing.crmBloggerId&&DataManager.state.automationFlow){const pay=document.createElement('button');pay.className='btn btn-ghost';pay.textContent='Подать на оплату → CRM';pay.onclick=()=>{const rows=(DataManager.state.microInfluencerDeals||[]).filter(x=>x.crmBloggerId===existing.crmBloggerId);openModal(`<h3>Заявка в существующий реестр оплат CRM</h3><div class="field"><label>Общая сумма, ₸</label><input id="flow-pay-amount" type="number" step="0.01" min="0.01" value="${existing.cost||''}"></div><div class="field"><label>Получатель</label><input id="flow-pay-recipient"></div><div class="field"><label>Способ расчёта</label><select id="flow-pay-settlement"><option value="ip">ИП</option><option value="cash">Наличные</option></select></div><div class="field"><label>Этап оплаты</label><input id="flow-pay-stage" value="Окончательный расчёт"></div><div class="field"><label>Ссылка на полученный счёт, если есть</label><input id="flow-pay-invoice"></div><div class="field"><label>Видео в этой заявке</label>${rows.map(x=>`<label><input type="checkbox" class="flow-pay-deal" value="${x.id}" ${x.id===existing.id?'checked':''}> №${x.id} · ${escapeHtml(x.product||'')}</label>`).join('')}</div><div class="login-hint">Сумма общая для выбранных видео. Выплата не выполняется. Для ИП без счёта согласование Bitrix не запускается.</div><button class="btn btn-primary" id="flow-pay-submit">Подать заявку</button>`);document.getElementById('flow-pay-submit').onclick=async()=>{try{const response=await apiFetch('/api/automation/payment-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({integrationIds:[...document.querySelectorAll('.flow-pay-deal:checked')].map(x=>x.value),amountKzt:document.getElementById('flow-pay-amount').value,recipientName:document.getElementById('flow-pay-recipient').value,settlement:document.getElementById('flow-pay-settlement').value,stage:document.getElementById('flow-pay-stage').value,invoiceReference:document.getElementById('flow-pay-invoice').value})});const data=await response.json();if(!response.ok)throw Error(data.error);closeModal();toast(data.crmPaymentId?'Заявка записана в CRM: '+data.crmPaymentId:'Заявка сохранена в очереди; CRM пока не подтвердила запись');}catch(e){toast(e.message,true)}}};document.getElementById('mm-save').parentElement.prepend(pay);}
++  if(isEdit&&existing.crmBloggerId&&DataManager.state.automationFlow){const pay=document.createElement('button');pay.className='btn btn-ghost';pay.textContent='Подать на оплату';pay.onclick=()=>{const rows=(DataManager.state.microInfluencerDeals||[]).filter(x=>x.crmBloggerId===existing.crmBloggerId);openModal(`<h3>Подать на оплату</h3><div class="field"><label>Общая сумма, ₸</label><input id="flow-pay-amount" type="number" step="0.01" min="0.01" value="${existing.cost||''}"></div><div class="field"><label>Получатель</label><input id="flow-pay-recipient"></div><div class="field"><label>Способ расчёта</label><select id="flow-pay-settlement"><option value="ip">ИП</option><option value="cash">Наличные</option></select></div><div class="field"><label>Этап оплаты</label><input id="flow-pay-stage" value="Окончательный расчёт"></div><div class="field"><label>Полученный счёт ИП (до 10 МБ)</label><input id="flow-pay-invoice" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg"><label><input id="flow-pay-confirmed" type="checkbox"> Счёт получен, сумма и реквизиты проверены</label></div><div class="field"><label>Видео в этой заявке</label>${rows.map(x=>`<label><input type="checkbox" class="flow-pay-deal" value="${x.id}" ${x.id===existing.id?'checked':''}> №${x.id} · ${escapeHtml(x.product||'')}</label>`).join('')}</div><div class="login-hint">Сумма общая для выбранных видео. Выплата не выполняется. Для ИП без счёта согласование Bitrix не запускается.</div><button class="btn btn-primary" id="flow-pay-submit">Подать заявку</button>`);document.getElementById('flow-pay-submit').onclick=async()=>{try{const form=new FormData();const invoice=document.getElementById('flow-pay-invoice').files[0];if(invoice)form.append('invoice',invoice);form.append('payload',JSON.stringify({integrationIds:[...document.querySelectorAll('.flow-pay-deal:checked')].map(x=>x.value),amountKzt:document.getElementById('flow-pay-amount').value,recipientName:document.getElementById('flow-pay-recipient').value,settlement:document.getElementById('flow-pay-settlement').value,stage:document.getElementById('flow-pay-stage').value,invoiceConfirmed:document.getElementById('flow-pay-confirmed').checked}));const data=await apiFetch('/api/automation/payment-request',{method:'POST',body:form});closeModal();toast(data.bitrixStatus==='submitted'?'Заявка записана в CRM и передана в Bitrix №'+data.bitrixItemId:data.crmPaymentId?'Заявка в CRM; Bitrix: '+(data.bitrixStatus||'ожидает передачи счёта'):'Заявка в очереди; запись CRM пока не подтверждена');}catch(e){toast(e.message,true)}}};document.getElementById('mm-save').parentElement.prepend(pay);}
 +
 +  if(isEdit&&(existing.flowBriefHistory||[]).length){
 +    const versions=existing.flowBriefHistory;const row=document.createElement('div');row.className='login-hint';
@@ -794,7 +858,7 @@ index 4662a1e..65d2a20 100644
    const skuPick = document.getElementById("mm-sku-pick");
    if(skuPick) skuPick.addEventListener("change", ()=>{
      const hit = microSkuAll().find(x=> skuPick.value === x.name+" — "+x.code || skuPick.value.trim() === x.code);
-@@ -7138,7 +7165,7 @@ function modalMicroDeal(existing, prefill){
+@@ -7138,7 +7166,7 @@ function modalMicroDeal(existing, prefill){
        erTT: parseFloat(document.getElementById("mm-er-tt").value)||0,
        avgReachTT: parseInt(document.getElementById("mm-avg-reach-tt").value,10)||0,
        cost: parseInt(document.getElementById("mm-cost").value,10)||0,
@@ -803,7 +867,7 @@ index 4662a1e..65d2a20 100644
        paymentStatus: document.getElementById("mm-payment-status").value,
        paymentMethod: document.getElementById("mm-payment-method").value.trim(),
        iin: document.getElementById("mm-iin").value.trim(),
-@@ -7160,6 +7187,7 @@ function modalMicroDeal(existing, prefill){
+@@ -7160,6 +7188,7 @@ function modalMicroDeal(existing, prefill){
        plannedDate: document.getElementById("mm-planned-date").value,
        publishDate: document.getElementById("mm-publish-date").value,
        notes: document.getElementById("mm-notes").value.trim(),
@@ -811,7 +875,7 @@ index 4662a1e..65d2a20 100644
      };
    };
    const formAtOpen = readMicroForm();
-@@ -7168,8 +7196,12 @@ function modalMicroDeal(existing, prefill){
+@@ -7168,8 +7197,12 @@ function modalMicroDeal(existing, prefill){
      const btn = document.getElementById("mm-save");
      const blogerName = document.getElementById("mm-name").value.trim();
      if(!blogerName){ toast("Укажите блогера", true); return; }
@@ -824,7 +888,7 @@ index 4662a1e..65d2a20 100644
      if(isEdit && !Object.keys(toSend).length){ closeModal(); toast("Изменений нет"); return; }
      try{
        await withBusy(btn, ()=> isEdit ? Api.updateMicroDeal(existing.id, toSend) : Api.createMicroDeal(payload));
-@@ -12485,6 +12517,8 @@ async function runSelfTests(){
+@@ -12485,6 +12518,8 @@ async function runSelfTests(){
    TestSuite.run();
  }
  
@@ -833,7 +897,7 @@ index 4662a1e..65d2a20 100644
  /* =========================================================================
     14. СТАРТ ПРИЛОЖЕНИЯ
     ========================================================================= */
-@@ -12511,6 +12545,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
+@@ -12511,6 +12546,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
    UI.inflCompare = {aFrom:"", aTo:"", bFrom:"", bTo:""};
    render();
    startPolling();
@@ -888,23 +952,24 @@ index 0000000..be105e6
 +}
 +module.exports={createReviewTransport};
 diff --git a/server.js b/server.js
-index 877644b..7171d61 100644
+index 877644b..f5761ce 100644
 --- a/server.js
 +++ b/server.js
-@@ -934,6 +934,12 @@ require("./mcp.js")(app, { getState: ()=> state, pgPool, readonlyScrub });
+@@ -934,6 +934,13 @@ require("./mcp.js")(app, { getState: ()=> state, pgPool, readonlyScrub });
  // ИИ-координатор блогеров через WhatsApp/Wazzup (30.10.2026, тест на одном менеджере) — см. coordinator.js.
  // Выключен, пока в Render не задан COORD_MODE=dry (проверка без отправки) или on.
  require("./coordinator.js")(app, { getState: ()=> state, persist: ()=> persist(), requireAuth });
 +// Mobile logistics pilot: disabled unless FLOW_LOGISTICS_ENABLED=1.
 +const automationFlow = require("./automation-flow.js");
 +automationFlow.mount(app, {getState:()=>state, persist:()=>persist(), requireAuth});
++require("./lifecycle").mount(app,{getState:()=>state,persist:()=>persist(),requireAuth});
 +require("./blogery-client").createClient({getState:()=>state,persist:()=>persist()}).mount(app,requireAuth);
 +require("./crm-link").mount(app,{getState:()=>state,persist:()=>persist(),requireAuth});
 +require("./finance-client").createFinanceClient({getState:()=>state,persist:()=>persist()}).mount(app,requireAuth);
  
  // ---------- state & health ----------
  // /api/state отдаёт ВСЮ базу (заказы, телефоны, адреса, выручку, ROMI) — без
-@@ -1060,6 +1066,7 @@ app.post("/api/orders", requireAuth, (req,res)=>{
+@@ -1060,6 +1067,7 @@ app.post("/api/orders", requireAuth, (req,res)=>{
      deliveredAt: null, bitrixSynced: false,
    };
    state.orders.push(order);
@@ -912,7 +977,7 @@ index 877644b..7171d61 100644
    persist();
    res.json(order);
  });
-@@ -1067,6 +1074,7 @@ app.patch("/api/orders/:id", requireAuth, (req,res)=>{
+@@ -1067,6 +1075,7 @@ app.patch("/api/orders/:id", requireAuth, (req,res)=>{
    const o = state.orders.find(o=>o.id===+req.params.id);
    if(!o) return res.status(404).json({error:"not found"});
    Object.assign(o, req.body || {});
@@ -920,7 +985,7 @@ index 877644b..7171d61 100644
    persist();
    res.json(o);
  });
-@@ -1104,6 +1112,7 @@ app.delete("/api/orders/:id", requireAuth, (req,res)=>{
+@@ -1104,6 +1113,7 @@ app.delete("/api/orders/:id", requireAuth, (req,res)=>{
    // без этого публикация (и её замеры охвата/продаж) остаётся "осиротевшей" в базе и
    // продолжает попадать в сводки на дашборде, хотя сам заказ уже удалён.
    state.publications = state.publications.filter(p=>p.orderId!==id);
@@ -928,7 +993,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({ok:true});
  });
-@@ -1118,6 +1127,7 @@ app.post("/api/orders/:id/deliver", requireAuth, uploadPhoto, (req,res)=>{
+@@ -1118,6 +1128,7 @@ app.post("/api/orders/:id/deliver", requireAuth, uploadPhoto, (req,res)=>{
    o.driverComment = (req.body && req.body.comment) || "";
    o.deliveredAt = new Date().toLocaleString("ru-RU");
    o.bitrixSynced = false;
@@ -936,7 +1001,7 @@ index 877644b..7171d61 100644
    persist();
    res.json(o);
  });
-@@ -1130,6 +1140,7 @@ app.post("/api/orders/:id/problem", requireAuth, (req,res)=>{
+@@ -1130,6 +1141,7 @@ app.post("/api/orders/:id/problem", requireAuth, (req,res)=>{
    o.status = statusCode;
    o.driverComment = comment;
    o.deliveredAt = new Date().toLocaleString("ru-RU");
@@ -944,7 +1009,7 @@ index 877644b..7171d61 100644
    persist();
    res.json(o);
  });
-@@ -1138,6 +1149,7 @@ app.post("/api/orders/:id/sync-bitrix", requireAuth, (req,res)=>{
+@@ -1138,6 +1150,7 @@ app.post("/api/orders/:id/sync-bitrix", requireAuth, (req,res)=>{
    const o = state.orders.find(o=>o.id===+req.params.id);
    if(!o) return res.status(404).json({error:"not found"});
    o.bitrixSynced = true;
@@ -952,7 +1017,7 @@ index 877644b..7171d61 100644
    persist();
    res.json(o);
  });
-@@ -1151,6 +1163,7 @@ app.post("/api/orders/bulk-assign", requireAuth, (req,res)=>{
+@@ -1151,6 +1164,7 @@ app.post("/api/orders/bulk-assign", requireAuth, (req,res)=>{
    state.orders.forEach(o=>{
      if(idSet.has(o.id)){ o.driverCode = driverCode; o.status = "assigned"; o.assignedAt = now; count++; }
    });
@@ -960,7 +1025,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({ok:true, count});
  });
-@@ -1171,6 +1184,7 @@ app.post("/api/orders/bulk-deliver", requireAuth, (req,res)=>{
+@@ -1171,6 +1185,7 @@ app.post("/api/orders/bulk-deliver", requireAuth, (req,res)=>{
      o.closedWithoutPhoto = true; o.bitrixSynced = false;
      count++;
    });
@@ -968,7 +1033,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({ok:true, count, skipped});
  });
-@@ -1200,6 +1214,7 @@ app.post("/api/orders/bulk-status", requireAuth, (req,res)=>{
+@@ -1200,6 +1215,7 @@ app.post("/api/orders/bulk-status", requireAuth, (req,res)=>{
      if(status === "assigned" && !o.assignedAt) o.assignedAt = now;
      count++;
    });
@@ -976,7 +1041,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({ok:true, count});
  });
-@@ -1212,6 +1227,7 @@ app.post("/api/orders/bulk-delete", requireAuth, (req,res)=>{
+@@ -1212,6 +1228,7 @@ app.post("/api/orders/bulk-delete", requireAuth, (req,res)=>{
    // та же причина, что и в одиночном удалении: без каскада публикации выбранных заказов
    // остаются в базе и продолжают попадать в сводки на дашборде.
    state.publications = state.publications.filter(p=>!idSet.has(p.orderId));
@@ -984,7 +1049,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({ok:true, count: before - state.orders.length});
  });
-@@ -1245,6 +1261,7 @@ app.post("/api/orders/import", requireAuth, (req,res)=>{
+@@ -1245,6 +1262,7 @@ app.post("/api/orders/import", requireAuth, (req,res)=>{
      });
      added++;
    });
@@ -992,7 +1057,7 @@ index 877644b..7171d61 100644
    persist();
    res.json({added});
  });
-@@ -1508,6 +1525,17 @@ app.post("/api/influencer-deals/import", requireAuth, (req,res)=>{
+@@ -1508,6 +1526,17 @@ app.post("/api/influencer-deals/import", requireAuth, (req,res)=>{
  app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
    const b = req.body || {};
    if(!b.blogerName) return res.status(400).json({error:"blogerName обязателен"});
@@ -1010,7 +1075,7 @@ index 877644b..7171d61 100644
    const deal = {
      id: nextId("microInfluencerDeals"),
      responsible: b.responsible || "Нина",
-@@ -1526,6 +1554,9 @@ app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
+@@ -1526,6 +1555,9 @@ app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
      coopType: b.coopType || "",
      plannedDate: b.plannedDate || "", publishDate: b.publishDate || "", notes: b.notes || "",
    };
@@ -1020,7 +1085,7 @@ index 877644b..7171d61 100644
    state.microInfluencerDeals.push(deal);
    persist();
    res.json(deal);
-@@ -1534,6 +1565,13 @@ app.patch("/api/micro-influencer-deals/:id", requireAuth, (req,res)=>{
+@@ -1534,6 +1566,13 @@ app.patch("/api/micro-influencer-deals/:id", requireAuth, (req,res)=>{
    const d = state.microInfluencerDeals.find(d=>d.id===+req.params.id);
    if(!d) return res.status(404).json({error:"not found"});
    const body = Object.assign({}, req.body || {});
@@ -1117,6 +1182,18 @@ index 0000000..610e5b4
 +console.log('PASS actual Express: auth, server-side price, grouped shipment, retry, assembly, dispatch, confirmed delivery, reversal, UI assets.');
 +}catch(e){console.error('Server errors:',log.match(/(?:ReferenceError|TypeError|Error):[^\n]+/g));throw e;}finally{child.kill('SIGTERM');await new Promise(resolve=>{child.on('exit',resolve);setTimeout(resolve,2000)});rmSync(dir,{recursive:true,force:true});}
 +})().catch(e=>{console.error(e.message);process.exitCode=1});
+diff --git a/test/lifecycle.test.js b/test/lifecycle.test.js
+new file mode 100644
+index 0000000..7717b31
+--- /dev/null
++++ b/test/lifecycle.test.js
+@@ -0,0 +1,6 @@
++const {test}=require('node:test'),a=require('node:assert/strict'),{applyEvent}=require('../lifecycle');
++const state=()=>({microInfluencerDeals:[{id:1}]});
++test('expected then received produces +2/+4, preserves actual publication field, deduplicates',()=>{const s=state(),d=s.microInfluencerDeals[0];applyEvent(s,1,{type:'expected_delivery',date:'2026-11-20',key:'expected-1'},'Сая');a.equal(d.plannedDate,'2026-11-24');a.equal(d.flowLifecycle.plan.tentative,true);const e={type:'received',date:'2026-11-21',key:'received-1'};applyEvent(s,1,e,'менеджер');applyEvent(s,1,e,'менеджер');a.equal(d.plannedDate,'2026-11-25');a.equal(d.flowLifecycle.materialDueDate,'2026-11-23');a.equal(d.flowLifecycle.messages.length,1);a.equal(d.publishDate,undefined);});
++test('manual or confirmed date protected and carrier does not start shooting deadline',()=>{const s=state(),d=s.microInfluencerDeals[0];d.plannedDate='2026-12-01';applyEvent(s,1,{type:'carrier_delivered',date:'2026-11-20',key:'carrier-1'},'курьер');a.equal(d.flowLifecycle.materialDueDate,undefined);applyEvent(s,1,{type:'received',date:'2026-11-21',key:'received-1'},'менеджер');a.equal(d.plannedDate,'2026-12-01');a.equal(d.flowLifecycle.suggestedPlan.publicationDate,'2026-11-25');});
++test('paid buyout requests delivery date but never starts content timer',()=>{const s=state(),e={type:'payment_paid',purpose:'buyout',crmPaymentId:'pay1',confirmed:true,key:'payment-1'};applyEvent(s,1,e,'CRM');applyEvent(s,1,{...e,key:'payment-2'},'CRM');const d=s.microInfluencerDeals[0];a.equal(d.plannedDate,undefined);a.equal(d.flowLifecycle.messages.length,1);a.throws(()=>applyEvent(s,1,{...e,key:'payment-3',confirmed:false},'CRM'));});
++test('date arithmetic crosses month and invalid dates rejected',()=>{const s=state();applyEvent(s,1,{type:'received',date:'2026-12-30',key:'received-1'},'менеджер');a.equal(s.microInfluencerDeals[0].plannedDate,'2027-01-03');a.throws(()=>applyEvent(s,1,{type:'received',date:'2026-02-30',key:'invalid-1'},'менеджер'));});
 diff --git a/tools/prepare_catalog.py b/tools/prepare_catalog.py
 new file mode 100644
 index 0000000..60f68bb
