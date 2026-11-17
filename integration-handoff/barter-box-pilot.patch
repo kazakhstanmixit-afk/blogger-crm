@@ -1,9 +1,9 @@
 diff --git a/automation-flow.js b/automation-flow.js
 new file mode 100644
-index 0000000..9520e65
+index 0000000..f821071
 --- /dev/null
 +++ b/automation-flow.js
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,158 @@
 +'use strict';
 +// Additive pilot. Existing orders and microInfluencerDeals remain the sources of truth.
 +// No external sends, no cron, no financial mutations, no changes to audit.js.
@@ -120,6 +120,8 @@ index 0000000..9520e65
 +    const match=String(d.text||'').trim().match(/^(согласовано|правки|монтаж|пересъём|пересъем)(?:\s*:\s*([\s\S]+))?$/i);need(match,'Неоднозначный ответ',422);
 +    const decision={'согласовано':'approved','правки':'changes','монтаж':'editing','пересъём':'reshoot','пересъем':'reshoot'}[match[1].toLowerCase()];
 +    need(decision==='approved'||Boolean(match[2]),'Для правок нужен комментарий');
++    const checked=deal.flowVideoVersions?.find(v=>v.id===bind.videoVersionId)?.review;
++    if(decision==='approved'&&checked?.score!=null&&checked.scale&&checked.score/checked.scale<0.6)need(Boolean(match[2]),'При низком GATE ответьте «Согласовано: причина»');
 +    const decisions=deal.flowVideoDecisions||(deal.flowVideoDecisions=[]);need(!decisions.some(x=>x.videoVersionId===bind.videoVersionId),'Решение по версии уже принято',409);
 +    const record={videoVersionId:bind.videoVersionId,decision,note:match[2]||'',messageId:String(d.messageId||''),reviewerPhone:bind.reviewerPhone,at:stamp()};decisions.push(record);
 +    // Separate version-aware data; no unverified mapping to the existing vstage state machine.
@@ -153,15 +155,93 @@ index 0000000..9520e65
 + app.post('/api/automation/brief-event',guard(req=>{
 +  const expected=process.env.FLOW_INTEGRATION_SECRET||'',supplied=String(req.headers.authorization||'').replace(/^Bearer /,'');
 +  need(expected.length>=32,'Связка ТЗ отключена',503);need(Buffer.byteLength(supplied)===Buffer.byteLength(expected)&&crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)),'Неверный сервисный ключ',401);
-+  need(['brief_approved','brief_sent'].includes(req.body?.action),'Недопустимое событие');return service.execute('Бриф-студия',req.body,req.headers['idempotency-key']);
++  need(['brief_approved','brief_sent'].includes(req.body?.action),'Недопустимое событие');return service.execute('Blogery Audit',req.body,req.headers['idempotency-key']);
 + }));
 + app.get(/^\/flow$/,(req,res)=>res.redirect('/flow/'));
 + app.get('/flow/',(req,res)=>res.sendFile(path.join(__dirname,'flow-mobile','index.html')));
 + for(const file of ['app.js','style.css','manifest.webmanifest','icon.svg'])app.get('/flow/'+file,(req,res)=>res.sendFile(path.join(__dirname,'flow-mobile',file)));
 +}
 +module.exports={mount,createService,syncOrderLinks,moneyMinor,priceSelection,FlowError};
+diff --git a/blogery-client.js b/blogery-client.js
+new file mode 100644
+index 0000000..03173e5
+--- /dev/null
++++ b/blogery-client.js
+@@ -0,0 +1,33 @@
++'use strict';
++const crypto=require('crypto');
++function createClient({getState,persist,fetchImpl=fetch,env=process.env}){
++ let busy=false;const store=()=>{const st=getState();st.automationFlow=st.automationFlow||{version:1,catalog:[],requests:{},reviewMessages:{},events:[],drafts:[]};return st.automationFlow.briefRequests||(st.automationFlow.briefRequests=[])};
++ function request(deal,actor,notes=''){
++  const old=store().find(r=>String(r.integrationId)===String(deal.id)&&r.status!=='cancelled');if(old)return old;
++  const products=(deal.flowGoods||[]).map(x=>({id:x.id,name:x.name,barcode:x.barcode,kaspiArticle:x.kaspiArticle,qty:x.qty}));
++  if(!products.length&&deal.product)products.push({name:deal.product,barcode:deal.barcode||'',qty:1});if(!products.length)throw Error('Сначала выберите товары');
++  const row={id:crypto.randomUUID(),integrationId:String(deal.id),status:'pending',attempts:0,nextAt:Date.now(),requestedBy:actor,payload:{integrationId:String(deal.id),blogger:{id:deal.crmBloggerId||'',handle:deal.instagramAccount||deal.blogerName,name:deal.blogerName},products,manager:deal.responsible,plannedDate:deal.plannedDate||'',format:deal.contentFormat||'Instagram Reels',language:deal.videoLang||'',notes}};
++  store().push(row);persist();return row;
++ }
++ async function drain(){if(busy||env.BLOGERY_BRIDGE_ENABLED!=='1')return;busy=true;try{const origin=env.BLOGERY_AUDIT_ORIGIN;if(!origin||new URL(origin).protocol!=='https:'||(env.BLOGERY_BRIDGE_SECRET||'').length<32)return;
++  for(const row of store().filter(r=>r.status==='pending'&&r.nextAt<=Date.now()).slice(0,5)){row.attempts++;row.nextAt=Date.now()+300000;persist();try{
++   const response=await fetchImpl(new URL('/api/integrations/requests',origin),{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+env.BLOGERY_BRIDGE_SECRET,'Content-Type':'application/json','Idempotency-Key':'barter-request:'+row.id},body:JSON.stringify(row.payload)});
++   if(!response.ok)throw Error('HTTP '+response.status);const result=await response.json();if(!result.id)throw Error('Ответ без ID запроса');Object.assign(row,{status:'received',remoteRequestId:result.id,url:origin+'/?flow_request='+encodeURIComponent(result.id),receivedAt:new Date().toISOString(),lastError:null});
++  }catch(e){row.lastError=/^HTTP \d+$/.test(e.message)?e.message:'Ошибка связи с Blogery Audit';}persist();}
++  for(const row of store().filter(r=>r.status==='received'&&(!r.resultNextAt||r.resultNextAt<=Date.now())).slice(0,5)){
++   const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===row.integrationId);if(!deal||deal.videoStatus!=='опубликовано'||!deal.publishDate||!deal.reelsLink)continue;
++   const result={integrationId:row.integrationId,publicationUrl:deal.reelsLink,publishedAt:deal.publishDate,resultNote:'Подтверждённая публикация. Просмотры Reels: '+(deal.factReachReels||0)+'; TikTok: '+(deal.factReachTT||0)+'; GATE: '+(deal.vreview?.score??'нет данных')};
++   const hash=crypto.createHash('sha256').update(JSON.stringify(result)).digest('hex');if(row.resultHash===hash)continue;row.resultNextAt=Date.now()+15*60000;
++   try{const response=await fetchImpl(new URL('/api/integrations/result',origin),{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+env.BLOGERY_BRIDGE_SECRET,'Content-Type':'application/json'},body:JSON.stringify(result)});if(response.ok){row.resultHash=hash;row.resultSyncedAt=new Date().toISOString();}}catch{}persist();
++  }
++ }finally{busy=false}}
++ function mount(app,requireAuth){
++  if(env.FLOW_LOGISTICS_ENABLED!=='1')return;
++  const staff=(req,res,next)=>['manager','marketer'].includes(req.session.role)?next():res.status(403).json({error:'Нет доступа'});
++  app.post('/api/automation/brief-request/:id',requireAuth,staff,(req,res)=>{try{const d=(getState().microInfluencerDeals||[]).find(x=>String(x.id)===req.params.id);if(!d)return res.status(404).json({error:'Интеграция не найдена'});let actor=req.session.name||'общий вход';try{actor=req.session.name||decodeURIComponent(req.headers['x-actor']||'')||actor}catch{}const row=request(d,actor,String(req.body?.notes||'').slice(0,5000));res.json(row);drain().catch(()=>{});}catch(e){res.status(400).json({error:e.message})}});
++  app.get('/api/automation/brief-request/:id',requireAuth,staff,(req,res)=>res.json({request:store().find(r=>r.integrationId===req.params.id)||null,approved:(getState().microInfluencerDeals||[]).find(d=>String(d.id)===req.params.id)?.flowBriefHistory||[]}));
++  const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();
++ }
++ return {request,drain,mount};
++}
++module.exports={createClient};
+diff --git a/brief-delivery.js b/brief-delivery.js
+new file mode 100644
+index 0000000..286b8e0
+--- /dev/null
++++ b/brief-delivery.js
+@@ -0,0 +1,33 @@
++'use strict';
++const {createService}=require('./automation-flow');
++function createBriefDelivery({getState,persist,send,getChannel,env=process.env,fetchImpl=fetch}){
++ let busy=false;const queue=()=>{const st=getState();st.briefDelivery=st.briefDelivery||[];return st.briefDelivery};
++ function enqueue(dealId,versionId,actor){
++  const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===String(dealId));if(!deal)throw Error('Интеграция не найдена');
++  const version=(deal.flowBriefHistory||[]).find(v=>v.versionId===versionId);if(!version||!version.files?.pdf)throw Error('Нет утверждённой PDF-версии ТЗ');
++  const phone=String(deal.phone||'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7');if(!/^7\d{10}$/.test(phone))throw Error('Подтвердите телефон блогера');
++  const prior=queue().find(x=>x.integrationId===deal.id&&x.versionId===versionId);if(prior)return prior;
++  const job={id:'brief-delivery:'+deal.id+':'+versionId,integrationId:deal.id,briefId:version.briefId,versionId,phone,file:version.files.pdf,status:'pending',approvedBy:actor,createdAt:new Date().toISOString()};queue().push(job);persist();return job;
++ }
++ async function callback(job){if(!env.BLOGERY_AUDIT_ORIGIN||(env.BLOGERY_BRIDGE_SECRET||'').length<32)return;try{const r=await fetchImpl(new URL('/api/integrations/sent',env.BLOGERY_AUDIT_ORIGIN),{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+env.BLOGERY_BRIDGE_SECRET,'Content-Type':'application/json'},body:JSON.stringify({integrationId:String(job.integrationId),briefId:job.briefId,versionId:job.versionId,messageId:job.providerMessageId,channel:'whatsapp'})});if(r.ok){job.callbackDone=true;persist()}}catch{}}
++ async function drain(){if(busy||env.FLOW_BRIEF_SEND_MODE!=='on')return;busy=true;try{
++  for(const deal of getState().microInfluencerDeals||[]){if(!deal.flowBriefAutoSend||!deal.flowBriefApprovedVersionId)continue;const current=String(deal.phone||'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7');if(current!==deal.flowBriefAutoSendPhone){deal.flowBriefAutoError='Телефон изменился: подтвердите автоматическую отправку заново';continue}try{enqueue(deal.id,deal.flowBriefApprovedVersionId,'автоотправка по разрешению менеджера')}catch(e){deal.flowBriefAutoError=e.message;}}
++  const ch=await getChannel();const service=createService(getState,persist);
++  for(const job of queue()){
++   if(job.status==='sent'){if(!job.callbackDone)await callback(job);continue}
++   if(job.status!=='pending')continue;
++   const last=getState().coord?.lastIn?.[job.phone];if(!ch.plain&&(!last||Date.now()-Date.parse(last)>23.5*3600000)){job.lastError='Для WABA нужно активное окно общения';persist();continue}
++   const deal=(getState().microInfluencerDeals||[]).find(d=>d.id===job.integrationId);if(!deal||String(deal.phone||'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7')!==job.phone){job.status='needs_recipient_check';persist();continue}
++   job.status='sending';persist();try{const result=await send({channelId:ch.id,chatType:'whatsapp',chatId:job.phone,contentUri:job.file,crmMessageId:job.id,clearUnanswered:false});if(!result.messageId)throw Error('no_message_id');job.providerMessageId=result.messageId;job.status='accepted';persist();}catch{job.status='uncertain';job.lastError='Проверьте чат перед повтором';persist();}
++  }
++ }finally{busy=false}}
++ function statuses(items){let changed=false;for(const item of items||[]){const job=queue().find(x=>x.providerMessageId===item.messageId);if(!job)continue;
++  if(['sent','delivered','read'].includes(item.status)&&job.status!=='sent'){
++   createService(getState,persist).execute('WhatsApp',{action:'brief_sent',data:{dealId:job.integrationId,briefId:job.briefId,versionId:job.versionId,channel:'whatsapp',messageId:item.messageId,recipientConfirmed:true}},job.id+':confirmed');job.status='sent';job.sentAt=new Date().toISOString();changed=true;
++  }else if(item.status==='error'){job.status='failed';job.lastError=String(item.error?.error||'Ошибка доставки');changed=true;}
++ }if(changed)persist();return changed;}
++ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;app.post('/api/automation/brief-send/:id',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});try{res.json(enqueue(req.params.id,req.body.versionId,req.session.name||'общий вход'));drain().catch(()=>{})}catch(e){res.status(400).json({error:e.message})}});const timer=setInterval(()=>drain().catch(()=>{}),15000);timer.unref();}
++ for(const job of queue())if(job.status==='sending')job.status='uncertain';
++ return {enqueue,drain,statuses,mount};
++}
++module.exports={createBriefDelivery};
 diff --git a/coordinator.js b/coordinator.js
-index 073d85e..4267f89 100644
+index 073d85e..05f489c 100644
 --- a/coordinator.js
 +++ b/coordinator.js
 @@ -24,6 +24,7 @@
@@ -172,7 +252,32 @@ index 073d85e..4267f89 100644
  
  const H = 3600 * 1000;
  const WAZZUP = "https://api.wazzup24.com/v3";
-@@ -403,6 +404,16 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+@@ -294,6 +295,16 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+     if (j.messageId) C().seen[`out:${j.messageId}`] = Date.now(); // чтобы статусы ошибок брать только по нашим сообщениям
+     return j;
+   }
++  const flowMedia=require('./flow-media').createMedia({});
++  flowMedia.mount(app,requireAuth);
++  const reviewTransport=require('./review-transport').createReviewTransport({getState,persist,send:wazzupSend,getChannel:chanInfo,resolveUrl:item=>{const v=(getState().microInfluencerDeals||[]).find(d=>d.id===item.dealId)?.flowVideoVersions?.find(v=>v.id===item.videoVersionId);return v?.mediaId?flowMedia.url(v.mediaId):item.url}});
++  const briefDelivery=require('./brief-delivery').createBriefDelivery({getState,persist,send:wazzupSend,getChannel:chanInfo});
++  briefDelivery.mount(app,requireAuth);
++  const logisticsDigests=require('./logistics-digests').createDigests({getState,persist,send:wazzupSend,getChannel:chanInfo});
++  const digestTimer=setInterval(()=>logisticsDigests.drain().catch(()=>{}),30000);digestTimer.unref();
++  const reviewTimer=setInterval(()=>reviewTransport.drain().catch(()=>{}),15000);reviewTimer.unref();
++  const crmRelay=require('./crm-comms-relay').createRelay({getState,persist});
++  const relayTimer=setInterval(()=>crmRelay.drain().catch(()=>{}),15000);relayTimer.unref();
+   let sending = false;
+   async function processQueue() {
+     const k = cfg();
+@@ -390,6 +401,7 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+     // Адрес вебхука один на весь аккаунт Wazzup (24 номера Sillan, Masterok…): сюда приходят сообщения ВСЕХ клиентов.
+     // Берём только наш канал (WAZZUP_CHANNEL_ID), входящие, от номеров из теста. Всё остальное — сразу мимо, ничего не сохраняем.
+     if (!msg || !ourChannel || String(msg.channelId || "") !== ourChannel) return false;
++    if(videoFlow.enabled() && reviewTransport.incoming(msg,ourChannel))return true;
+     if (msg.isEcho || String(msg.chatType || "whatsapp") !== "whatsapp") return false;
+     const chatId = waNumber(msg.chatId);
+     if (!chatId) return false;
+@@ -403,6 +415,16 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
      c.lastIn[chatId] = new Date().toISOString();
      const today = almatyDate();
      const active = cands.filter((d) => !isPublished(d)).sort((a, b) => Math.abs(daysBetween(today, a.plannedDate || today)) - Math.abs(daysBetween(today, b.plannedDate || today)));
@@ -189,7 +294,28 @@ index 073d85e..4267f89 100644
      const d = active[0] || cands[0];
      return processReply(d, String(msg.text || "").trim(), String(msg.type || "text"), msg.contentUri || "");
    }
-@@ -620,6 +631,19 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+@@ -416,7 +438,7 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+     if (["video", "image", "document", "file"].includes(type)) {
+       const u = url || (draft ? draft[1] : "");
+       d.coordMedia = (Array.isArray(d.coordMedia) ? d.coordMedia : []).concat([{ at: new Date().toISOString(), type: draft ? "link" : type, url: u }]).slice(-20);
+-      const isVideo = type === "video" || type === "document" || type === "file" || !!draft;
++      const isVideo = videoFlow.enabled() ? (type === "video" || /\.(mp4|mov|webm)(?:$|[?#])/i.test(u)) : (type === "video" || type === "document" || type === "file" || !!draft);
+       if (isVideo && ["wait", "revise", "reshoot"].includes(stageOf(d))) {
+         d.vstage = "received"; d.vreceivedAt = new Date().toISOString();
+         log(d.id, "sys", "видео пришло — статус «📥 проверить»");
+@@ -466,9 +488,11 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+     const sts = Array.isArray(b.statuses) ? b.statuses : [];
+     if (!msgs.length && !sts.length) return;
+     let changed = false;
++    if(crmRelay.enqueue(b)){changed=true;crmRelay.drain().catch(()=>{});}
+     try {
+       const our = k.apiKey ? (await chanInfo()).id : "";
+       for (const m of msgs) if (handleIncoming(m, our)) changed = true;
++      if(briefDelivery.statuses(sts)) changed=true;
+       for (const s of sts) if (s && s.status === "error" && C().seen[`out:${s.messageId}`]) { log(null, "sys", "Wazzup: ошибка доставки нашего напоминания"); changed = true; }
+     } catch (e) { console.error("Wazzup webhook:", e.message); }
+     if (changed) persist();
+@@ -620,6 +644,37 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
      res.json({ mode: k.mode, transport: transport(), bot: C().botId || null, manager: k.manager, phones: k.phones, wazzup: !!k.apiKey, templates: { soon: !!k.tpl.soon, today: !!k.tpl.today, overdue: !!k.tpl.overdue },
        webhook: k.secret.length >= 16, queue: c.queue.filter((q) => q.status === "pending").length, log: c.log.slice(-60).reverse() });
    });
@@ -206,10 +332,28 @@ index 073d85e..4267f89 100644
 +    processReply(deal,pending.text,pending.type,pending.url);
 +    pending.status='attached';pending.dealId=deal.id;persist();res.json({ok:true});
 +  });
++  app.get('/api/automation/editing',requireAuth,(req,res)=>{
++    if(!staff(req,res))return;
++    const st=getState();res.json({tasks:(st.automationFlow?.drafts||[]).filter(x=>x.topic==='editing.requested').map(task=>{
++      const deal=(st.microInfluencerDeals||[]).find(d=>d.id===task.dealId),version=deal?.flowVideoVersions?.find(v=>v.id===task.videoVersionId);
++      let source=version?.url||'';if(version?.mediaId){try{source=flowMedia.url(version.mediaId)}catch{}}
++      return {...task,blogger:deal?.blogerName,source,versionNumber:version?.number};
++    })});
++  });
++  app.post('/api/automation/editing/:taskId/upload',requireAuth,(req,res,next)=>{if(!staff(req,res))return;if(process.env.FLOW_VIDEO_VERSIONS_ENABLED!=='1')return res.status(409).json({error:'Версионность выключена'});const task=getState().automationFlow?.drafts?.find(x=>x.id===req.params.taskId&&x.topic==='editing.requested');if(!task||task.status!=='pending')return res.status(409).json({error:'Задача уже обработана или не найдена'});try{flowMedia.url('00000000-0000-0000-0000-000000000000.mp4')}catch(e){return res.status(503).json({error:e.message})}next();},flowMedia.upload,(req,res)=>{
++    if(!req.file)return res.status(400).json({error:'Загрузите видео'});
++    const st=getState(),task=st.automationFlow?.drafts?.find(x=>x.id===req.params.taskId&&x.topic==='editing.requested');
++    if(!task||task.status!=='pending'){flowMedia.remove(req.file.filename);return res.status(409).json({error:'Задача уже обработана'});}
++    const deal=(st.microInfluencerDeals||[]).find(d=>d.id===task.dealId);if(!deal){flowMedia.remove(req.file.filename);return res.status(404).json({error:'Интеграция удалена'});}
++    const version=videoFlow.recordVersion(deal,{messageId:'editor:'+req.file.filename,url:flowMedia.url(req.file.filename),source:'editor'});version.mediaId=req.file.filename;
++    task.status='uploaded';task.uploadedVersionId=version.id;task.uploadedBy=actorName(req)||'монтажёр';deal.vstage='received';deal.flowEditingStatus='uploaded';
++    const ev=event(deal,'media','Монтажёр загрузил новую версию — автоматическая проверка',{review:true,url:version.url});
++    if(process.env.GEMINI_API_KEY)startReview(deal,version.url,ev?.id);else event(deal,'error','Видео сохранено; автоматическая проверка требует настроенного Gemini');persist();res.json({ok:true,versionId:version.id});
++  });
    // Каналы и шаблоны WABA из Wazzup — чтобы взять коды для WAZZUP_TPL_* и WAZZUP_CHANNEL_ID без программиста.
    app.get("/api/coord/wazzup-info", requireAuth, async (req, res) => {
      if (!staff(req, res)) return;
-@@ -779,7 +803,13 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+@@ -779,7 +834,13 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
    let reviewing = false;
    function startReview(d, url, eventId, mode) {
      d.vreview = { status: "running", at: new Date().toISOString(), url };
@@ -224,7 +368,23 @@ index 073d85e..4267f89 100644
      runReviews();
    }
    async function runReviews() {
-@@ -802,6 +832,8 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+@@ -790,7 +851,14 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+         const job = reviewQueue.shift();
+         const find = () => (getState().microInfluencerDeals || []).find((x) => x.id === job.dealId);
+         let res = null, err = null, retryable = false;
+-        try { res = await reviewVideo(job.url); } catch (e) { err = e.message; retryable = !!e.retryable; }
++        try {
++          if(job.videoVersionId && process.env.FLOW_MEDIA_CACHE_ENABLED!=='0' && process.env.FLOW_PUBLIC_ORIGIN && process.env.FLOW_MEDIA_SECRET){
++            const version=find()?.flowVideoVersions?.find(v=>v.id===job.videoVersionId);
++            if(version&&!version.mediaId){try{const saved=await flowMedia.copyRemote(job.url);version.originalUri=version.url;version.mediaId=saved.id;version.url=saved.url;job.url=saved.url;persist();}catch(e){e.retryable=true;throw e;}}
++            else if(version?.mediaId)job.url=flowMedia.url(version.mediaId);
++          }
++          res = await reviewVideo(job.url);
++        } catch (e) { err = e.message; retryable = !!e.retryable; }
+         const d = find();
+         if (!d) continue;
+         const ev = job.eventId ? C().events.find((e) => e.id === job.eventId) : null;
+@@ -802,6 +870,8 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
            persist();
            continue;
          }
@@ -233,86 +393,214 @@ index 073d85e..4267f89 100644
          if (res) {
            d.vreview = { status: "done", at: new Date().toISOString(), url: job.url, text: String(res.text).slice(0, 12000), decision: res.decision, score: res.score, formal: res.formal, model: res.model };
            const head = `🤖 ИИ: ${res.decision || "разбор готов"}${res.score != null ? ` · ${res.score}/9` : ""}`;
+@@ -816,6 +886,7 @@ module.exports = function mountCoordinator(app, { getState, persist, requireAuth
+           else if (ev) { ev.text = `Блогер прислал видео на согласование. ИИ не смог разобрать (${String(err).slice(0, 150)}) — посмотрите сами`; ev.read = false; }
+         }
+         persist();
++        if(job.videoVersionId)reviewTransport.drain().catch(()=>{});
+       }
+     } finally { reviewing = false; }
+   }
+diff --git a/crm-comms-relay.js b/crm-comms-relay.js
+new file mode 100644
+index 0000000..a6d6b4a
+--- /dev/null
++++ b/crm-comms-relay.js
+@@ -0,0 +1,13 @@
++'use strict';
++function createRelay({getState,persist,env=process.env,fetchImpl=fetch}){
++ let busy=false;const jobs=()=>getState().crmCommsRelay||(getState().crmCommsRelay=[]);
++ function enqueue(body){const configured=env.CRM_INSTAGRAM_CHANNEL_ID;if(!configured)return false;const messages=(body.messages||[]).filter(m=>m.channelId===configured&&m.chatType==='instagram');
++  // Statuses contain no channel; restrict them to CRM message IDs seen for this configured channel.
++  const ids=new Set(jobs().flatMap(j=>j.payload.messages.map(m=>m.messageId)));for(const m of messages)ids.add(m.messageId);
++  const statuses=(body.statuses||[]).filter(s=>ids.has(s.messageId));if(!messages.length&&!statuses.length)return false;
++  const key=JSON.stringify({messages:messages.map(m=>[m.messageId,m.status]),statuses:statuses.map(s=>[s.messageId,s.status])});if(jobs().some(x=>x.key===key))return false;jobs().push({key,payload:{messages,statuses},state:'pending',attempts:0,nextAt:0});persist();return true;
++ }
++ async function drain(){if(busy||!env.CRM_COMMS_WEBHOOK_URL||(env.CRM_COMMS_WEBHOOK_SECRET||'').length<32)return;const target=new URL(env.CRM_COMMS_WEBHOOK_URL);if(target.protocol!=='https:')return;busy=true;try{for(const job of jobs().filter(x=>x.state==='pending'&&x.nextAt<=Date.now()).slice(0,10)){job.attempts++;job.nextAt=Date.now()+60000;persist();try{const r=await fetchImpl(target,{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+env.CRM_COMMS_WEBHOOK_SECRET,'Content-Type':'application/json'},body:JSON.stringify(job.payload)});if(r.ok)job.state='delivered';}catch{}persist()}}finally{busy=false}}
++ return {enqueue,drain};
++}
++module.exports={createRelay};
+diff --git a/crm-link.js b/crm-link.js
+new file mode 100644
+index 0000000..c8ddc83
+--- /dev/null
++++ b/crm-link.js
+@@ -0,0 +1,14 @@
++'use strict';
++const crypto=require('crypto');
++function mount(app,{getState,persist,requireAuth,env=process.env}){
++ if(env.FLOW_LOGISTICS_ENABLED!=='1')return;
++ const keyOK=req=>{const want=env.FLOW_CRM_SECRET||'',got=String(req.headers.authorization||'').replace(/^Bearer /,'');return want.length>=32&&Buffer.byteLength(want)===Buffer.byteLength(got)&&crypto.timingSafeEqual(Buffer.from(want),Buffer.from(got))};
++ const list=()=>{const st=getState();st.automationFlow=st.automationFlow||{version:1,catalog:[],requests:{},reviewMessages:{},events:[],drafts:[]};return st.automationFlow.bloggerLinks||(st.automationFlow.bloggerLinks=[])};
++ app.post('/api/automation/crm-blogger',(req,res)=>{if(!keyOK(req))return res.status(403).json({error:'Нет межсерверного доступа'});const b=req.body||{};const handle=String(b.instagram||'').toLowerCase().replace(/^https?:\/\/(www\.)?instagram\.com\//,'').replace(/^@/,'').split(/[/?#]/)[0];if(!b.crmBloggerId||!/^[a-z0-9._]{1,30}$/.test(handle))return res.status(400).json({error:'Нужен ID CRM и Instagram-профиль'});
++  const records=list();const collision=records.find(x=>x.handle===handle&&x.crmBloggerId!==String(b.crmBloggerId));if(collision)return res.status(409).json({error:'Профиль связан с другой записью CRM: нужна сверка'});
++  const old=records.find(x=>x.crmBloggerId===String(b.crmBloggerId));if(old&&old.handle!==handle)return res.status(409).json({error:'Instagram-профиль изменился: подтвердите соответствие вручную'});
++  const record={crmBloggerId:String(b.crmBloggerId),handle,name:String(b.name||handle).slice(0,150),phone:String(b.phone||'').slice(0,30),responsible:String(b.responsible||'').slice(0,100),updatedAt:new Date().toISOString()};if(old)Object.assign(old,record);else records.push(record);persist();res.json({ok:true,crmBloggerId:record.crmBloggerId});
++ });
++ app.get('/api/automation/crm-blogger/:id',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});const profile=list().find(x=>x.crmBloggerId===req.params.id);if(!profile)return res.status(404).json({error:'Профиль не найден'});res.json({profile,integrations:(getState().microInfluencerDeals||[]).filter(x=>x.crmBloggerId===profile.crmBloggerId).map(x=>({id:x.id,plannedDate:x.plannedDate,product:x.product}))});});
++}
++module.exports={mount};
 diff --git a/docs/automation-pilot.md b/docs/automation-pilot.md
 new file mode 100644
-index 0000000..36fb733
+index 0000000..3925c57
 --- /dev/null
 +++ b/docs/automation-pilot.md
-@@ -0,0 +1,64 @@
-+# MIXIT: товары, Сая и видео — пилот
+@@ -0,0 +1,62 @@
++# MIXIT — связанный операционный цикл
 +
-+Код подготовлен для проверки; на рабочий сайт не развёрнут. Новые процессы выключены по умолчанию.
++Код в ветке: существующие orders/microInfluencerDeals, основной интерфейс, общий вход и audit.js сохранены. Prod не развёрнут. Маршруты основного расширения включаются FLOW_LOGISTICS_ENABLED=1; отдельные внешние действия имеют собственные флаги.
 +
-+## Что меняется для менеджера
++## Товары и отправки
 +
-+В существующей форме новой/редактируемой микроинтеграции появляется компактный поиск товаров. Он ищет по словам, ШК, SKU и Kaspi-артикулу, показывает максимум шесть подсказок. Точное совпадение текущего ШК даёт предложение подбора; менеджер проверяет количество и применяет его. Выбор и изменение количества считают себестоимость автоматически. Сумма проверяется сервером; если цена справочника изменилась, сохранение требует пересчёта. Старые суммы не меняются при открытии формы.
++В текущей компьютерной форме: компактный поиск по названию/ШК/SKU/Kaspi → до шести подсказок → количество → себестоимость с точностью до тиына, проверенная сервером. По текущему ШК предлагается точное совпадение. Открытие старой формы и обновление справочника не переписывают старые расходы. Все действующие сотрудники с правом изменения могут выбирать товары; read-only сохраняется.
 +
-+Все действующие менеджеры/маркетологи с правом изменения могут выбирать товары с компьютера; read-only входы по-прежнему не могут изменять данные. Отдельная обязательная авторизация не вводится.
++Выбор товаров отдельно от заявки. `/flow/` — дополнительный компьютерный/мобильный режим существующих отправок: **Сая → склад Алматы/Астана → любой назначенный сборщик → собрано/нехватка → отправка → фактическая доставка**. Одна посылка связана с несколькими видео через dealIds. Передача перевозчику не считается доставкой. Существующее подтверждение доставки с фото обновляет все связанные интеграции; прежний bulk-процесс сохранён. Старые заказы без связи не изменяются. Явная отмена доставки восстанавливает прежние товарные статусы без затирания более поздних ручных правок.
 +
-+Выбор товаров **не создаёт заказ**. Созданная отправка относится к существующему `orders`; `dealIds` связывает несколько видео с одной посылкой. Сумма посылки — сумма количества × себестоимость, без умножения на число роликов. Не копировать стоимость общей передачи товара в каждое видео: существующая аналитика суммирует `productCost` строк. Алгоритм атрибуции не изменён.
++Сумма посылки не умножается на число роликов. При работе со старой строковой аналитикой не копировать одну общую себестоимость в каждое видео. Атрибуция не изменена.
 +
-+## Где интерфейс
++Справочник готовит tools/prepare_catalog.py из Excel себестоимости и Kaspi. Только точные идентификаторы; несколько активных карточек остаются на сверке. «В продаже» не является складским остатком. Валюта KZT подтверждена пользователем. Реальные файлы и цены **не коммитить** в этот публичный репозиторий.
 +
-+- Основной компьютерный: существующая форма интеграции.
-+- `/flow/`: дополнительный адаптивный экран логистики, работает на компьютере и телефоне.
-+- Основное мобильное приложение коммуникации — `/discovery/` **в Blogger CRM**, отдельный PR.
++## CRM → интеграция
 +
-+В `/flow/`: справочник → импорт нормализованного catalog.json → интеграции → заявка → очередь Саи → склад Алматы/Астана → любой назначенный сборщик → собрано/нехватка → отправка. Передача перевозчику — `in_route`, не доставка. Фактическая доставка использует существующее подтверждение с фото; действующий bulk-deliver сохраняется для разрешённых прежним процессом случаев. Все связанные интеграции получают `товар доставлен`. Обратная явная смена статуса восстанавливает прежние товарные статусы, не затирая более позднюю ручную правку.
++crm-link.js принимает профиль с проверенным CRM ID по FLOW_CRM_SECRET и хранит только соответствие. Из CRM открывается существующая форма интеграции, включая после входа общим аккаунтом. Создание строки не происходит до подтверждения условий менеджером. Конфликт ник/ID не сливается автоматически.
 +
-+## Подготовка справочника
++## Интеграция → Blogery Audit → утверждённая версия → блогер
 +
-+`tools/prepare_catalog.py` читает Excel себестоимости и Kaspi; для него отдельно нужен `openpyxl`. Рабочее приложение новых зависимостей не требует.
++blogery-client.js: кнопка «ТЗ → Blogery Audit» ставит запрос в сохраняемую очередь; BLOGERY_BRIDGE_ENABLED=1, BLOGERY_AUDIT_ORIGIN, BLOGERY_BRIDGE_SECRET включают передачу. Тот же ключ используется при повторе. После приёма доступна ссылка на запрос в **существующем Blogery Audit**.
++
++Сервер Blogery Audit хранит связь с существующим ТЗ, утверждение, реальные DOCX/PDF и outbox. `/api/automation/brief-event` принимает результат по FLOW_INTEGRATION_SECRET. В Barter Box нет второй редактируемой базы ТЗ. Утверждённые версии неизменяемы; новое утверждение не заменяет старую отправленную версию.
++
++Кнопка отправки ТЗ в текущей интеграции использует brief-delivery.js. Менеджер может заранее разрешить автоотправку флажком в форме; разрешение связано с проверенным телефоном и требует повторного подтверждения при его изменении. FLOW_BRIEF_SEND_MODE=on разрешает отправку PDF через существующий Wazzup. Получатель фиксируется и сверяется с текущим телефоном. Статус accepted не считается sent; sent подтверждается webhook. После него статус возвращается в Blogery Audit. Сетевой timeout — uncertain, не повторная отправка вслепую. Для WABA проверяется окно общения.
++
++Подтверждённые videoStatus=опубликовано + publishDate + reelsLink передаются в существующие поля результата Blogery Audit вместе с доступными метриками. Один присланный URL не публикует строку.
++
++## WhatsApp → GATE → тимлид → монтаж
++
++FLOW_VIDEO_VERSIONS_ENABLED=1 сохраняет версии в существующем координаторе. Неоднозначное сообщение не привязывается к ближайшей дате. Выбор: POST `/api/coord/pending-media/:messageId/attach` с dealId; экран выбора находится в `/flow/` → «Входящие материалы».
++
++Существующий GATE сохраняет исходную шкалу **9**, без умножения старых оценок. Запоздалый анализ старой версии не заменяет актуальную. PDF/счёт не считается видео только потому, что пришёл документом.
++
++review-transport.js **реально отправляет** видео и GATE двумя связанными сообщениями по Wazzup v3. FLOW_REVIEW_SEND_MODE=dry/on; FLOW_TEAM_LEADS_JSON — проверенные телефоны тимлидов по именам Нина/Сая/Анеля. Ответ на видео или карточку связывается с version ID через quotedMessage.messageId, проверяются отправитель и канал. Согласовано → текущий vstage; правки/пересъём → соответствующий процесс; монтаж → задача. При низком GATE требуется «Согласовано: причина». Неоднозначный ответ уходит на проверку, дата не меняется.
++
++В `/flow/` появился «Монтаж»: исходник + комментарий → самостоятельная загрузка монтажёром MP4/MOV/WebM → новая версия той же интеграции → повторный GATE → тимлид. Для защищённых видео: FLOW_MEDIA_SECRET, FLOW_PUBLIC_ORIGIN и постоянный FLOW_MEDIA_DIR. Файлы не лежат в state.json и не публикуются под /uploads. Ссылки подписываются и имеют срок. Входящие видео копируются с разрешённого домена Wazzup при настроенном хранилище; дополнительные CDN задаются FLOW_MEDIA_ALLOWED_HOSTS. Нужен постоянный диск и регламент хранения/резервирования. Временные ссылки Wazzup сами по себе не являются архивом.
++
++## Сводки логистике
++
++logistics-digests.js: в 12:00 и 15:00 Астана готовит одну сводку каждому нужному исполнителю; 0 задач — 0 сообщений. Сая видит распределение/нехватку/готовое, сборщик — свои сборки, логист — готовое на своём складе. FLOW_LOGISTICS_CONTACTS_JSON содержит подтверждённые контакты/роли; FLOW_LOGISTICS_DIGEST_MODE=dry/on. В тексте нет адресов и телефонов блогеров. Повтор cron не создаёт сообщение повторно.
++
++## Оплаты
++
++finance-client.js: одна подтверждённая сумма на выбранные видео → existing payments Blogger CRM → опрос статуса и чеков → отображение в интеграциях. FINANCE_BRIDGE_ENABLED, CRM_ORIGIN, FLOW_CRM_SECRET и FLOW_EMPLOYEE_CRM_MAP_JSON (имя Barter Box → точный ID сотрудника CRM). Никаких выплат и дублирования реестра. Без проверенной привязки блогера/сотрудника операция остановится.
++
++Конкретная отправка в Bitrix «Согласование оплаты», договорные шаблоны и АВР требуют существующего webhook/схемы/шаблонов; их здесь нет. Создавать обычные задачи вместо процесса запрещено и не реализовано.
++
++## Общий webhook Wazzup
++
++Существующий webhook не заменяется. crm-comms-relay.js передаёт события настроенного Instagram-канала в CRM_COMMS_WEBHOOK_URL с CRM_COMMS_WEBHOOK_SECRET. Приём и отправка Direct реализованы в CRM, не выдаются за доступные без Instagram-канала. Для иной структуры webhook требуется проверка payload. Документация: https://wazzup24.com/help/api-en/sending-messages/ и https://wazzup24.com/help/api-en/webhooks/.
++
++## Проверки и выпуск
 +
 +```sh
-+python tools/prepare_catalog.py --cost /secure/cost.xlsx --kaspi /secure/kaspi.xlsx --out /secure/local-catalog
-+```
-+
-+Связь только по точному ШК, SKU или внутреннему артикулу с `sku_merch`. Поле `sku` в Kaspi-выгрузке трактуется как Kaspi-артикул; поле «в продаже» — признак карточки, **не складской остаток**. Несколько активных карточек остаются на сверке. Валюта себестоимости подтверждена пользователем: KZT.
-+
-+Реальные файлы, каталог с ценами и отчёт сверки не коммитить в публичный репозиторий. Импортировать в закрытое серверное хранилище после проверки.
-+
-+## Флаги и события
-+
-+- `FLOW_LOGISTICS_ENABLED=1`: маршруты `/api/automation/*`, `/flow/`, серверная проверка корзины и синхронизация подтверждённой доставки.
-+- `FLOW_VIDEO_VERSIONS_ENABLED=1`: сохранение версий входящих видео в существующем пилоте координатора. Неоднозначные сообщения остаются в `state.videoFlow.pendingMedia`; их привязка — `POST /api/coord/pending-media/:messageId/attach` с `dealId`. Это API; кнопка выбора в основном интерфейсе ещё не добавлена.
-+- Результат существующего Gemini сохраняется со шкалой **9**, не умножается. Итог старой версии сохраняется в её истории, но не заменяет текущую версию.
-+- `state.videoFlow.reviewOutbox`: сухая очередь «видео + GATE → тимлиду». Автоотправка не реализована и не включается этими флагами.
-+- `FLOW_REVIEW_ADAPTER_SECRET` (не менее 32 символов): `/api/automation/review-event`, нормализованные события `review_bind` и `review_reply`. Адаптер должен удостоверить отправителя и quoted message ID по реальному Wazzup payload. Контракт не является готовым парсером сырого Wazzup.
-+- `FLOW_INTEGRATION_SECRET`: `/api/automation/brief-event`, события `brief_approved`, `brief_sent`. Получатель хранит только связи с неизменяемой версией и файлами, не вторую редактируемую базу ТЗ. Отправленная версия не заменяется новым утверждением.
-+- Все новые команды требуют `Idempotency-Key`; тот же ключ с другим содержимым отклоняется.
-+
-+Секреты — только в защищённых переменных окружения, не в браузере, чатах или GitHub.
-+
-+## Проверка
-+
-+```sh
-+node --test test/automation-flow.test.js
++node --test test/automation-flow.test.js test/full-cycle.test.js
 +node test/http-flow.smoke.js
 +```
 +
-+Первый набор проверяет расчёт, подбор, дубли, старые заказы, передачу перевозчику, доставку нескольких интеграций, явную отмену доставки, версии и ответы тимлида. Второй запускает **реальный Express server.js** на временных синтетических данных без внешних ключей и проходит цепочку через HTTP.
++Вторая команда запускает настоящий Express server.js на временных синтетических данных без внешних ключей. Проверены auth, расчёт, общая посылка, повтор, сборка, передача, подтверждённая доставка и обратная смена статуса. Основные inline scripts проходят node --check. audit.js и attribution.js не изменены. Произвольный связный rollback всех новых бизнес-событий через старый журнал отдельно не проверялся.
 +
-+`audit.js`, атрибуция и календарь не изменены. В существующий журнал попадают изменения существующих orders/microInfluencerDeals через прежний persist. Дополнительные технические события находятся в `automationFlow.events`; они не подменяют основной журнал. Полный сквозной откат произвольных событий основного журнала отдельно не проверялся.
-+
-+## Перед включением
-+
-+1. Backup `state.json`, журнала и uploads; копия в отдельной тестовой среде.
-+2. Прогнать сценарии, сверить каталог, проверить компьютерную форму и Safari на реальном iPhone.
-+3. Проверить расход общей посылки на несколько видео; не переносить корзину в дополнительные видео автоматически.
-+4. Сверить payload Wazzup, номера тимлидов и защищённое хранение медиа: временные contentUri могут истечь. Автопереноса медиа в постоянный сторедж в этом PR нет.
-+5. Проверить действующие открытые формы и rollback журнала. При выключенном флаге новый пилот не выполняется.
-+
-+Браузерная QA не выполнена: managed preview relay в среде разработки не открылся. Проверки синтаксиса, правил и HTTP выполнены; проверка физического iPhone ещё нужна. Ни рассылка, ни выплата, ни prod-деплой не выполнялись.
++До включения: backup state.json/audit/uploads/защищённых видео → тестовый сервер → сверка активных баз Blogery Audit/CRM → настройка защищённых секретов и сотрудников → тестовые контакты → браузер и физический iPhone → отдельное разрешение на боевой запуск. Код и тесты не являются подтверждением prod-работы.
+diff --git a/docs/runtime-configuration.env.example b/docs/runtime-configuration.env.example
+new file mode 100644
+index 0000000..764356c
+--- /dev/null
++++ b/docs/runtime-configuration.env.example
+@@ -0,0 +1,23 @@
++# Names only. Store real secrets in protected hosting configuration.
++FLOW_LOGISTICS_ENABLED=0
++FLOW_VIDEO_VERSIONS_ENABLED=0
++FLOW_CRM_SECRET=
++CRM_ORIGIN=
++FLOW_EMPLOYEE_CRM_MAP_JSON={}
++FINANCE_BRIDGE_ENABLED=0
++BLOGERY_BRIDGE_ENABLED=0
++BLOGERY_AUDIT_ORIGIN=
++BLOGERY_BRIDGE_SECRET=
++FLOW_INTEGRATION_SECRET=
++FLOW_BRIEF_SEND_MODE=off
++FLOW_REVIEW_SEND_MODE=off
++FLOW_TEAM_LEADS_JSON={}
++FLOW_PUBLIC_ORIGIN=
++FLOW_MEDIA_SECRET=
++FLOW_MEDIA_DIR=
++FLOW_MEDIA_ALLOWED_HOSTS=
++FLOW_LOGISTICS_DIGEST_MODE=off
++FLOW_LOGISTICS_CONTACTS_JSON={}
++CRM_INSTAGRAM_CHANNEL_ID=
++CRM_COMMS_WEBHOOK_URL=
++CRM_COMMS_WEBHOOK_SECRET=
+diff --git a/finance-client.js b/finance-client.js
+new file mode 100644
+index 0000000..4bd25cb
+--- /dev/null
++++ b/finance-client.js
+@@ -0,0 +1,19 @@
++'use strict';
++const crypto=require('crypto');
++function createFinanceClient({getState,persist,env=process.env,fetchImpl=fetch}){
++ let busy=false;const records=()=>getState().flowFinance||(getState().flowFinance=[]);
++ function request(raw,actor){const st=getState(),ids=[...new Set((raw.integrationIds||[]).map(String))];if(!ids.length)throw Error('Выберите интеграции');const deals=ids.map(id=>st.microInfluencerDeals.find(d=>String(d.id)===id));if(deals.some(d=>!d))throw Error('Интеграция не найдена');const bloggerId=deals[0].crmBloggerId;if(!bloggerId||deals.some(d=>d.crmBloggerId!==bloggerId))throw Error('Интеграции должны быть связаны с одним блогером CRM');
++  const stage=String(raw.stage||'').trim();if(!stage)throw Error('Укажите этап оплаты');const existing=records().find(p=>p.payload.stage===stage&&p.payload.integrationIds.some(id=>ids.includes(id)));if(existing){const requestedMinor=Math.round(Number(String(raw.amountKzt||'').replace(',','.'))*100);if(existing.payload.amountMinor!==requestedMinor||existing.payload.recipientName!==String(raw.recipientName||'')||existing.payload.settlement!==raw.settlement||existing.payload.integrationIds.length!==ids.length)throw Error('Заявка этого этапа уже существует с другими условиями');return existing;}
++  let employeeMap={};try{employeeMap=JSON.parse(env.FLOW_EMPLOYEE_CRM_MAP_JSON||'{}')}catch{}const managerId=employeeMap[deals[0].responsible];if(!managerId)throw Error('Сопоставьте ответственного с ID сотрудника CRM');
++  const amount=String(raw.amountKzt||'').replace(',','.');if(!/^\d+(\.\d{1,2})?$/.test(amount))throw Error('Проверьте сумму');const [a,b='']=amount.split('.'),minor=Number(a)*100+Number(b.padEnd(2,'0'));if(!Number.isSafeInteger(minor)||minor<=0)throw Error('Проверьте сумму');if(!['ip','cash'].includes(raw.settlement)||!String(raw.recipientName||'').trim())throw Error('Укажите способ расчёта и получателя');
++  const r={id:crypto.randomUUID(),status:'pending',requestedBy:actor,createdAt:new Date().toISOString(),nextAt:0,payload:{bloggerId,managerId,integrationIds:ids,stage,amountMinor:minor,settlement:raw.settlement,recipientName:String(raw.recipientName).slice(0,200),invoiceReference:String(raw.invoiceReference||'').slice(0,2000),notes:String(raw.notes||'').slice(0,3000)}};records().push(r);persist();return r;
++ }
++ async function drain(){if(busy||env.FINANCE_BRIDGE_ENABLED!=='1'||!env.CRM_ORIGIN||(env.FLOW_CRM_SECRET||'').length<32)return;busy=true;try{const origin=new URL(env.CRM_ORIGIN);if(origin.protocol!=='https:')return;
++  for(const row of records().filter(r=>r.nextAt<=Date.now()).slice(0,20)){try{const endpoint=row.crmPaymentId?'/api/integrations/payments/'+encodeURIComponent(row.crmPaymentId):'/api/integrations/payments';const response=await fetchImpl(new URL(endpoint,origin),{method:row.crmPaymentId?'GET':'POST',redirect:'error',signal:AbortSignal.timeout(12000),headers:{Authorization:'Bearer '+env.FLOW_CRM_SECRET,'Content-Type':'application/json','Idempotency-Key':'payment:'+row.id},body:row.crmPaymentId?undefined:JSON.stringify(row.payload)});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data.crmPaymentId||data.amountMinor!==row.payload.amountMinor)throw Error('Не совпадает платёж CRM');row.crmPaymentId=data.crmPaymentId;row.status=data.status;row.receipts=data.receipts||[];row.lastError=null;row.updatedAt=new Date().toISOString();
++   for(const id of row.payload.integrationIds){const deal=(getState().microInfluencerDeals||[]).find(d=>String(d.id)===id);if(deal){deal.flowPaymentId=row.crmPaymentId;deal.flowPaymentStatus=row.status;deal.flowPaymentReceipts=row.receipts;if(row.status==='paid')deal.paymentStatus='оплачено';else if(deal.paymentStatus==='оплачено')deal.paymentStatus='к оплате';}}
++  }catch(e){row.lastError=/^HTTP \d+$/.test(e.message)?e.message:'Не удалось сверить заявку с CRM';}row.nextAt=Date.now()+60000;persist();}
++ }finally{busy=false}}
++ function mount(app,requireAuth){if(env.FLOW_LOGISTICS_ENABLED!=='1')return;app.post('/api/automation/payment-request',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});try{res.json(request(req.body||{},req.session.name||'общий вход'));drain().catch(()=>{})}catch(e){res.status(409).json({error:e.message})}});app.get('/api/automation/payments',requireAuth,(req,res)=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).json({error:'Нет доступа'});res.json({payments:records()})});const timer=setInterval(()=>drain().catch(()=>{}),30000);timer.unref();}
++ return {request,drain,mount};
++}
++module.exports={createFinanceClient};
+diff --git a/flow-media.js b/flow-media.js
+new file mode 100644
+index 0000000..6fb1958
+--- /dev/null
++++ b/flow-media.js
+@@ -0,0 +1,23 @@
++'use strict';
++const fs=require('fs'),path=require('path'),crypto=require('crypto'),multer=require('multer');
++function createMedia({env=process.env,fetchImpl=fetch}){
++ const root=path.resolve(env.FLOW_MEDIA_DIR||path.join(env.DATA_DIR||path.join(__dirname,'data'),'flow-media'));
++ const valid=id=>/^[a-f0-9-]{36}\.(mp4|mov|webm)$/.test(String(id));
++ function sign(id,exp){return crypto.createHmac('sha256',env.FLOW_MEDIA_SECRET||'').update(id+':'+exp).digest('hex')}
++ function url(id){if(!valid(id))throw Error('Неверный ID файла');if((env.FLOW_MEDIA_SECRET||'').length<32||!env.FLOW_PUBLIC_ORIGIN||new URL(env.FLOW_PUBLIC_ORIGIN).protocol!=='https:')throw Error('Не настроены защищённые ссылки на видео');const exp=Math.floor(Date.now()/1000)+7*86400;return env.FLOW_PUBLIC_ORIGIN+'/api/automation/media/'+id+'?exp='+exp+'&sig='+sign(id,exp)}
++ async function copyRemote(remote){
++  url('00000000-0000-0000-0000-000000000000.mp4');
++  const source=new URL(remote);const allowed=(env.FLOW_MEDIA_ALLOWED_HOSTS||'').split(',').map(x=>x.trim()).filter(Boolean);
++  if(source.protocol!=='https:'||!(source.hostname==='wazzup24.com'||source.hostname.endsWith('.wazzup24.com')||allowed.includes(source.hostname)))throw Error('Источник медиа не входит в разрешённый список');
++  const response=await fetchImpl(source,{redirect:'error',signal:AbortSignal.timeout(90000)});if(!response.ok||!response.body)throw Error('Не удалось получить исходное видео');
++  const mime=String(response.headers.get('content-type')||'').split(';')[0];if(!['video/mp4','video/quicktime','video/webm','application/octet-stream'].includes(mime))throw Error('Источник не вернул видео');
++  if(Number(response.headers.get('content-length')||0)>100*1024*1024)throw Error('Видео больше 100 МБ');
++  fs.mkdirSync(root,{recursive:true});const id=crypto.randomUUID()+({ 'video/quicktime':'.mov','video/webm':'.webm'}[mime]||'.mp4'),tmp=path.join(root,id+'.tmp');let size=0;
++  const fd=fs.openSync(tmp,'wx');try{for await(const chunk of response.body){size+=chunk.length;if(size>100*1024*1024)throw Error('Видео больше 100 МБ');fs.writeSync(fd,Buffer.from(chunk));}if(!size)throw Error('Пустой видеофайл');fs.closeSync(fd);fs.renameSync(tmp,path.join(root,id));return {id,url:url(id),bytes:size};}catch(e){try{fs.closeSync(fd)}catch{}fs.rmSync(tmp,{force:true});throw e;}
++ }
++ const upload=multer({storage:multer.diskStorage({destination(req,file,cb){fs.mkdirSync(root,{recursive:true});cb(null,root)},filename(req,file,cb){const ext=path.extname(file.originalname).toLowerCase();if(!['.mp4','.mov','.webm'].includes(ext))return cb(Error('Нужен MP4, MOV или WebM'));cb(null,crypto.randomUUID()+ext)}}),limits:{fileSize:100*1024*1024,files:1}}).single('video');
++ function uploadMiddleware(req,res,next){upload(req,res,err=>err?res.status(400).json({error:err.code==='LIMIT_FILE_SIZE'?'Видео больше 100 МБ':'Не удалось загрузить видео'}):next())}
++ function mount(app,requireAuth){if(env.FLOW_VIDEO_VERSIONS_ENABLED!=='1')return;app.get('/api/automation/media/:id',(req,res)=>{const {id}=req.params;if(!valid(id))return res.status(404).end();const expected=sign(id,req.query.exp),given=String(req.query.sig||'');const signed=(env.FLOW_MEDIA_SECRET||'').length>=32&&/^\d+$/.test(String(req.query.exp))&&Number(req.query.exp)>Date.now()/1000&&Number(req.query.exp)<Date.now()/1000+8*86400&&/^[a-f0-9]{64}$/.test(given)&&crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(given));const serve=()=>{res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');res.sendFile(path.join(root,id));};if(signed)return serve();requireAuth(req,res,()=>{if(!['manager','marketer'].includes(req.session.role))return res.status(403).end();serve()});});}
++ return {upload:uploadMiddleware,url,mount,copyRemote,remove(id){if(valid(id))fs.rmSync(path.join(root,id),{force:true})}};
++}
++module.exports={createMedia};
 diff --git a/flow-mobile/app.js b/flow-mobile/app.js
 new file mode 100644
-index 0000000..b1c42ae
+index 0000000..aab379d
 --- /dev/null
 +++ b/flow-mobile/app.js
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,30 @@
 +'use strict';
 +const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 +const money=v=>new Intl.NumberFormat('ru-KZ',{style:'currency',currency:'KZT',maximumFractionDigits:2}).format(v/100);
-+let session,actor=localStorage.getItem('mixitFlowActor')||'Сая',state,tab='orders',pendingItems=[];
++let session,actor=localStorage.getItem('mixitFlowActor')||'Сая',state,tab='orders',pendingItems=[],editingTasks=[];
 +try{session=JSON.parse(localStorage.getItem('barterBoxApp_session')||'null')}catch{}
 +const stages={distribution:'На распределении',assigned:'На сборке',shortage:'Нехватка товара',assembled:'Готово к отправке',dispatched:'В пути',delivered:'Доставлено',cancelled:'Отменено'};
 +const btn=(t,a,id='',primary=false)=>`<button ${primary?'class="primary"':''} data-action="${a}" data-id="${esc(id)}">${t}</button>`;
@@ -322,8 +610,8 @@ index 0000000..b1c42ae
 +function input(name,title,value='',type='text'){return `<label>${title}</label><input name="${name}" value="${esc(value)}" type="${type}" required>`}
 +function modal(title,html,fn){$('#modal-content').innerHTML=`<div class="modal-head"><h2>${title}</h2><button type="button" id="close">×</button></div><form id="form">${html}<div class="actions"><button class="primary">Сохранить</button></div></form>`;$('#close').onclick=()=>$('#modal').close();$('#modal').showModal();$('#form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;try{await fn(Object.fromEntries(new FormData(e.target)));$('#modal').close();await load();toast('Сохранено')}catch(err){toast(err.message)}finally{e.submitter.disabled=false}}}
 +function login(){$('#app').innerHTML=`<div class="login panel"><div class="brand">MIXIT<span>Flow</span></div><h1>Доставки команды</h1><p>Используйте существующий вход Barter Box.</p><form id="login"><label>Роль</label><select name="role"><option value="marketer">Маркетолог</option><option value="manager">Менеджер / логист</option></select>${input('login','Логин')}${input('password','Пароль','','password')}<button class="primary">Войти</button></form><p><small>Новых обязательных персональных аккаунтов нет.</small></p></div>`;$('#login').onsubmit=async e=>{e.preventDefault();try{const data=Object.fromEntries(new FormData(e.target)),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),j=await r.json();if(!r.ok)throw Error(j.error);session={role:data.role,authToken:j.token,readOnly:!!j.readOnly};localStorage.setItem('barterBoxApp_session',JSON.stringify(session));await load()}catch(err){toast(err.message)}}}
-+async function load(){state=await api('/api/automation/state');render()}
-+function render(){const active=state.orders.filter(o=>!['delivered','cancelled'].includes(o.status));$('#app').innerHTML=`<aside><div class="brand">MIXIT<span>Flow</span></div><div class="workspace-label">ДОСТАВКИ · BARTER BOX</div><nav>${btn('Очередь Саи','tab','orders',tab==='orders')}${btn('Интеграции','tab','deals',tab==='deals')}${btn('Справочник товаров','tab','catalog',tab==='catalog')}${btn('События','tab','events',tab==='events')}</nav><div class="aside-bottom"><p>Работаем с существующими orders и интеграциями.</p><a href="/">Открыть Barter Box ↗</a></div></aside><main><div class="topbar"><span>ЕДИНАЯ ЛОГИСТИКА</span><span>${esc(actor)}</span></div><div class="heading"><div><div class="eyebrow">Координатор — Сая</div><h1>${tab==='orders'?'Посылки под контролем':tab==='deals'?'Заявка из интеграции':tab==='catalog'?'Товары и себестоимость':'История мобильного процесса'}</h1><p class="muted">Без повторного ввода адресов и пересылки списков.</p></div>${btn('Указать своё имя','actor')}</div><div class="notice">Пилот под флагом FLOW_LOGISTICS_ENABLED. Внешние сообщения и выплаты не отправляются. Имя исполнителя указывается при общем входе.</div>${tab==='orders'?`<div class="stats"><div class="stat">На распределении<strong>${state.orders.filter(o=>o.fulfillment.stage==='distribution').length}</strong></div><div class="stat">На сборке<strong>${state.orders.filter(o=>o.fulfillment.stage==='assigned').length}</strong></div><div class="stat">В работе<strong>${active.length}</strong></div><div class="stat">Отправлено товаров<strong>${money(state.orders.filter(o=>['in_route','delivered'].includes(o.status)).reduce((s,o)=>s+o.fulfillment.costMinor,0))}</strong></div></div><div class="grid">${state.orders.map(o=>{const f=o.fulfillment,s=o.status==='delivered'?'delivered':o.status==='cancelled'?'cancelled':f.stage;return `<article class="card"><div class="card-top"><span class="badge">${esc(stages[s]||s)}</span><small>Заказ №${o.id}</small></div><h2>${esc(o.blogger)}</h2><p>${esc(o.city)} · ${esc(o.address)}</p><small>${esc(o.phone)}</small><div class="facts"><div>Склад<strong>${esc(f.warehouse||'—')}</strong></div><div>Сборщик<strong>${esc(f.assembler||'—')}</strong></div></div>${f.items.map(x=>`<p><small>${esc(x.name)} × ${x.qty}</small></p>`).join('')}<p><b>${money(f.costMinor)}</b> · ${o.dealIds.length} интеграций</p>${f.note?`<p class="notice">${esc(f.note)}</p>`:''}${f.tracking?`<p>${esc(f.carrier)} · ${esc(f.tracking)}</p>`:''}<div class="actions">${['distribution','assigned'].includes(s)?btn('Назначить сборщика','assign',o.id,true):''}${s==='assigned'?btn('Собрано','assembled',o.id)+btn('Нехватка','shortage',o.id):''}${s==='shortage'?btn('Вернуть на сборку','assigned',o.id):''}${s==='assembled'?btn('Передать в доставку','dispatched',o.id,true):''}${s==='dispatched'?btn('Фото: доставлено','delivered',o.id,true):''}${!['dispatched','delivered','cancelled'].includes(s)?btn('Отменить','cancelled',o.id):''}</div></article>`}).join('')||'<div class="empty">Оформите первую отправку из существующей интеграции.</div>'}</div>`:tab==='deals'?`<input id="search" placeholder="Поиск по блогеру или менеджеру"><div id="deals" class="grid actions">${dealCards(state.deals)}</div>`:tab==='catalog'?`<div class="actions">${btn('Загрузить нормализованный catalog.json','catalog_import','',true)}</div><p class="muted">Файл подготовлен из ваших Excel. Стоимость — в тенге. «В продаже» не считается складским остатком.</p><div class="panel table-wrap"><table><thead><tr><th>Товар</th><th>ШК</th><th>Себестоимость</th><th>Kaspi</th></tr></thead><tbody>${state.catalog.map(p=>`<tr><td>${esc(p.name)}<br><small>${esc(p.sku)}</small></td><td>${esc(p.barcode)}</td><td>${money(p.costMinor)}</td><td>${esc(p.kaspiArticle||'На сверку')}</td></tr>`).join('')}</tbody></table></div>`:`<section class="panel">${state.events.map(e=>`<div class="list-row"><div><p>${esc(e.action)}</p><small>${esc(e.actor)} · ${esc(e.at)} · ${esc(e.entityId)}</small></div></div>`).join('')||'Событий пока нет.'}</section>`}</main>`;if($('#search'))$('#search').oninput=e=>{$('#deals').innerHTML=dealCards(state.deals.filter(d=>`${d.blogerName} ${d.responsible}`.toLowerCase().includes(e.target.value.toLowerCase())))};}
++async function load(){state=await api('/api/automation/state');const editing=await api('/api/automation/editing');editingTasks=editing.tasks;render()}
++function render(){const active=state.orders.filter(o=>!['delivered','cancelled'].includes(o.status));$('#app').innerHTML=`<aside><div class="brand">MIXIT<span>Flow</span></div><div class="workspace-label">ДОСТАВКИ · BARTER BOX</div><nav>${btn('Очередь Саи','tab','orders',tab==='orders')}${btn('Интеграции','tab','deals',tab==='deals')}${btn('Справочник товаров','tab','catalog',tab==='catalog')}${btn('Входящие материалы','tab','incoming',tab==='incoming')}${btn('Монтаж','tab','editing',tab==='editing')}${btn('События','tab','events',tab==='events')}</nav><div class="aside-bottom"><p>Работаем с существующими orders и интеграциями.</p><a href="/">Открыть Barter Box ↗</a></div></aside><main><div class="topbar"><span>ЕДИНАЯ ЛОГИСТИКА</span><span>${esc(actor)}</span></div><div class="heading"><div><div class="eyebrow">Координатор — Сая</div><h1>${tab==='orders'?'Посылки под контролем':tab==='deals'?'Заявка из интеграции':tab==='catalog'?'Товары и себестоимость':tab==='editing'?'Задачи монтажёра':tab==='incoming'?'Привязать входящие материалы':'История мобильного процесса'}</h1><p class="muted">Без повторного ввода адресов и пересылки списков.</p></div>${btn('Указать своё имя','actor')}</div><div class="notice">Пилот под флагом FLOW_LOGISTICS_ENABLED. Внешние сообщения и выплаты не отправляются. Имя исполнителя указывается при общем входе.</div>${tab==='orders'?`<div class="stats"><div class="stat">На распределении<strong>${state.orders.filter(o=>o.fulfillment.stage==='distribution').length}</strong></div><div class="stat">На сборке<strong>${state.orders.filter(o=>o.fulfillment.stage==='assigned').length}</strong></div><div class="stat">В работе<strong>${active.length}</strong></div><div class="stat">Отправлено товаров<strong>${money(state.orders.filter(o=>['in_route','delivered'].includes(o.status)).reduce((s,o)=>s+o.fulfillment.costMinor,0))}</strong></div></div><div class="grid">${state.orders.map(o=>{const f=o.fulfillment,s=o.status==='delivered'?'delivered':o.status==='cancelled'?'cancelled':f.stage;return `<article class="card"><div class="card-top"><span class="badge">${esc(stages[s]||s)}</span><small>Заказ №${o.id}</small></div><h2>${esc(o.blogger)}</h2><p>${esc(o.city)} · ${esc(o.address)}</p><small>${esc(o.phone)}</small><div class="facts"><div>Склад<strong>${esc(f.warehouse||'—')}</strong></div><div>Сборщик<strong>${esc(f.assembler||'—')}</strong></div></div>${f.items.map(x=>`<p><small>${esc(x.name)} × ${x.qty}</small></p>`).join('')}<p><b>${money(f.costMinor)}</b> · ${o.dealIds.length} интеграций</p>${f.note?`<p class="notice">${esc(f.note)}</p>`:''}${f.tracking?`<p>${esc(f.carrier)} · ${esc(f.tracking)}</p>`:''}<div class="actions">${['distribution','assigned'].includes(s)?btn('Назначить сборщика','assign',o.id,true):''}${s==='assigned'?btn('Собрано','assembled',o.id)+btn('Нехватка','shortage',o.id):''}${s==='shortage'?btn('Вернуть на сборку','assigned',o.id):''}${s==='assembled'?btn('Передать в доставку','dispatched',o.id,true):''}${s==='dispatched'?btn('Фото: доставлено','delivered',o.id,true):''}${!['dispatched','delivered','cancelled'].includes(s)?btn('Отменить','cancelled',o.id):''}</div></article>`}).join('')||'<div class="empty">Оформите первую отправку из существующей интеграции.</div>'}</div>`:tab==='deals'?`<input id="search" placeholder="Поиск по блогеру или менеджеру"><div id="deals" class="grid actions">${dealCards(state.deals)}</div>`:tab==='catalog'?`<div class="actions">${btn('Загрузить нормализованный catalog.json','catalog_import','',true)}</div><p class="muted">Файл подготовлен из ваших Excel. Стоимость — в тенге. «В продаже» не считается складским остатком.</p><div class="panel table-wrap"><table><thead><tr><th>Товар</th><th>ШК</th><th>Себестоимость</th><th>Kaspi</th></tr></thead><tbody>${state.catalog.map(p=>`<tr><td>${esc(p.name)}<br><small>${esc(p.sku)}</small></td><td>${esc(p.barcode)}</td><td>${money(p.costMinor)}</td><td>${esc(p.kaspiArticle||'На сверку')}</td></tr>`).join('')}</tbody></table></div>`:tab==='incoming'?`<div class="grid">${(state.pendingMedia||[]).map(m=>`<article class="card"><span class="badge warn">Нужен выбор интеграции</span><p>${esc(m.text||m.type)}</p>${/^https:\/\//.test(m.url)?`<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">Открыть материал ↗</a>`:''}<div class="actions">${btn('Выбрать интеграцию','media_attach',m.messageId,true)}</div></article>`).join('')||'<div class="empty">Неоднозначных материалов нет.</div>'}</div>`:tab==='editing'?`<div class="grid">${editingTasks.map(t=>`<article class="card"><span class="badge">${esc(t.status)}</span><h2>${esc(t.blogger)}</h2><p>Исходник v${t.versionNumber||'—'}</p><p>${esc(t.note||'')}</p>${t.source?`<a href="${esc(t.source)}" target="_blank" rel="noopener noreferrer">Исходное видео ↗</a>`:''}<div class="actions">${t.status==='pending'?btn('Загрузить готовый монтаж','editing_upload',t.id,true):''}</div></article>`).join('')||'<div class="empty">Нет задач на монтаж.</div>'}</div>`:`<section class="panel">${state.events.map(e=>`<div class="list-row"><div><p>${esc(e.action)}</p><small>${esc(e.actor)} · ${esc(e.at)} · ${esc(e.entityId)}</small></div></div>`).join('')||'Событий пока нет.'}</section>`}</main>`;if($('#search'))$('#search').oninput=e=>{$('#deals').innerHTML=dealCards(state.deals.filter(d=>`${d.blogerName} ${d.responsible}`.toLowerCase().includes(e.target.value.toLowerCase())))};}
 +function dealCards(deals){return deals.map(d=>`<article class="card"><small>Интеграция №${d.id} · ${esc(d.responsible)}</small><h2>${esc(d.blogerName)}</h2><p>${esc(d.product||'Товары выбираются при заявке')}</p><small>План: ${esc(d.plannedDate||'—')} · ${esc(d.productStatus||'Нет статуса')}</small><div class="actions">${btn('Оформить отправку','request',d.id,true)}</div></article>`).join('')}
 +function productLines(){const div=$('#product-lines');div.innerHTML=pendingItems.map((p,i)=>`<div class="itemline"><select data-product="${i}">${state.catalog.map(x=>`<option value="${esc(x.id)}" ${x.id===p.productId?'selected':''}>${esc(x.name)} · ${money(x.costMinor)}</option>`).join('')}</select><input type="number" aria-label="Количество" min="1" step="1" value="${p.qty}" data-qty="${i}" required><button type="button" data-remove="${i}">×</button></div>`).join('');function total(){$('#total').textContent='Себестоимость: '+money(pendingItems.reduce((s,p)=>s+(state.catalog.find(x=>x.id===p.productId)?.costMinor||0)*p.qty,0))}total();div.querySelectorAll('[data-product]').forEach(x=>x.onchange=()=>{pendingItems[+x.dataset.product].productId=x.value;total()});div.querySelectorAll('[data-qty]').forEach(x=>x.oninput=()=>{pendingItems[+x.dataset.qty].qty=+x.value;total()});div.querySelectorAll('[data-remove]').forEach(x=>x.onclick=()=>{pendingItems.splice(+x.dataset.remove,1);productLines()})}
 +async function action(a,id){
@@ -331,6 +619,8 @@ index 0000000..b1c42ae
 + if(a==='actor'){modal('Кто выполняет действие',input('name','Имя сотрудника',actor),async d=>{actor=d.name.trim();localStorage.setItem('mixitFlowActor',actor)});return}
 + if(a==='catalog_import'){modal('Импорт справочника',`<p>Выберите подготовленный catalog.json. Сначала проверка без записи.</p><input id="catalog-file" type="file" accept=".json" required><button type="button" id="check">Проверить</button><pre id="report"></pre>`,async()=>{const file=$('#catalog-file').files[0];if(!file)throw Error('Выберите файл');const items=JSON.parse(await file.text());await cmd('catalog_import',{items,dryRun:false})});$('#check').onclick=async()=>{try{const f=$('#catalog-file').files[0];if(!f)throw Error('Выберите файл');const items=JSON.parse(await f.text()),r=await cmd('catalog_import',{items,dryRun:true});$('#report').textContent=JSON.stringify(r,null,2)}catch(e){toast(e.message)}};return}
 + if(a==='request'){if(!state.catalog.length)throw Error('Сначала импортируйте справочник товаров');const d=state.deals.find(x=>String(x.id)===String(id)),other=state.deals.filter(x=>x.id!==d.id&&d.instagramAccount&&x.instagramAccount===d.instagramAccount);pendingItems=[{productId:state.catalog[0].id,qty:1}];modal('Заявка на товар',`<p>${esc(d.blogerName)}</p>${input('city','Город',d.city||'')}${input('address','Адрес',d.address||'')}${input('phone','Телефон',d.phone||'','tel')}${input('requiredDate','Желаемая дата получения',d.plannedDate||'','date')}<label>Связать другие видео того же блогера</label>${other.map(x=>`<label class="checkrow"><input type="checkbox" name="related" value="${x.id}">№${x.id} · ${esc(x.plannedDate)}</label>`).join('')}<label>Согласованные товары и количество</label><div id="product-lines"></div><button type="button" id="add">+ Товар</button><div class="total" id="total"></div><p><small>Нажатие подтверждает выбранный состав посылки. Количество не зависит от числа видео.</small></p>`,async values=>cmd('shipment_request',{...values,dealIds:[d.id,...[...$('#form').querySelectorAll('[name=related]:checked')].map(x=>Number(x.value))],items:pendingItems}));$('#add').onclick=()=>{pendingItems.push({productId:state.catalog[0].id,qty:1});productLines()};productLines();return}
++ if(a==='media_attach'){const m=(state.pendingMedia||[]).find(m=>m.messageId===id);if(!m)throw Error('Сообщение уже обработано');modal('К какой интеграции относится материал?','<label>Интеграция</label><select name="dealId">'+m.dealIds.map(id=>{const d=state.deals.find(d=>d.id===id);return '<option value="'+id+'">№'+id+' · '+esc(d?.blogerName)+' · '+esc(d?.product)+' · '+esc(d?.plannedDate)+'</option>'}).join('')+'</select>',d=>api('/api/coord/pending-media/'+encodeURIComponent(id)+'/attach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dealId:Number(d.dealId)})}));return}
++ if(a==='editing_upload'){modal('Готовая версия монтажа','<label>Видео MP4 / MOV / WebM до 100 МБ</label><input id="edit-video" type="file" accept="video/mp4,video/quicktime,video/webm" required><p>После загрузки проверка GATE запустится автоматически при настроенном Gemini.</p>',async()=>{const body=new FormData();body.append('video',$('#edit-video').files[0]);await api('/api/automation/editing/'+encodeURIComponent(id)+'/upload',{method:'POST',body})});return}
 + if(a==='assign'){const o=state.orders.find(x=>String(x.id)===id);modal('Склад и сборщик',`<label>Склад</label><select name="warehouse"><option>Алматы</option><option>Астана</option></select>${input('assembler','Кто собирает',o.fulfillment.assembler||'')}`,v=>cmd('shipment_assign',{id,...v}));return}
 + if(['assembled','shortage','assigned','dispatched','cancelled'].includes(a)){modal(stages[a],a==='shortage'?input('note','Какого товара не хватает'):a==='dispatched'?input('carrier','Перевозчик / водитель')+input('tracking','Трек / номер передачи'):`<p>Подтвердить: ${esc(stages[a])}?</p>`,v=>cmd('shipment_stage',{id,stage:a,...v}));return}
 + if(a==='delivered'){modal('Подтверждённая доставка',`<p>Используется существующий маршрут доставки с обязательным фото. Все связанные интеграции обновятся.</p><label>Фото доставки</label><input id="photo" type="file" accept="image/*" required>${input('comment','Комментарий','Доставка подтверждена')}`,async v=>{const data=new FormData();data.append('photo',$('#photo').files[0]);data.append('comment',v.comment);await api('/api/orders/'+encodeURIComponent(id)+'/deliver',{method:'POST',body:data})});return}
@@ -365,6 +655,30 @@ index 0000000..cacf8ba
 +++ b/flow-mobile/style.css
 @@ -0,0 +1 @@
 +:root{font-family:Arial,Helvetica,sans-serif;color:#202d27;background:#f5f6f1;font-synthesis:none;--green:#1e3b2e;--muted:#707a72;--line:#e2e6dd;--lime:#d9edb3}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a,input,select{touch-action:manipulation}button{cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:11px 15px;background:white;color:var(--green);font-weight:600;min-height:44px}button:hover{background:#edf2e7}button.primary{background:var(--green);color:white;border-color:var(--green)}button.danger{color:#a14b36}button:disabled{opacity:.45;cursor:wait}a{color:var(--green)}input,select,textarea{width:100%;border:1px solid #d8dfd3;background:#fff;border-radius:9px;padding:12px;color:#202d27;font-size:16px}textarea{min-height:100px;resize:vertical}label{display:block;font-size:13px;font-weight:600;margin:16px 0 7px}small,.muted{color:var(--muted);line-height:1.5}h1,h2,h3,p{margin-top:0}h1{font-size:30px;letter-spacing:-1px;margin-bottom:8px}h2{font-size:20px;letter-spacing:-.5px}h3{font-size:16px;margin-bottom:9px}p{line-height:1.5}aside{position:fixed;inset:0 auto 0 0;width:224px;padding:30px 20px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:10}.brand{font-size:27px;letter-spacing:-1.5px;font-weight:900}.brand span{font-size:15px;letter-spacing:0;font-weight:400;margin-left:7px}.workspace-label{font-size:10px;letter-spacing:1.8px;color:var(--muted);margin:12px 0 35px}nav{display:flex;flex-direction:column;gap:6px}nav button{border:0;background:transparent;text-align:left;font-size:14px;font-weight:500}nav button.active{background:var(--green);color:white}nav button .num{float:right;opacity:.7}.aside-bottom{margin-top:auto;font-size:12px;padding-top:20px}.avatar{display:inline-grid;place-items:center;width:38px;height:38px;background:var(--lime);border-radius:50%;font-weight:bold;margin-right:9px}.person{display:flex;align-items:center;margin:18px 0}.person small{display:block}main{margin-left:224px;padding:28px 42px 70px;max-width:1560px}.topbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:30px;font-size:12px;color:var(--muted)}.badge{display:inline-block;font-size:11px;padding:6px 9px;border-radius:7px;background:#edf1e8;color:#4d6143;line-height:1.2}.badge.warn{background:#fff0d6;color:#926522}.badge.red{background:#fce9e3;color:#a14b36}.badge.green{background:#dff0d7;color:#325b28}.heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:25px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.7px;color:#61724f;margin-bottom:11px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:25px}.stat{background:white;border:1px solid var(--line);border-radius:14px;padding:20px}.stat strong{font-size:32px;display:block;letter-spacing:-1px;margin:12px 0}.stat small{font-size:12px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.split{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}.card,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;overflow-wrap:anywhere}.card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px}.profile{display:flex;gap:12px;align-items:center}.profile .avatar{border-radius:12px;width:46px;height:46px;flex-shrink:0}.profile p{margin-bottom:2px;font-weight:600}.profile a{font-size:12px;color:var(--muted)}.facts{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:15px;font-size:12px}.facts strong{display:block;font-size:15px;margin-top:4px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:17px}.actions button{font-size:12px;padding:9px 12px}.toolbar{display:flex;gap:12px;margin:0 0 22px}.toolbar input{max-width:420px}.toolbar select{max-width:210px}.empty{text-align:center;padding:38px 20px;color:var(--muted);border:1px dashed #ccd5c2;border-radius:12px;background:#fafbf8}.list-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}.list-row:last-child{border:0}.list-row p{margin-bottom:4px;font-size:14px}.list-row small{font-size:12px}.hero{background:var(--green);color:white;border-radius:15px;padding:25px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;gap:16px}.hero p{color:#c9d5c5;margin-bottom:0;font-size:13px}.hero button{background:var(--lime);border:0}.notice{background:#fff8e8;border:1px solid #efe3c2;color:#7b632d;padding:13px 16px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:20px}.total{padding:15px;background:#edf3e5;border-radius:10px;margin-top:16px;font-weight:700}.itemline{display:grid;grid-template-columns:1fr 75px 40px;gap:7px;margin:9px 0}.itemline select{font-size:13px}.itemline button{padding:5px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--muted);font-weight:500;padding:13px 10px;border-bottom:1px solid var(--line)}td{padding:14px 10px;border-bottom:1px solid var(--line);max-width:320px;overflow-wrap:anywhere}dialog{border:1px solid var(--line);border-radius:18px;padding:26px;width:min(620px,calc(100% - 24px));max-height:90dvh;overflow:auto}dialog::backdrop{background:#14211788}.modal-head{display:flex;align-items:center;justify-content:space-between;gap:15px}.modal-head button{border:0}.login{max-width:440px;margin:9vh auto;padding:35px}.login .brand{margin-bottom:30px}.login button{width:100%;margin-top:23px}.login small{display:block;margin-top:20px}.loading{opacity:.5}#toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#1e3b2e;color:white;padding:14px 20px;border-radius:12px;z-index:100;display:none;max-width:90%;font-size:14px}#toast.error{background:#9f4834}.flow-step{border-left:2px solid #c8ddb4;padding:0 0 20px 20px;margin-left:8px}.flow-step h3{margin-bottom:5px}.flow-step p{font-size:13px;color:var(--muted)}.checkrow{display:flex;align-items:center;gap:9px;font-size:13px;margin:9px 0}.checkrow input{width:20px;min-height:20px}pre{white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto;background:#f6f7f2;padding:14px;border-radius:8px}.productname{max-width:330px}.nowrap{white-space:nowrap}@media(min-width:1600px){main{margin-right:auto}}@media(max-width:1100px){main{padding:25px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.split{grid-template-columns:1fr}.stats{gap:10px}.stat{padding:15px}}@media(max-width:760px){aside{position:sticky;top:0;width:100%;height:auto;padding:12px 16px;border-right:0;border-bottom:1px solid var(--line)}.brand{font-size:23px}.workspace-label,.aside-bottom{display:none}nav{flex-direction:row;overflow:auto;margin-top:11px;padding-bottom:3px;gap:5px}nav button{white-space:nowrap;font-size:12px;padding:9px 12px;min-height:38px}nav button .num{display:none}main{margin:0;padding:18px 15px 45px}.topbar{padding-bottom:14px;margin-bottom:20px}.heading{align-items:flex-start}.heading button{font-size:12px;padding:10px}.heading h1{font-size:25px}.heading p{font-size:12px}.stats{grid-template-columns:repeat(2,1fr)}.stat strong{font-size:28px}.stat{padding:15px}.grid{grid-template-columns:1fr}.hero{padding:20px;align-items:flex-start}.hero h2{font-size:18px}.hero button{font-size:12px;flex-shrink:0}.toolbar{flex-wrap:wrap}.toolbar input,.toolbar select{max-width:100%}.row2{grid-template-columns:1fr}.card{padding:18px}.login{margin:3vh auto;padding:23px}.itemline{grid-template-columns:minmax(0,1fr) 65px 35px}.modal-head h2{font-size:19px}.list-row{align-items:flex-start}.topbar span:last-child{max-width:45%;text-align:right}}
+diff --git a/logistics-digests.js b/logistics-digests.js
+new file mode 100644
+index 0000000..64f94a5
+--- /dev/null
++++ b/logistics-digests.js
+@@ -0,0 +1,18 @@
++'use strict';
++const stamp=clock=>Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(clock()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
++function createDigests({getState,persist,send,getChannel,env=process.env,clock=()=>new Date()}){
++ let busy=false;const jobs=()=>getState().logisticsDigests||(getState().logisticsDigests=[]);
++ function prepare(){if(!['dry','on'].includes(env.FLOW_LOGISTICS_DIGEST_MODE))return;const p=stamp(clock),minutes=Number(p.hour)*60+Number(p.minute),slot=[720,900].find(s=>minutes>=s&&minutes<s+10);if(slot===undefined)return;
++  let contacts={};try{contacts=JSON.parse(env.FLOW_LOGISTICS_CONTACTS_JSON||'{}')}catch{return}
++  for(const [name,contact] of Object.entries(contacts)){
++   const orders=(getState().orders||[]).filter(o=>o.fulfillment&&o.status!=='cancelled'&&o.status!=='delivered');const selected=orders.filter(o=>{const f=o.fulfillment;if(name==='Сая'||contact.role==='coordinator')return ['distribution','shortage','assembled'].includes(f.stage);if(contact.role==='logistic')return f.stage==='assembled'&&(!contact.warehouse||contact.warehouse===f.warehouse);return f.assembler===name&&f.stage==='assigned'});
++   const phone=String(contact.phone||'').replace(/\D/g,'');if(!selected.length||!/^7\d{10}$/.test(phone))continue;
++   const key=[p.year,p.month,p.day,slot,name].join(':');if(jobs().some(j=>j.key===key))continue;
++   const text=`${name}, задачи на ${slot===720?'12:00':'15:00'}: ${selected.length}.\n`+selected.slice(0,20).map(o=>'Заявка №'+o.id+' · '+({distribution:'распределить',shortage:'нехватка товара',assembled:'готово к отправке',assigned:'собрать'}[o.fulfillment.stage]||o.fulfillment.stage)).join('\n')+'\nОткрыть очередь: '+(env.FLOW_PUBLIC_ORIGIN||'')+'/flow/';
++   jobs().push({key,phone,name,text,status:env.FLOW_LOGISTICS_DIGEST_MODE==='dry'?'dry_run':'pending',createdAt:clock().toISOString()});persist();
++  }
++ }
++ async function drain(){if(busy)return;prepare();if(env.FLOW_LOGISTICS_DIGEST_MODE!=='on')return;busy=true;try{const ch=await getChannel();for(const j of jobs().filter(j=>j.status==='pending')){if(clock()-new Date(j.createdAt)>30*60000){j.status='expired';persist();continue}const last=getState().coord?.lastIn?.[j.phone];if(!ch.plain&&(!last||Date.now()-Date.parse(last)>23.5*3600000))continue;j.status='sending';persist();try{const result=await send({channelId:ch.id,chatType:'whatsapp',chatId:j.phone,text:j.text,crmMessageId:'logistics:'+j.key,clearUnanswered:false});if(!result.messageId)throw Error('No ID');j.status='accepted';j.messageId=result.messageId;persist()}catch{j.status='uncertain';persist()}}}finally{busy=false}}
++ return {prepare,drain};
++}
++module.exports={createDigests};
 diff --git a/public/flow-product-picker.js b/public/flow-product-picker.js
 new file mode 100644
 index 0000000..741a999
@@ -409,7 +723,7 @@ index 0000000..741a999
 + if(global)global.mountFlowProductPicker=mountFlowProductPicker;
 +})(typeof window!=='undefined'?window:null);
 diff --git a/public/index.html b/public/index.html
-index 4662a1e..3ae7cea 100644
+index 4662a1e..2a7078b 100644
 --- a/public/index.html
 +++ b/public/index.html
 @@ -294,6 +294,7 @@ select.inline-edit-input{cursor:pointer}
@@ -420,7 +734,15 @@ index 4662a1e..3ae7cea 100644
  <script>
  "use strict";
  
-@@ -7021,6 +7022,8 @@ function microProblemWarning(name, exceptId){
+@@ -3366,6 +3367,7 @@ function renderLogin(){
+         UI.role = role; UI.authToken = data.token; UI.readOnly = !!data.readOnly; saveSession(); UI.tab = "dashboard";
+         await DataManager.load(); // токена не было до этого момента — предыдущая попытка загрузки данных 401'ится
+         render();
++        await maybeOpenFlowCrmProfile();
+       }catch(e){ toast(e.message, true); }
+     };
+     document.getElementById("staff-login-btn").onclick = submit;
+@@ -7021,6 +7023,8 @@ function microProblemWarning(name, exceptId){
  }
  function modalMicroDeal(existing, prefill){
    const isEdit = !!existing;
@@ -429,7 +751,7 @@ index 4662a1e..3ae7cea 100644
    const d = existing || Object.assign({
      responsible:"Нина", blogerName:"", bloggerCategory:"", phone:"",
      instagramAccount:"", followers:0, er:0, avgReach:0,
-@@ -7066,6 +7069,8 @@ function modalMicroDeal(existing, prefill){
+@@ -7066,6 +7070,8 @@ function modalMicroDeal(existing, prefill){
        <div class="field"><label>ИИН</label><input id="mm-iin" value="${escapeHtml(d.iin||'')}"></div>
      </div>
      <div class="login-hint">Стоимость товара — себестоимость подарённого бартером товара; учитывается в расходах, CPV и ROMI вместе с суммой оплаты.</div>
@@ -438,10 +760,31 @@ index 4662a1e..3ae7cea 100644
      <div class="field"><label>Условия</label><input id="mm-conditions" value="${escapeHtml(d.conditions||'')}"></div>
      <div class="form-row">
        <div class="field"><label>Товар</label><input id="mm-product" list="product-suggestions" placeholder="Название товара как в 1С" value="${escapeHtml(d.product||'')}"></div>
-@@ -7104,6 +7109,12 @@ function modalMicroDeal(existing, prefill){
+@@ -7098,12 +7104,33 @@ function modalMicroDeal(existing, prefill){
+     </div>
+     <div class="login-hint">Плановая дата — чтобы интеграция сразу попала в нужный месяц фильтра/графика, даже если видео ещё не вышло. Как только появится факт-дата выкладки — используется она.</div>
+     <div class="field"><label>Комментарий</label><textarea id="mm-notes">${escapeHtml(d.notes||"")}</textarea></div>
++    <label class="login-hint"><input id="mm-brief-auto-send" type="checkbox" ${d.flowBriefAutoSend?'checked':''}> Разрешаю автоматически отправить утверждённое ТЗ в WhatsApp на проверенный телефон этой интеграции</label>
+     <div class="modal-actions">
++      ${isEdit&&DataManager.state.automationFlow?'<button class="btn btn-ghost" id="mm-blogery-request">ТЗ → Blogery Audit</button>':''}
+       <button class="btn btn-ghost" id="mm-cancel">Отмена</button>
+       <button class="btn btn-primary" id="mm-save">${isEdit?'Сохранить':'Добавить'}</button>
      </div>
    `);
    document.getElementById("mm-cancel").onclick = closeModal;
++  if(isEdit&&existing.crmBloggerId&&DataManager.state.automationFlow){const pay=document.createElement('button');pay.className='btn btn-ghost';pay.textContent='Подать на оплату → CRM';pay.onclick=()=>{const rows=(DataManager.state.microInfluencerDeals||[]).filter(x=>x.crmBloggerId===existing.crmBloggerId);openModal(`<h3>Заявка в существующий реестр оплат CRM</h3><div class="field"><label>Общая сумма, ₸</label><input id="flow-pay-amount" type="number" step="0.01" min="0.01" value="${existing.cost||''}"></div><div class="field"><label>Получатель</label><input id="flow-pay-recipient"></div><div class="field"><label>Способ расчёта</label><select id="flow-pay-settlement"><option value="ip">ИП</option><option value="cash">Наличные</option></select></div><div class="field"><label>Этап оплаты</label><input id="flow-pay-stage" value="Окончательный расчёт"></div><div class="field"><label>Ссылка на полученный счёт, если есть</label><input id="flow-pay-invoice"></div><div class="field"><label>Видео в этой заявке</label>${rows.map(x=>`<label><input type="checkbox" class="flow-pay-deal" value="${x.id}" ${x.id===existing.id?'checked':''}> №${x.id} · ${escapeHtml(x.product||'')}</label>`).join('')}</div><div class="login-hint">Сумма общая для выбранных видео. Выплата не выполняется. Для ИП без счёта согласование Bitrix не запускается.</div><button class="btn btn-primary" id="flow-pay-submit">Подать заявку</button>`);document.getElementById('flow-pay-submit').onclick=async()=>{try{const response=await apiFetch('/api/automation/payment-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({integrationIds:[...document.querySelectorAll('.flow-pay-deal:checked')].map(x=>x.value),amountKzt:document.getElementById('flow-pay-amount').value,recipientName:document.getElementById('flow-pay-recipient').value,settlement:document.getElementById('flow-pay-settlement').value,stage:document.getElementById('flow-pay-stage').value,invoiceReference:document.getElementById('flow-pay-invoice').value})});const data=await response.json();if(!response.ok)throw Error(data.error);closeModal();toast('Заявка записана для передачи в реестр CRM');}catch(e){toast(e.message,true)}}};document.getElementById('mm-save').parentElement.prepend(pay);}
++
++  if(isEdit&&(existing.flowBriefHistory||[]).length){
++    const versions=existing.flowBriefHistory;const row=document.createElement('div');row.className='login-hint';
++    const title=document.createElement('span');title.textContent='Утверждённое ТЗ из Blogery Audit: ';row.appendChild(title);
++    const select=document.createElement('select');for(const v of versions){const option=document.createElement('option');option.value=v.versionId;option.textContent=(v.title||'ТЗ')+' · '+(v.status==='sent'?'отправлено':'утверждено');select.appendChild(option);}select.value=existing.flowBriefApprovedVersionId||versions[versions.length-1].versionId;row.appendChild(select);
++    const send=document.createElement('button');send.className='btn btn-ghost';send.textContent='Отправить ТЗ блогеру в WhatsApp';send.onclick=async()=>{try{const r=await apiFetch('/api/automation/brief-send/'+existing.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:select.value})});const data=await r.json();if(!r.ok)throw Error(data.error);toast('ТЗ в очереди WhatsApp. Факт отправки подтвердит канал.');}catch(e){toast(e.message,true)}};row.appendChild(send);document.getElementById('mm-save').parentElement.before(row);
++  }
++  const blogeryRequest=document.getElementById('mm-blogery-request');
++  if(blogeryRequest)blogeryRequest.onclick=async()=>{try{
++    const r=await apiFetch('/api/automation/brief-request/'+existing.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes:document.getElementById('mm-notes').value})});const data=await r.json();if(!r.ok)throw Error(data.error);if(data.url){window.open(data.url,'_blank','noopener,noreferrer');}else toast('Запрос записан в очередь передачи в Blogery Audit');
++  }catch(e){toast(e.message,true)}};
++
 +  let flowPicker = null;
 +  if(document.getElementById("mm-flow-goods") && typeof mountFlowProductPicker === 'function'){
 +    flowPicker = mountFlowProductPicker({root:document.getElementById('mm-flow-goods'),catalog:DataManager.state.automationFlow.catalog,selected:d.flowGoods||[],barcodes:d.barcode||'',name:d.product||'',onChange:(lines,total)=>{
@@ -451,7 +794,7 @@ index 4662a1e..3ae7cea 100644
    const skuPick = document.getElementById("mm-sku-pick");
    if(skuPick) skuPick.addEventListener("change", ()=>{
      const hit = microSkuAll().find(x=> skuPick.value === x.name+" — "+x.code || skuPick.value.trim() === x.code);
-@@ -7138,7 +7149,7 @@ function modalMicroDeal(existing, prefill){
+@@ -7138,7 +7165,7 @@ function modalMicroDeal(existing, prefill){
        erTT: parseFloat(document.getElementById("mm-er-tt").value)||0,
        avgReachTT: parseInt(document.getElementById("mm-avg-reach-tt").value,10)||0,
        cost: parseInt(document.getElementById("mm-cost").value,10)||0,
@@ -460,32 +803,108 @@ index 4662a1e..3ae7cea 100644
        paymentStatus: document.getElementById("mm-payment-status").value,
        paymentMethod: document.getElementById("mm-payment-method").value.trim(),
        iin: document.getElementById("mm-iin").value.trim(),
-@@ -7168,8 +7179,10 @@ function modalMicroDeal(existing, prefill){
+@@ -7160,6 +7187,7 @@ function modalMicroDeal(existing, prefill){
+       plannedDate: document.getElementById("mm-planned-date").value,
+       publishDate: document.getElementById("mm-publish-date").value,
+       notes: document.getElementById("mm-notes").value.trim(),
++      flowBriefAutoSend: document.getElementById("mm-brief-auto-send").checked,
+     };
+   };
+   const formAtOpen = readMicroForm();
+@@ -7168,8 +7196,12 @@ function modalMicroDeal(existing, prefill){
      const btn = document.getElementById("mm-save");
      const blogerName = document.getElementById("mm-name").value.trim();
      if(!blogerName){ toast("Укажите блогера", true); return; }
 +    if(flowGoodsDirty && flowPicker){try{flowPicker.validate();}catch(e){toast(e.message,true);return;}}
++    if(prefill?.crmBloggerId&&!document.getElementById('mm-responsible').value.trim()){toast('Укажите ответственного: соответствие сотрудника CRM ещё не настроено',true);return;}
      const payload = readMicroForm();
++    if(!isEdit&&prefill?.crmBloggerId)payload.crmBloggerId=prefill.crmBloggerId;
      const toSend = isEdit ? changedFields(payload, formAtOpen) : payload;
 +    if(flowGoodsDirty) toSend.flowGoodsInput=flowGoodsInput;
      if(isEdit && !Object.keys(toSend).length){ closeModal(); toast("Изменений нет"); return; }
      try{
        await withBusy(btn, ()=> isEdit ? Api.updateMicroDeal(existing.id, toSend) : Api.createMicroDeal(payload));
+@@ -12485,6 +12517,8 @@ async function runSelfTests(){
+   TestSuite.run();
+ }
+ 
++let flowCrmProfileOpened=false;
++async function maybeOpenFlowCrmProfile(){const id=new URL(location.href).searchParams.get('crm_blogger');if(!id||!UI.authToken||flowCrmProfileOpened)return;try{const r=await apiFetch('/api/automation/crm-blogger/'+encodeURIComponent(id));const data=await r.json();if(!r.ok)throw Error(data.error);flowCrmProfileOpened=true;UI.tab='microInfluencers';render();modalMicroDeal(null,{crmBloggerId:data.profile.crmBloggerId,blogerName:data.profile.name,instagramAccount:'https://www.instagram.com/'+data.profile.handle+'/',phone:data.profile.phone,responsible:data.profile.responsible});}catch(e){toast(e.message,true)}}
+ /* =========================================================================
+    14. СТАРТ ПРИЛОЖЕНИЯ
+    ========================================================================= */
+@@ -12511,6 +12545,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
+   UI.inflCompare = {aFrom:"", aTo:"", bFrom:"", bTo:""};
+   render();
+   startPolling();
++  await maybeOpenFlowCrmProfile();
+ });
+ </script>
+ </body>
+diff --git a/review-transport.js b/review-transport.js
+new file mode 100644
+index 0000000..be105e6
+--- /dev/null
++++ b/review-transport.js
+@@ -0,0 +1,40 @@
++'use strict';
++const {createService}=require('./automation-flow');
++const teams={Нина:['Нина','Мадина','Марина','Зарина','Камила'],Сая:['Сая','Надира','Анастасия','Сабрина','Оксана'],Анеля:['Анеля','Ажар']};
++const phone=x=>String(x||'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7');
++function createReviewTransport({getState,persist,send,getChannel,env=process.env,resolveUrl=item=>item.url}){
++ let busy=false;const records=()=>getState().videoFlow?.reviewOutbox||[];
++ const service=createService(getState,persist);
++ function reviewers(){try{return JSON.parse(env.FLOW_TEAM_LEADS_JSON||'{}')}catch{return {}}}
++ function reviewer(manager){const key=String(manager||'').trim().split(/[\s(]/)[0];const team=Object.entries(teams).find(([,people])=>people.includes(key))?.[0];const r=reviewers()[team];return r&&/^7\d{10}$/.test(phone(r.phone))?{name:team,phone:phone(r.phone)}:null}
++ function bind(id,item,to){const f=getState().automationFlow||(getState().automationFlow={version:1,catalog:[],requests:{},reviewMessages:{},events:[],drafts:[]});f.reviewMessages[id]={dealId:item.dealId,videoVersionId:item.videoVersionId,reviewerPhone:to.phone,at:new Date().toISOString()};}
++ async function drain(){if(busy||!['dry','on'].includes(env.FLOW_REVIEW_SEND_MODE))return;busy=true;try{const channel=await getChannel();
++  for(const item of records().filter(x=>['dry_run','pending','media_sent'].includes(x.status)).slice(0,5)){
++   const deal=(getState().microInfluencerDeals||[]).find(d=>d.id===item.dealId);
++   if(!deal||deal.flowCurrentVideoVersionId!==item.videoVersionId){item.status='superseded';persist();continue}
++   const to=reviewer(item.responsible);if(!to){item.lastError='Не настроен подтверждённый контакт тимлида';persist();continue}
++   const lastIn=getState().coord?.lastIn?.[to.phone];if(!channel.plain&&(!lastIn||Date.now()-Date.parse(lastIn)>23.5*3600000)){item.lastError='Для WABA нужно активное окно общения с тимлидом';persist();continue}
++   item.recipient=to.name;
++   const caption=`${deal.blogerName} · интеграция ${deal.id} · v${item.versionNumber}\nGATE ${item.review.score??'—'}/${item.review.scale}\n${String(item.review.text||'').slice(0,2500)}\nОтветьте на видео или это сообщение: Согласовано / Правки: … / Монтаж: … / Пересъём: … При низком GATE: Согласовано: причина`;
++   item.preview={video:item.url,text:caption};
++   if(env.FLOW_REVIEW_SEND_MODE==='dry'){item.status='dry_run';persist();continue}
++   try{
++    if(!item.mediaMessageId){item.status='sending_media';persist();const response=await send({channelId:channel.id,chatType:'whatsapp',chatId:to.phone,contentUri:resolveUrl(item),crmMessageId:'flow-review-media:'+item.videoVersionId,clearUnanswered:false});if(!response.messageId)throw Error('no_message_id');item.mediaMessageId=response.messageId;bind(response.messageId,item,to);item.status='media_sent';persist();}
++    item.status='sending_caption';persist();const response=await send({channelId:channel.id,chatType:'whatsapp',chatId:to.phone,text:caption,refMessageId:item.mediaMessageId,crmMessageId:'flow-review-caption:'+item.videoVersionId,clearUnanswered:false});if(!response.messageId)throw Error('no_message_id');bind(response.messageId,item,to);item.captionMessageId=response.messageId;item.status='sent';item.sentAt=new Date().toISOString();deal.vstage='lead';deal.vlead=to.name;persist();
++   }catch{item.status='uncertain';item.lastError='Результат отправки не подтверждён: проверьте чат перед повтором';persist();}
++  }
++ }finally{busy=false}}
++ function incoming(msg,ourChannel){
++  if(!msg||msg.isEcho||msg.isEdited||msg.isDeleted||msg.channelId!==ourChannel||msg.chatType!=='whatsapp')return false;
++  const sender=phone(msg.chatId);if(!Object.values(reviewers()).some(r=>phone(r.phone)===sender))return false;
++  const st=getState();st.coord=st.coord||{};st.coord.lastIn=st.coord.lastIn||{};st.coord.lastIn[sender]=new Date().toISOString();
++  const quoted=msg.quotedMessage?.messageId;const binding=st.automationFlow?.reviewMessages?.[quoted];if(!binding)return true;
++  try{const decision=service.execute('тимлид (WhatsApp)',{action:'review_reply',data:{quotedMessageId:quoted,senderPhone:sender,text:msg.text,messageId:msg.messageId}},'review-in:'+msg.messageId);
++   const deal=(st.microInfluencerDeals||[]).find(d=>d.id===binding.dealId);if(deal){deal.vstage=({approved:'approved',changes:'revise',reshoot:'reshoot',editing:'lead'})[decision.decision];deal.vstageAt=new Date().toISOString();deal.vleadComment=decision.note||'';if(decision.decision==='approved'){deal.vmissed=0;deal.vdueMissed=null;}if(decision.decision==='editing')deal.flowEditingStatus='requested';}
++   persist();return true;
++  }catch(e){const events=st.coord.events||(st.coord.events=[]);if(!events.some(x=>x.sourceMessageId===msg.messageId))events.push({id:'review-error:'+msg.messageId,sourceMessageId:msg.messageId,at:new Date().toISOString(),dealId:binding.dealId,to:reviewer((st.microInfluencerDeals||[]).find(d=>d.id===binding.dealId)?.responsible)?.name,kind:'review_attention',text:e.status?e.message:'Ответ требует проверки',read:false});persist();return true;}
++ }
++ for(const item of records())if(['sending_media','sending_caption'].includes(item.status))item.status='uncertain';
++ return {drain,incoming,reviewer};
++}
++module.exports={createReviewTransport};
 diff --git a/server.js b/server.js
-index 877644b..ec287d2 100644
+index 877644b..7171d61 100644
 --- a/server.js
 +++ b/server.js
-@@ -934,6 +934,9 @@ require("./mcp.js")(app, { getState: ()=> state, pgPool, readonlyScrub });
+@@ -934,6 +934,12 @@ require("./mcp.js")(app, { getState: ()=> state, pgPool, readonlyScrub });
  // ИИ-координатор блогеров через WhatsApp/Wazzup (30.10.2026, тест на одном менеджере) — см. coordinator.js.
  // Выключен, пока в Render не задан COORD_MODE=dry (проверка без отправки) или on.
  require("./coordinator.js")(app, { getState: ()=> state, persist: ()=> persist(), requireAuth });
 +// Mobile logistics pilot: disabled unless FLOW_LOGISTICS_ENABLED=1.
 +const automationFlow = require("./automation-flow.js");
 +automationFlow.mount(app, {getState:()=>state, persist:()=>persist(), requireAuth});
++require("./blogery-client").createClient({getState:()=>state,persist:()=>persist()}).mount(app,requireAuth);
++require("./crm-link").mount(app,{getState:()=>state,persist:()=>persist(),requireAuth});
++require("./finance-client").createFinanceClient({getState:()=>state,persist:()=>persist()}).mount(app,requireAuth);
  
  // ---------- state & health ----------
  // /api/state отдаёт ВСЮ базу (заказы, телефоны, адреса, выручку, ROMI) — без
-@@ -1060,6 +1063,7 @@ app.post("/api/orders", requireAuth, (req,res)=>{
+@@ -1060,6 +1066,7 @@ app.post("/api/orders", requireAuth, (req,res)=>{
      deliveredAt: null, bitrixSynced: false,
    };
    state.orders.push(order);
@@ -493,7 +912,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json(order);
  });
-@@ -1067,6 +1071,7 @@ app.patch("/api/orders/:id", requireAuth, (req,res)=>{
+@@ -1067,6 +1074,7 @@ app.patch("/api/orders/:id", requireAuth, (req,res)=>{
    const o = state.orders.find(o=>o.id===+req.params.id);
    if(!o) return res.status(404).json({error:"not found"});
    Object.assign(o, req.body || {});
@@ -501,7 +920,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json(o);
  });
-@@ -1104,6 +1109,7 @@ app.delete("/api/orders/:id", requireAuth, (req,res)=>{
+@@ -1104,6 +1112,7 @@ app.delete("/api/orders/:id", requireAuth, (req,res)=>{
    // без этого публикация (и её замеры охвата/продаж) остаётся "осиротевшей" в базе и
    // продолжает попадать в сводки на дашборде, хотя сам заказ уже удалён.
    state.publications = state.publications.filter(p=>p.orderId!==id);
@@ -509,7 +928,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json({ok:true});
  });
-@@ -1118,6 +1124,7 @@ app.post("/api/orders/:id/deliver", requireAuth, uploadPhoto, (req,res)=>{
+@@ -1118,6 +1127,7 @@ app.post("/api/orders/:id/deliver", requireAuth, uploadPhoto, (req,res)=>{
    o.driverComment = (req.body && req.body.comment) || "";
    o.deliveredAt = new Date().toLocaleString("ru-RU");
    o.bitrixSynced = false;
@@ -517,7 +936,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json(o);
  });
-@@ -1130,6 +1137,7 @@ app.post("/api/orders/:id/problem", requireAuth, (req,res)=>{
+@@ -1130,6 +1140,7 @@ app.post("/api/orders/:id/problem", requireAuth, (req,res)=>{
    o.status = statusCode;
    o.driverComment = comment;
    o.deliveredAt = new Date().toLocaleString("ru-RU");
@@ -525,7 +944,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json(o);
  });
-@@ -1138,6 +1146,7 @@ app.post("/api/orders/:id/sync-bitrix", requireAuth, (req,res)=>{
+@@ -1138,6 +1149,7 @@ app.post("/api/orders/:id/sync-bitrix", requireAuth, (req,res)=>{
    const o = state.orders.find(o=>o.id===+req.params.id);
    if(!o) return res.status(404).json({error:"not found"});
    o.bitrixSynced = true;
@@ -533,7 +952,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json(o);
  });
-@@ -1151,6 +1160,7 @@ app.post("/api/orders/bulk-assign", requireAuth, (req,res)=>{
+@@ -1151,6 +1163,7 @@ app.post("/api/orders/bulk-assign", requireAuth, (req,res)=>{
    state.orders.forEach(o=>{
      if(idSet.has(o.id)){ o.driverCode = driverCode; o.status = "assigned"; o.assignedAt = now; count++; }
    });
@@ -541,7 +960,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json({ok:true, count});
  });
-@@ -1171,6 +1181,7 @@ app.post("/api/orders/bulk-deliver", requireAuth, (req,res)=>{
+@@ -1171,6 +1184,7 @@ app.post("/api/orders/bulk-deliver", requireAuth, (req,res)=>{
      o.closedWithoutPhoto = true; o.bitrixSynced = false;
      count++;
    });
@@ -549,7 +968,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json({ok:true, count, skipped});
  });
-@@ -1200,6 +1211,7 @@ app.post("/api/orders/bulk-status", requireAuth, (req,res)=>{
+@@ -1200,6 +1214,7 @@ app.post("/api/orders/bulk-status", requireAuth, (req,res)=>{
      if(status === "assigned" && !o.assignedAt) o.assignedAt = now;
      count++;
    });
@@ -557,7 +976,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json({ok:true, count});
  });
-@@ -1212,6 +1224,7 @@ app.post("/api/orders/bulk-delete", requireAuth, (req,res)=>{
+@@ -1212,6 +1227,7 @@ app.post("/api/orders/bulk-delete", requireAuth, (req,res)=>{
    // та же причина, что и в одиночном удалении: без каскада публикации выбранных заказов
    // остаются в базе и продолжают попадать в сводки на дашборде.
    state.publications = state.publications.filter(p=>!idSet.has(p.orderId));
@@ -565,7 +984,7 @@ index 877644b..ec287d2 100644
    persist();
    res.json({ok:true, count: before - state.orders.length});
  });
-@@ -1245,6 +1258,7 @@ app.post("/api/orders/import", requireAuth, (req,res)=>{
+@@ -1245,6 +1261,7 @@ app.post("/api/orders/import", requireAuth, (req,res)=>{
      });
      added++;
    });
@@ -573,10 +992,15 @@ index 877644b..ec287d2 100644
    persist();
    res.json({added});
  });
-@@ -1508,6 +1522,12 @@ app.post("/api/influencer-deals/import", requireAuth, (req,res)=>{
+@@ -1508,6 +1525,17 @@ app.post("/api/influencer-deals/import", requireAuth, (req,res)=>{
  app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
    const b = req.body || {};
    if(!b.blogerName) return res.status(400).json({error:"blogerName обязателен"});
++  let crmLinkedProfile = null;
++  if(b.crmBloggerId){
++    crmLinkedProfile=state.automationFlow?.bloggerLinks?.find(x=>x.crmBloggerId===String(b.crmBloggerId));
++    if(!crmLinkedProfile||microIgLogin(b.instagramAccount)!==crmLinkedProfile.handle)return res.status(409).json({error:'Связь с CRM не подтверждена'});
++  }
 +  let flowSelection = null;
 +  if(b.flowGoodsInput){
 +    if(process.env.FLOW_LOGISTICS_ENABLED !== "1") return res.status(409).json({error:"Выбор товаров из справочника выключен"});
@@ -586,15 +1010,17 @@ index 877644b..ec287d2 100644
    const deal = {
      id: nextId("microInfluencerDeals"),
      responsible: b.responsible || "Нина",
-@@ -1526,6 +1546,7 @@ app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
+@@ -1526,6 +1554,9 @@ app.post("/api/micro-influencer-deals", requireAuth, (req,res)=>{
      coopType: b.coopType || "",
      plannedDate: b.plannedDate || "", publishDate: b.publishDate || "", notes: b.notes || "",
    };
++  deal.flowBriefAutoSend=b.flowBriefAutoSend===true;if(deal.flowBriefAutoSend)deal.flowBriefAutoSendPhone=String(deal.phone||'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7');
++  if(crmLinkedProfile)deal.crmBloggerId=crmLinkedProfile.crmBloggerId;
 +  if(flowSelection) Object.assign(deal,{flowGoods:flowSelection.items,flowGoodsCostMinor:flowSelection.costMinor,productCost:flowSelection.costMinor/100});
    state.microInfluencerDeals.push(deal);
    persist();
    res.json(deal);
-@@ -1534,6 +1555,12 @@ app.patch("/api/micro-influencer-deals/:id", requireAuth, (req,res)=>{
+@@ -1534,6 +1565,13 @@ app.patch("/api/micro-influencer-deals/:id", requireAuth, (req,res)=>{
    const d = state.microInfluencerDeals.find(d=>d.id===+req.params.id);
    if(!d) return res.status(404).json({error:"not found"});
    const body = Object.assign({}, req.body || {});
@@ -604,6 +1030,7 @@ index 877644b..ec287d2 100644
 +    catch(e){ return res.status(e.status||400).json({error:e.message}); }
 +  }
 +  delete body.flowGoodsInput;
++  if(body.flowBriefAutoSend===true)body.flowBriefAutoSendPhone=String(body.phone??d.phone??'').replace(/\D/g,'').replace(/^8(?=\d{10}$)/,'7');
    if("instagramAccount" in body) body.instagramAccount = normalizeInstagramUrl(body.instagramAccount);
    if("reelsLink" in body) body.reelsLink = normalizeLinkUrl(body.reelsLink);
    if("tiktokVideoLink" in body) body.tiktokVideoLink = normalizeLinkUrl(body.tiktokVideoLink);
@@ -638,6 +1065,28 @@ index 0000000..8f3d9b5
 +test('ambiguous messages remain unassigned',()=>{const st={};videoFlow.queueAmbiguous(st,{messageId:'m',type:'video',contentUri:'https://x/v'},[{id:1},{id:2}]);videoFlow.queueAmbiguous(st,{messageId:'m'},[{id:1}]);assert.equal(st.videoFlow.pendingMedia.length,1);assert.deepEqual(st.videoFlow.pendingMedia[0].dealIds,[1,2]);});
 +
 +test('approved brief version cannot be rewritten and sent version stays fixed',()=>{const f=fixture();const event={dealId:1,briefId:'brief1',versionId:'v1',contentSha256:'a'.repeat(64),approvedBy:'Тимлид',files:{pdf:'https://storage.example.test/v1.pdf'}};f.cmd('brief_approved',event);f.cmd('brief_sent',{dealId:1,briefId:'brief1',versionId:'v1',channel:'whatsapp',messageId:'m1',recipientConfirmed:true});f.cmd('brief_approved',{...event,versionId:'v2',contentSha256:'b'.repeat(64)});assert.equal(f.state.microInfluencerDeals[0].flowBriefSentVersionId,'v1');assert.equal(f.state.microInfluencerDeals[0].flowBriefApprovedVersionId,'v2');assert.throws(()=>f.cmd('brief_approved',{...event,contentSha256:'c'.repeat(64)}));});
+diff --git a/test/full-cycle.test.js b/test/full-cycle.test.js
+new file mode 100644
+index 0000000..c083a6c
+--- /dev/null
++++ b/test/full-cycle.test.js
+@@ -0,0 +1,16 @@
++const test=require('node:test'),assert=require('node:assert/strict');const {createReviewTransport}=require('../review-transport');const {recordVersion,finishReview}=require('../video-flow');const {createClient}=require('../blogery-client');
++function reviewFixture(mode='on'){
++ const deal={id:1,blogerName:'Тест',responsible:'Марина',plannedDate:'2026-12-10'},st={microInfluencerDeals:[deal],orders:[],coord:{lastIn:{}}};const v=recordVersion(deal,{messageId:'input1',url:'https://example.test/v1.mp4'});finishReview(st,deal,v.id,{score:7,text:'Test'});const calls=[];
++ const transport=createReviewTransport({getState:()=>st,persist:()=>{},env:{FLOW_REVIEW_SEND_MODE:mode,FLOW_TEAM_LEADS_JSON:JSON.stringify({'Нина':{phone:'77000000000'}})},getChannel:async()=>({id:'channel1',plain:true}),send:async body=>{calls.push(body);return {messageId:'out'+calls.length}}});return {deal,st,v,transport,calls};
++}
++test('video and GATE are sent separately, both quoted IDs bind exact version',async()=>{const f=reviewFixture();await f.transport.drain();assert.equal(f.calls.length,2);assert.equal(f.calls[0].contentUri,'https://example.test/v1.mp4');assert.equal(f.calls[0].text,undefined);assert.match(f.calls[1].text,/7\/9/);assert.equal(f.calls[1].refMessageId,'out1');await f.transport.drain();assert.equal(f.calls.length,2);assert.equal(f.st.automationFlow.reviewMessages.out1.videoVersionId,f.v.id);assert.equal(f.st.automationFlow.reviewMessages.out2.videoVersionId,f.v.id)});
++test('real quoted leader reply creates editing task and retains publication date',async()=>{const f=reviewFixture();await f.transport.drain();assert.equal(f.transport.incoming({messageId:'reply1',channelId:'channel1',chatType:'whatsapp',chatId:'77000000000',quotedMessage:{messageId:'out1'},text:'Монтаж: сделать чудо'},'channel1'),true);assert.equal(f.deal.flowEditingStatus,'requested');assert.equal(f.st.automationFlow.drafts[0].topic,'editing.requested');assert.equal(f.deal.plannedDate,'2026-12-10');f.transport.incoming({messageId:'reply1',channelId:'channel1',chatType:'whatsapp',chatId:'77000000000',quotedMessage:{messageId:'out1'},text:'Монтаж: сделать чудо'},'channel1');assert.equal(f.st.automationFlow.drafts.length,1)});
++test('dry mode and unknown recipients never send',async()=>{const f=reviewFixture('dry');await f.transport.drain();assert.equal(f.calls.length,0);const g=reviewFixture();g.st.videoFlow.reviewOutbox[0].responsible='Неизвестный';await g.transport.drain();assert.equal(g.calls.length,0)});
++test('late quoted reply never approves newer video',async()=>{const f=reviewFixture();await f.transport.drain();recordVersion(f.deal,{messageId:'v2',url:'https://example.test/v2.mp4'});f.transport.incoming({messageId:'reply2',channelId:'channel1',chatType:'whatsapp',chatId:'77000000000',quotedMessage:{messageId:'out1'},text:'Согласовано'},'channel1');assert.equal(f.deal.flowVideoDecisions,undefined);assert.match(f.st.coord.events[0].text,/старую версию/)});
++test('Blogery request persists retry key and remote request link',async()=>{const st={microInfluencerDeals:[]},calls=[];let fail=true;const client=createClient({getState:()=>st,persist:()=>{},env:{BLOGERY_BRIDGE_ENABLED:'1',BLOGERY_AUDIT_ORIGIN:'https://audit.example.test',BLOGERY_BRIDGE_SECRET:'x'.repeat(32)},fetchImpl:async(u,o)=>{calls.push(o);if(fail)return {ok:false,status:503};return {ok:true,json:async()=>({id:'request-1'})}}});const deal={id:7,blogerName:'Тест',instagramAccount:'test',product:'Крем',responsible:'Марина'};const r=client.request(deal,'Марина');assert.equal(client.request(deal,'Марина').id,r.id);await client.drain();assert.equal(r.status,'pending');r.nextAt=0;fail=false;await client.drain();assert.equal(r.status,'received');assert.equal(calls[0].headers['Idempotency-Key'],calls[1].headers['Idempotency-Key']);assert.equal(r.url,'https://audit.example.test/?flow_request=request-1')});
++const {createBriefDelivery}=require('../brief-delivery');
++test('approved PDF sends once and actual channel status confirms exact brief version',async()=>{const deal={id:5,phone:'+77000000000',flowBriefHistory:[{briefId:'b1',versionId:'v1',files:{pdf:'https://audit.example.test/file.pdf'},status:'approved'}]};const st={microInfluencerDeals:[deal],orders:[]},calls=[];const delivery=createBriefDelivery({getState:()=>st,persist:()=>{},env:{FLOW_BRIEF_SEND_MODE:'on'},getChannel:async()=>({id:'wa1',plain:true}),send:async b=>{calls.push(b);return {messageId:'file-message'}}});delivery.enqueue(5,'v1','Менеджер');delivery.enqueue(5,'v1','Менеджер');await delivery.drain();assert.equal(calls.length,1);assert.equal(deal.flowBriefHistory[0].status,'approved');delivery.statuses([{messageId:'file-message',status:'sent'}]);assert.equal(deal.flowBriefHistory[0].status,'sent');assert.equal(deal.flowBriefSentVersionId,'v1');await delivery.drain();assert.equal(calls.length,1)});
++const {createFinanceClient}=require('../finance-client');const {createDigests}=require('../logistics-digests');
++test('finance client uses one CRM payment for linked videos; only paid confirmation changes status',async()=>{const deals=[{id:1,crmBloggerId:'b1',responsible:'Марина'},{id:2,crmBloggerId:'b1',responsible:'Марина'}],st={microInfluencerDeals:deals};let paid=false;const client=createFinanceClient({getState:()=>st,persist:()=>{},env:{FINANCE_BRIDGE_ENABLED:'1',CRM_ORIGIN:'https://crm.example.test',FLOW_CRM_SECRET:'x'.repeat(32),FLOW_EMPLOYEE_CRM_MAP_JSON:JSON.stringify({'Марина':'m1'})},fetchImpl:async()=>({ok:true,json:async()=>({crmPaymentId:'pay1',amountMinor:10000,status:paid?'paid':'pending',receipts:[]})})});const row=client.request({integrationIds:[1,2],amountKzt:'100',stage:'Аванс',settlement:'ip',recipientName:'Тест'},'Марина');await client.drain();assert.notEqual(deals[0].paymentStatus,'оплачено');paid=true;row.nextAt=0;await client.drain();assert.equal(deals[0].paymentStatus,'оплачено');assert.equal(deals[1].flowPaymentId,'pay1');assert.equal(st.flowFinance.length,1)});
++test('12:00 Astana digest goes to Saya once and contains no addresses or phones',async()=>{const st={orders:[{id:1,status:'created',address:'Секретный адрес',phone:'77000000001',fulfillment:{stage:'distribution'}}]},calls=[];const digests=createDigests({getState:()=>st,persist:()=>{},clock:()=>new Date('2026-11-17T07:00:00Z'),env:{FLOW_LOGISTICS_DIGEST_MODE:'on',FLOW_LOGISTICS_CONTACTS_JSON:JSON.stringify({'Сая':{phone:'77000000000',role:'coordinator'}}),FLOW_PUBLIC_ORIGIN:'https://barter.example.test'},getChannel:async()=>({id:'wa1',plain:true}),send:async b=>{calls.push(b);return {messageId:'digest1'}}});await digests.drain();await digests.drain();assert.equal(calls.length,1);assert.match(calls[0].text,/12:00/);assert.doesNotMatch(calls[0].text,/Секретный|77000000001/)});
++test('no tasks means no logistics message',async()=>{const st={orders:[]};let calls=0;const d=createDigests({getState:()=>st,persist:()=>{},clock:()=>new Date('2026-11-17T10:00:00Z'),env:{FLOW_LOGISTICS_DIGEST_MODE:'on',FLOW_LOGISTICS_CONTACTS_JSON:JSON.stringify({'Сая':{phone:'77000000000'}})},getChannel:async()=>({id:'wa',plain:true}),send:async()=>{calls++}});await d.drain();assert.equal(calls,0)});
 diff --git a/test/http-flow.smoke.js b/test/http-flow.smoke.js
 new file mode 100644
 index 0000000..610e5b4
