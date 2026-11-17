@@ -28,7 +28,7 @@ function planImport(rows,existing,makeBlogger){
   used.add(nick);if(platformId)ids.add(platformId);
   result.additions.push({id:crypto.randomUUID(),...makeBlogger({name:String(row.fullName||row.name||nick).slice(0,150),instagram_url:'https://www.instagram.com/'+nick+'/',instagram_followers:followers,status:'new'}),
    instagram_platform_id:platformId||null,discovery_status:'unreviewed',discovery_source:row._relatedSeed?'apify_recommendation':'apify_import',discovery_seed:row._relatedSeed||null,discovery_evidence:row._relatedSeed?'Рекомендации из выгрузки для @'+row._relatedSeed:'Данные из выгрузки; аудитория и тематика требуют проверки',
-   city:String(row.city||'').slice(0,100),batch_id:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+   city:String(row.city||'').slice(0,100),discovery_context:{biography:String(row.biography||'').slice(0,1500),captions:(Array.isArray(row.latestPosts)?row.latestPosts:[]).slice(0,3).map(p=>String(p.caption||'').slice(0,500))},batch_id:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
  }
  return result;
 }
