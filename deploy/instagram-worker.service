@@ -1,0 +1,19 @@
+[Unit]
+Description=MIXIT Instagram browser worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mixit
+WorkingDirectory=/opt/mixit/blogger-crm/instagram-worker
+EnvironmentFile=/etc/mixit/instagram-worker.env
+ExecStart=/usr/bin/node worker.mjs
+Restart=on-failure
+RestartSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

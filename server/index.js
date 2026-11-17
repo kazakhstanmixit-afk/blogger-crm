@@ -1232,6 +1232,7 @@ app.get('/api/bloggers/duplicates', auth, (req, res) => {
 // check duplicate
 // Additive Apify discovery pilot; existing bloggers and auth are reused.
 require('./discovery').mount(app, {db, auth, parse, makeBlogger});
+require('./negotiation').createNegotiation({db}).mount(app,auth);
 require('./communication').createCommunication({db}).mount(app,auth);
 require('./browser-outbox').createBrowserOutbox({db}).mount(app,auth);
 require('./finance-bridge').createFinanceBridge({db}).mount(app);
