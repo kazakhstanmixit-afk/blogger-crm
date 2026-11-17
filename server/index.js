@@ -1230,6 +1230,16 @@ app.get('/api/bloggers/duplicates', auth, (req, res) => {
 });
 
 // check duplicate
+// Additive Apify discovery pilot; existing bloggers and auth are reused.
+require('./discovery').mount(app, {db, auth, parse, makeBlogger});
+require('./negotiation').createNegotiation({db}).mount(app,auth);
+require('./communication').createCommunication({db}).mount(app,auth);
+require('./browser-outbox').createBrowserOutbox({db}).mount(app,auth);
+require('./finance-bridge').createFinanceBridge({db}).mount(app);
+require('./bitrix-payments').createBitrixPayments({db}).mount(app,auth);
+require('./discovery-search').createSearch({db,makeBlogger}).mount(app,auth);
+require('./discovery-compose').createCompose({db}).mount(app,auth);
+
 app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
   const { instagram_url, tiktok_url, name } = req.body;
   const users = db.get('users').value();
