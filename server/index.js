@@ -1238,6 +1238,7 @@ require('./browser-outbox').createBrowserOutbox({db}).mount(app,auth);
 require('./finance-bridge').createFinanceBridge({db,makeBlogger}).mount(app);
 require('./bitrix-payments').createBitrixPayments({db}).mount(app,auth);
 require('./discovery-search').createSearch({db,makeBlogger}).mount(app,auth);
+require('./apify-scout').createScout({db,makeBlogger}).mount(app,auth);
 require('./discovery-compose').createCompose({db}).mount(app,auth);
 require('./contracts').createContracts({db}).mount(app,auth);
 
