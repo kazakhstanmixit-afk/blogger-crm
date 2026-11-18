@@ -40,8 +40,9 @@ function mount(app,{db,auth,parse,makeBlogger}){
  const guard=fn=>(req,res)=>{try{need(['admin','manager'].includes(req.user.role),'Недостаточно прав',403);res.json(fn(req))}catch(e){res.status(e.status||500).json({error:e.status?e.message:'Ошибка обработки'});}};
  app.get(/^\/discovery$/,(req,res)=>res.redirect('/discovery/'));
  app.get('/discovery/',(req,res)=>res.sendFile(path.join(__dirname,'discovery-mobile','index.html')));
- for(const file of ['app.js','style.css','manifest.webmanifest','icon.svg'])app.get('/discovery/'+file,(req,res)=>res.sendFile(path.join(__dirname,'discovery-mobile',file)));
+ for(const file of ['app.js','style.css','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','sw.js'])app.get('/discovery/'+file,(req,res)=>res.sendFile(path.join(__dirname,'discovery-mobile',file)));
  app.get('/api/discovery/outbox',auth,guard(req=>({drafts:(db.getState().discovery_outbox||[]).filter(x=>req.user.role==='admin'||x.manager_id===req.user.id)})));
+ app.post('/api/discovery/contact-terms',auth,guard(req=>{const b=db.get('bloggers').find({id:req.body.blogger_id}).value();need(b&&b.assigned_manager_id===req.user.id,'Другой ответственный',403);need(!['declined','do_not_contact'].includes(b.status),'Контакт ограничен');const value=req.body.price_kzt;const price=value===''||value===null||value===undefined?null:Number(value);need(price===null||Number.isSafeInteger(price)&&price>=0,'Прайс в целых тенге');const phone=String(req.body.whatsapp||'').replace(/[^0-9+]/g,'');need(!phone||/^\+?\d{10,15}$/.test(phone),'Проверьте номер WhatsApp');const terms={price_kzt:price,whatsapp:phone,city:String(req.body.city||'').slice(0,100),scope:String(req.body.scope||'').slice(0,2000),source_note:String(req.body.source_note||'').slice(0,3000),verified_by:req.user.id,verified_at:new Date().toISOString()};need(terms.source_note.trim(),'Сохраните исходный ответ или пояснение');b.contact_terms=terms;b.blogger_whatsapp=phone||b.blogger_whatsapp;b.city=terms.city||b.city;b.updated_at=terms.verified_at;db.write();return {ok:true,terms};}));
  app.post('/api/discovery/contact-status',auth,guard(req=>{
   const b=db.get('bloggers').find({id:req.body.id}).value();need(b,'Блогер не найден',404);
   need(b.assigned_manager_id===req.user.id||req.user.role==='admin','Другой ответственный',403);
@@ -73,11 +74,11 @@ function mount(app,{db,auth,parse,makeBlogger}){
  app.post('/api/discovery/claim',auth,guard(req=>{const before=JSON.parse(JSON.stringify(db.getState()));try{const result=claim(db.get('bloggers').value(),req.body.id,req.user);db.write();return result;}catch(e){db.setState(before);throw e;}}));
  app.post('/api/discovery/draft',auth,guard(req=>{
   const b=db.get('bloggers').find({id:req.body.blogger_id}).value();need(b,'Блогер не найден',404);need(b.assigned_manager_id===req.user.id,'Сначала возьмите блогера в работу',409);
-  need(!['declined','do_not_contact','replied'].includes(b.status),'Контакт ограничен или ответ уже получен',409);
+  need(!['declined','do_not_contact','replied','contacted'].includes(b.status),'Контакт ограничен или ответ уже получен',409);
   const message=String(req.body.text||'').trim();need(message&&message.length<=4000,'Введите текст до 4000 символов');
   const state=db.getState(),outbox=state.discovery_outbox||(state.discovery_outbox=[]);
   const existing=outbox.find(x=>x.blogger_id===b.id&&x.status==='draft');if(existing)return existing;
-  const draft={id:crypto.randomUUID(),blogger_id:b.id,manager_id:req.user.id,text:message,instagram_url:b.instagram_url,status:'draft',created_at:new Date().toISOString(),sending_enabled:false};outbox.push(draft);db.write();return draft;
+  const draft={id:crypto.randomUUID(),blogger_id:b.id,manager_id:req.user.id,text:message,instagram_url:b.instagram_url,status:'draft',purpose:'initial',created_at:new Date().toISOString(),sending_enabled:false};outbox.push(draft);db.write();return draft;
  }));
 }
 module.exports={mount,planImport,claim,nickname,expandRelated,DiscoveryError};

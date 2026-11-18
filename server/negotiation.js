@@ -16,7 +16,7 @@ function createNegotiation({db,env=process.env}){
   all().push(p);db.write();return p;
  }
  function decide(id,decision,user,note=''){
-  if(!lead(user))throw Error('Решение доступно тимлиду');const p=all().find(p=>p.id===id);if(!p)throw Error('Предложение не найдено');
+  if(!lead(user))throw Error('Решение доступно тимлиду');const p=all().find(p=>p.id===id);if(!p)throw Error('Предложение не найдено');if(p.manager_id===user.id)throw Error('Своё предложение должен согласовать другой тимлид');
   if(!['approved','rejected','changes_requested'].includes(decision))throw Error('Неверное решение');if(p.status!=='pending'){if(p.status===decision)return p;throw Error('Решение уже принято');}
   p.status=decision;p.decided_by=user.id;p.decided_at=new Date().toISOString();p.decision_note=String(note).slice(0,2000);db.write();return p;
  }
