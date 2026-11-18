@@ -76,8 +76,9 @@ function passes(m, job, skipped) {
 function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) {
   let busy = false;
   const jobs = () => db.getState().apify_scout_jobs || (db.getState().apify_scout_jobs = []);
-  const runLimit = () => Math.min(10, Number(env.APIFY_SCOUT_MAX_USD) || 1);
-  const dayLimit = () => Math.min(50, Number(env.APIFY_SCOUT_DAILY_USD) || 3);
+  const runLimit = () => Math.min(100, Number(env.APIFY_SCOUT_MAX_USD) || 1);
+  // Дневной лимит: APIFY_SCOUT_DAILY_USD=0 (или off) — без дневного лимита (решение Нины 18.11).
+  const dayLimit = () => { const v = String(env.APIFY_SCOUT_DAILY_USD || '3').trim().toLowerCase(); return v === '0' || v === 'off' ? 0 : Math.min(500, Number(v) || 3); };
   const configured = () => Boolean(env.APIFY_TOKEN) && env.APIFY_SCOUT_ENABLED === '1';
   const knownIg = () => new Set(db.getState().bloggers.map(b => nick(b.instagram_url)).filter(Boolean));
   const knownTt = () => new Set(db.getState().bloggers.map(b => nick(b.tiktok_url)).filter(Boolean));
@@ -105,7 +106,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (!(usd > 0 && usd <= runLimit())) throw Error('Потолок запуска — до ' + runLimit() + ' $');
     const today = new Date().toISOString().slice(0, 10);
     const spent = jobs().filter(j => String(j.createdAt).slice(0, 10) === today && j.status !== 'cancelled').reduce((s, j) => s + Number(j.maxUsd || 0), 0);
-    if (spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $: сегодня уже заложено ' + Math.round(spent * 100) / 100 + ' $, этот запуск ' + usd + ' $');
+    if (dayLimit() && spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $: сегодня уже заложено ' + Math.round(spent * 100) / 100 + ' $, этот запуск ' + usd + ' $');
     const users = db.get('users').value();
     const j = { id: crypto.randomUUID(), source, hashtags: tags, queries: ['tiktok', 'mentions'].includes(source) ? queries : [], accounts, perSource: n(raw.perTag, 50, 5, 1000), maxProfiles: n(raw.maxProfiles, 50, 5, 3000),
       target: n(raw.target, 0, 0, 5000), firstShare: Math.min(0.9, Math.max(0.1, Number(raw.firstShare) || 0.5)),
