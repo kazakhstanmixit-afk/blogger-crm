@@ -218,7 +218,7 @@ export default function ScoutPage({ currentUser }) {
             <button className="btn btn-primary" disabled={busy || !data.configured} onClick={run}>{busy ? 'Запускаю…' : 'Найти блогеров'}</button>
             <span style={{fontSize:12, color: msg.startsWith('⚠') ? '#c0392b' : '#1f8a4c'}}>{msg}</span>
           </div>
-          <Hint>Дневной лимит {data.dayLimit||3} $. Цена ориентировочная (тариф Apify ≈ $2.7 за 1000 результатов).</Hint>
+          <Hint>{data.dayLimit ? `Дневной лимит ${data.dayLimit} $. ` : 'Дневного лимита нет. '}Цена ориентировочная (тариф Apify ≈ $2.7 за 1000 результатов).</Hint>
         </div>
       )}
 
