@@ -8,6 +8,7 @@ import BarterPage from './BarterPage';
 import TzRequestsPage from './TzRequestsPage';
 import StatsPage from './StatsPage';
 import UsersPage from './UsersPage';
+import ScoutPage from './ScoutPage';
 
 const ICONS = {
   bloggers:'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM22 19v-1a4 4 0 0 0-3-3.87M16 4.13a3 3 0 0 1 0 5.75',
@@ -18,6 +19,7 @@ const ICONS = {
   regulations:'M9 4h6M9 2h6v4H9zM6 4H5a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-1M8 11h8M8 15h6',
   barter:'M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z',
   tz:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5',
+  scout:'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   users:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
 };
 function NavIcon({ id }) {
@@ -39,6 +41,7 @@ export default function Dashboard({ user, onLogout }) {
     { id:'regulations', icon:'📋', label:'Регламенты' },
     { id:'barter', icon:'🎁', label:'Бартер' },
     { id:'tz', icon:'📝', label:'Запросы ТЗ' },
+    { id:'scout', icon:'🔎', label:'Поиск блогеров' },
     ...(user.role==='admin' ? [{ id:'users', icon:'⚙️', label:'Менеджеры' }] : []),
   ];
   return (
@@ -70,6 +73,7 @@ export default function Dashboard({ user, onLogout }) {
         {page==='regulations' && <RegulationsPage currentUser={user} />}
         {page==='barter' && <BarterPage currentUser={user} />}
         {page==='tz' && <TzRequestsPage currentUser={user} />}
+        {page==='scout' && <ScoutPage currentUser={user} />}
         {page==='users' && <UsersPage currentUser={user} />}
       </main>
     </div>
