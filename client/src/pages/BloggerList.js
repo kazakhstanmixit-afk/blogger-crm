@@ -614,10 +614,19 @@ export default function BloggerList({ currentUser }) {
     setSelected(new Set()); setShowDistribute(false); doFetch(page);
   };
 
+  const [bulkBusy, setBulkBusy] = useState('');
   const handleBulkStatus = async (status) => {
+    if (bulkBusy) return;
     const ids = Array.from(selected);
-    await apiFetch('/api/bloggers/bulk-status', { method:'POST', body: JSON.stringify({ blogger_ids: ids, status }) });
-    setSelected(new Set()); setShowBulkStatus(false); doFetch(page);
+    setBulkBusy(status);
+    try {
+      const r = await apiFetch('/api/bloggers/bulk-status', { method:'POST', body: JSON.stringify({ blogger_ids: ids, status }) });
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(data.error || ('ошибка ' + r.status));
+      setSelected(new Set()); setShowBulkStatus(false); doFetch(page);
+    } catch (e) {
+      window.alert('Статус не изменился: ' + e.message);
+    } finally { setBulkBusy(''); }
   };
 
   const resetFilters = () => {
@@ -947,10 +956,11 @@ export default function BloggerList({ currentUser }) {
             <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
               {STATUS_OPTIONS.map(s=>(
                 <div key={s.value} onClick={()=>handleBulkStatus(s.value)}
-                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1px solid #e2e6ef',borderRadius:8,cursor:'pointer'}}
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1px solid #e2e6ef',borderRadius:8,cursor:bulkBusy?'wait':'pointer',opacity:bulkBusy&&bulkBusy!==s.value?0.5:1}}
                   onMouseOver={e=>e.currentTarget.style.background='#f8f9fb'}
                   onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                   <span className={`status-badge status-${s.value}`}>{s.label}</span>
+                  {bulkBusy===s.value && <span style={{fontSize:12,color:'#5a6380'}}>Сохраняю…</span>}
                 </div>
               ))}
             </div>
