@@ -76,8 +76,9 @@ function passes(m, job, skipped) {
 function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) {
   let busy = false;
   const jobs = () => db.getState().apify_scout_jobs || (db.getState().apify_scout_jobs = []);
-  const runLimit = () => Math.min(10, Number(env.APIFY_SCOUT_MAX_USD) || 1);
-  const dayLimit = () => Math.min(50, Number(env.APIFY_SCOUT_DAILY_USD) || 3);
+  const runLimit = () => Math.min(100, Number(env.APIFY_SCOUT_MAX_USD) || 1);
+  // Дневной лимит: APIFY_SCOUT_DAILY_USD=0 (или off) — без дневного лимита (решение Нины 18.11).
+  const dayLimit = () => { const v = String(env.APIFY_SCOUT_DAILY_USD || '3').trim().toLowerCase(); return v === '0' || v === 'off' ? 0 : Math.min(500, Number(v) || 3); };
   const configured = () => Boolean(env.APIFY_TOKEN) && env.APIFY_SCOUT_ENABLED === '1';
   const knownIg = () => new Set(db.getState().bloggers.map(b => nick(b.instagram_url)).filter(Boolean));
   const knownTt = () => new Set(db.getState().bloggers.map(b => nick(b.tiktok_url)).filter(Boolean));
@@ -105,7 +106,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (!(usd > 0 && usd <= runLimit())) throw Error('Потолок запуска — до ' + runLimit() + ' $');
     const today = new Date().toISOString().slice(0, 10);
     const spent = jobs().filter(j => String(j.createdAt).slice(0, 10) === today && j.status !== 'cancelled').reduce((s, j) => s + Number(j.maxUsd || 0), 0);
-    if (spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $: сегодня уже заложено ' + Math.round(spent * 100) / 100 + ' $, этот запуск ' + usd + ' $');
+    if (dayLimit() && spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $: сегодня уже заложено ' + Math.round(spent * 100) / 100 + ' $, этот запуск ' + usd + ' $');
     const users = db.get('users').value();
     const j = { id: crypto.randomUUID(), source, hashtags: tags, queries: ['tiktok', 'mentions'].includes(source) ? queries : [], accounts, perSource: n(raw.perTag, 50, 5, 1000), maxProfiles: n(raw.maxProfiles, 50, 5, 3000),
       target: n(raw.target, 0, 0, 5000), firstShare: Math.min(0.9, Math.max(0.1, Number(raw.firstShare) || 0.5)),
@@ -216,8 +217,8 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       const row = { username: u, platform: 'ig', followers: m.followers, reach: m.reach, viewsRatio: m.viewsRatio, er: m.er, adShare: m.adShare, kz: m.kz.score, kzWhy: m.kz.reasons.join('; '), via, brands: c.brands || [], flags: flags.join('; '), lang: m.lang };
       if (exists) { created.push({ ...row, id: 'exists-' + u, existing: true }); continue; }
       const b = { id: crypto.randomUUID(), batch_id: batchId, created_at: now, updated_at: now,
-        ...makeBlogger({ name: String(p.fullName || u).slice(0, 150), instagram_url: 'https://www.instagram.com/' + u + '/', instagram_followers: m.followers, instagram_avg_reach: m.reach, er: m.er ? String(m.er) : null, category: p.businessCategoryName || null, status: 'new',
-          notes: ('Apify · ' + SOURCES[job.source] + (via ? ' (' + via + ')' : '') + ' · KZ ' + m.kz.score + ' б.' + (m.kz.reasons.length ? ' (' + m.kz.reasons.join(', ') + ')' : '') + ' · просмотры/подписчики ' + m.viewsRatio + '%' + (flags.length ? ' · ' + flags.join(' · ') : '') + (p.biography ? ' · ' + String(p.biography).replace(/\s+/g, ' ').slice(0, 250) : '')).slice(0, 700) }),
+        ...makeBlogger({ name: u, instagram_url: 'https://www.instagram.com/' + u + '/', instagram_followers: m.followers, instagram_avg_reach: m.reach, er: m.er ? String(m.er) : null, category: p.businessCategoryName || null, status: 'new',
+          notes: ((p.fullName ? String(p.fullName).slice(0, 80) + ' · ' : '') + 'Apify · ' + SOURCES[job.source] + (via ? ' (' + via + ')' : '') + ' · KZ ' + m.kz.score + ' б.' + (m.kz.reasons.length ? ' (' + m.kz.reasons.join(', ') + ')' : '') + ' · просмотры/подписчики ' + m.viewsRatio + '%' + (flags.length ? ' · ' + flags.join(' · ') : '') + (p.biography ? ' · ' + String(p.biography).replace(/\s+/g, ' ').slice(0, 250) : '')).slice(0, 700) }),
         instagram_platform_id: p.id ? String(p.id) : null, discovery_status: 'unreviewed', discovery_source: 'apify_' + job.source, discovery_search_id: job.id,
         kz_score: m.kz.score, kz_reasons: m.kz.reasons, scout: { source: job.source, via, viewsRatio: m.viewsRatio, recentPosts: m.recent, adShare: m.adShare, lang: m.lang, competitors: m.competitors },
         discovery_evidence: 'KZ: ' + (m.kz.reasons.join('; ') || 'признаков нет'), discovery_context: { biography: String(p.biography || '').slice(0, 1500), captions: (c.items || []).slice(0, 3).map(r => r.caption), posts: (c.items || []).slice(0, 3).map(r => r.url).filter(Boolean), externalUrl: p.externalUrl || null } };
@@ -245,8 +246,8 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       if (!passes(m, job, skipped)) continue;
       known.add(c.username);
       const b = { id: crypto.randomUUID(), batch_id: batchId, created_at: now, updated_at: now,
-        ...makeBlogger({ name: String(c.meta.nickName || c.username).slice(0, 150), tiktok_url: 'https://www.tiktok.com/@' + c.username, tiktok_followers: followers, tiktok_avg_reach: reach, status: 'new',
-          notes: ('Apify · TikTok (' + (c.q.length ? 'поиск «' + c.q.join('», «') + '»' : '#' + job.hashtags.join(' #')) + ') · KZ ' + kz.score + ' б.' + (kz.reasons.length ? ' (' + kz.reasons.join(', ') + ')' : '') + ' · просмотры/подписчики ' + m.viewsRatio + '%' + (c.meta.signature ? ' · ' + String(c.meta.signature).replace(/\s+/g, ' ').slice(0, 250) : '')).slice(0, 700) }),
+        ...makeBlogger({ name: c.username, tiktok_url: 'https://www.tiktok.com/@' + c.username, tiktok_followers: followers, tiktok_avg_reach: reach, status: 'new',
+          notes: ((c.meta.nickName ? String(c.meta.nickName).slice(0, 80) + ' · ' : '') + 'Apify · TikTok (' + (c.q.length ? 'поиск «' + c.q.join('», «') + '»' : '#' + job.hashtags.join(' #')) + ') · KZ ' + kz.score + ' б.' + (kz.reasons.length ? ' (' + kz.reasons.join(', ') + ')' : '') + ' · просмотры/подписчики ' + m.viewsRatio + '%' + (c.meta.signature ? ' · ' + String(c.meta.signature).replace(/\s+/g, ' ').slice(0, 250) : '')).slice(0, 700) }),
         discovery_status: 'unreviewed', discovery_source: 'apify_tiktok', discovery_search_id: job.id, kz_score: kz.score, kz_reasons: kz.reasons,
         scout: { source: 'tiktok', via: c.q.length ? 'поиск «' + c.q.join('», «') + '»' : '#' + job.hashtags.join(' #'), viewsRatio: m.viewsRatio, recentPosts: m.recent, adShare: m.adShare, lang: m.lang }, discovery_evidence: 'KZ: ' + (kz.reasons.join('; ') || 'признаков нет') };
       assign(job, b, s, loads); s.bloggers.push(b);

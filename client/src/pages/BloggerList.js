@@ -363,6 +363,17 @@ function QuickBarterModal({ blogger, onClose, onSave }) {
   );
 }
 
+// Ник в едином виде «@ник»: из ссылки Instagram (или TikTok), иначе из поля «ник»; полное имя — в подсказке.
+function handleFrom(url, site) { const s = String(url||'').trim().toLowerCase(); if (!s.includes(site)) return ''; const h = (s.split(site)[1]||'').split(/[/?#]/).filter(Boolean)[0]||''; return h.replace(/^@/,''); }
+export function displayNick(b) {
+  const ig = handleFrom(b.instagram_url, 'instagram.com/'), tt = handleFrom(b.tiktok_url, 'tiktok.com/');
+  if (/^[a-z0-9._]{1,30}$/.test(ig)) return '@' + ig;
+  if (/^[a-z0-9._]{1,30}$/.test(tt)) return '@' + tt;
+  const n = String(b.name||'').trim().replace(/^@/,'');
+  if (/^[a-z0-9._]{1,30}$/i.test(n)) return '@' + n.toLowerCase();
+  return b.name || '—';
+}
+
 export default function BloggerList({ currentUser }) {
   const [bloggers, setBloggers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -852,7 +863,7 @@ export default function BloggerList({ currentUser }) {
                     <td onClick={e=>e.stopPropagation()}><input type="checkbox" className="in-work-check" checked={isSelected} onChange={()=>toggleSelect(b.id)} /></td>
                   )}
                   {currentUser.role==='admin' && <td onClick={e=>e.stopPropagation()} style={{textAlign:'center'}}><input type="checkbox" checked={!!b.is_exclusive} onChange={async e=>{e.stopPropagation();await patch(b.id,{is_exclusive:e.target.checked});doFetch(page);}} style={{accentColor:'#f59e0b',width:16,height:16,cursor:'pointer'}} /></td>}
-                  <td style={{fontWeight:500,whiteSpace:'nowrap'}}>{b.name}{isFresh && <span className="badge-new">new</span>}</td>
+                  <td style={{fontWeight:500,whiteSpace:'nowrap'}} title={b.name && b.name !== displayNick(b) ? b.name : undefined}>{displayNick(b)}{!handleFrom(b.instagram_url,'instagram.com/') && handleFrom(b.tiktok_url,'tiktok.com/') && <span style={{fontSize:10,color:'#9ba3be',marginLeft:4}}>TikTok</span>}{isFresh && <span className="badge-new">new</span>}</td>
                   {show('category') && <td data-dropdown="true" onClick={e=>e.stopPropagation()}>
                     <CategoryDropdown value={b.category} onChange={v=>patch(b.id,{category:v})} />
                   </td>}
@@ -1056,7 +1067,7 @@ function DistributeForm({ users, totalCount, allTotal, selectedBloggers, onSelec
                 <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:3}}>
                   {list.map(b=>(
                     <span key={b.id} style={{fontSize:10,padding:'1px 6px',background:'#eef1fe',color:'#4f6ef7',borderRadius:4}}>
-                      {b.name||b.instagram_url||b.id}
+                      {displayNick(b)}
                     </span>
                   ))}
                 </div>
