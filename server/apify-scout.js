@@ -5,7 +5,7 @@
 // Платно: запускает только администратор; потолок запуска и дневной лимит в USD.
 const crypto = require('crypto');
 const ACT = { tags: 'apify~instagram-hashtag-scraper', tagged: 'apify~instagram-tagged-scraper', ig: 'apify~instagram-scraper', profile: 'apify~instagram-profile-scraper', tiktok: 'clockworks~tiktok-scraper' };
-const SOURCES = { hashtags: 'Хэштеги', brands: 'Отметки брендов', places: 'Места', similar: 'Похожие на блогеров', tiktok: 'TikTok' };
+const SOURCES = { hashtags: 'Хэштеги', brands: 'Отметки брендов', places: 'Места', similar: 'Похожие на блогеров', mentions: 'Упоминания бренда (IG)', tiktok: 'TikTok' };
 
 const nick = v => { let s = String(v || '').trim().toLowerCase(); if (s.includes('instagram.com/')) s = s.split('instagram.com/')[1].split(/[/?#]/)[0]; if (s.includes('tiktok.com/')) s = s.split('tiktok.com/')[1].split(/[/?#]/)[0]; s = s.replace(/^@/, ''); return /^[a-z0-9._]{1,30}$/.test(s) && !['p', 'reel', 'reels', 'explore', 'stories', 'accounts'].includes(s) ? s : null; };
 const num = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
@@ -96,6 +96,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     else accounts = list(raw.accounts).map(nick).filter(Boolean).slice(0, 30);
     const queries = [...new Set(String(raw.queries || '').split(/[,;\n]+/).map(x => x.trim().toLowerCase()).filter(x => x.length >= 2 && x.length <= 60))].slice(0, 15);
     if (source === 'hashtags' && !tags.length) throw Error('Введите хэштеги');
+    if (source === 'mentions' && !queries.length) throw Error('Введите слова для поиска в подписях — например, bidalli');
     if (source === 'tiktok' && !tags.length && !queries.length) throw Error('Введите хэштеги или слова для поиска (например, названия брендов)');
     if (['brands', 'similar'].includes(source) && !accounts.length) throw Error('Введите аккаунты (ник или ссылка), по одному в строке');
     if (source === 'places' && !accounts.length) throw Error('Введите ссылки на места вида instagram.com/explore/locations/123456/ или их номера');
@@ -104,9 +105,10 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (!(usd > 0 && usd <= runLimit())) throw Error('Потолок запуска — до ' + runLimit() + ' $');
     const today = new Date().toISOString().slice(0, 10);
     const spent = jobs().filter(j => String(j.createdAt).slice(0, 10) === today && j.status !== 'cancelled').reduce((s, j) => s + Number(j.maxUsd || 0), 0);
-    if (spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $ уже исчерпан (заложено ' + spent + ' $)');
+    if (spent + usd > dayLimit()) throw Error('Дневной лимит Apify ' + dayLimit() + ' $: сегодня уже заложено ' + Math.round(spent * 100) / 100 + ' $, этот запуск ' + usd + ' $');
     const users = db.get('users').value();
-    const j = { id: crypto.randomUUID(), source, hashtags: tags, queries: source === 'tiktok' ? queries : [], accounts, perSource: n(raw.perTag, 50, 5, 200), maxProfiles: n(raw.maxProfiles, 50, 5, 200),
+    const j = { id: crypto.randomUUID(), source, hashtags: tags, queries: ['tiktok', 'mentions'].includes(source) ? queries : [], accounts, perSource: n(raw.perTag, 50, 5, 1000), maxProfiles: n(raw.maxProfiles, 50, 5, 3000),
+      target: n(raw.target, 0, 0, 5000), firstShare: Math.min(0.9, Math.max(0.1, Number(raw.firstShare) || 0.5)),
       minFollowers: n(raw.minFollowers, 0, 0, 1e9), maxFollowers: n(raw.maxFollowers, 0, 0, 1e9), periodDays: [30, 60, 90].includes(Number(raw.periodDays)) ? Number(raw.periodDays) : 30,
       kzOnly: raw.kzOnly !== false, minKz: n(raw.minKz, 3, 1, 10), minViews: n(raw.minViews, 0, 0, 1e9), minViewsPct: n(raw.minViewsPct, 0, 0, 100), activeOnly: raw.activeOnly !== false, maxAdShare: n(raw.maxAdShare, 40, 0, 100), excludeExisting: raw.excludeExisting !== false,
       niches: (Array.isArray(raw.niches) ? raw.niches : [raw.niche]).filter(x => NICHES[x]), langs: (Array.isArray(raw.langs) ? raw.langs : []).filter(x => ['ru', 'kk', 'kk+ru'].includes(x)), competitors: list(raw.competitors).map(nick).filter(Boolean).slice(0, 50),
@@ -120,6 +122,8 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (job.stage === 'seeds') return [ACT.profile, { usernames: job.accounts, includeAboutSection: false }];
     if (job.stage === 'profiles') return [ACT.profile, { usernames: job.candidates.map(c => c.username), includeAboutSection: false }];
     if (job.source === 'hashtags') return [ACT.tags, { hashtags: job.hashtags, resultsType: 'reels', resultsLimit: job.perSource, keywordSearch: false }];
+    // Упоминания бренда текстом в подписи (без отметки аккаунта): поиск по словам.
+    if (job.source === 'mentions') return [ACT.tags, { hashtags: job.queries, resultsType: 'posts', resultsLimit: job.perSource, keywordSearch: true }];
     if (job.source === 'brands') return [ACT.tagged, { username: job.accounts, resultsLimit: job.perSource }];
     if (job.source === 'places') return [ACT.ig, { directUrls: job.accounts.map(id => 'https://www.instagram.com/explore/locations/' + id + '/'), resultsType: 'posts', resultsLimit: job.perSource, onlyPostsNewerThan: since }];
     // TikTok: хэштеги и/или поиск видео по словам (названия брендов) — страна видео проверяется по locationCreated.
@@ -129,7 +133,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
   async function start(job) {
     const [actor, input] = stageInput(job);
     const first = job.stage === 'collect' || job.stage === 'seeds';
-    const usd = first ? Math.round(job.maxUsd * 0.5 * 100) / 100 : Math.max(0.1, Math.round((job.maxUsd - (job.spentUsd || 0)) * 100) / 100);
+    const usd = first ? Math.max(0.1, Math.round(job.maxUsd * (job.firstShare || 0.5) * 100) / 100) : Math.max(0.1, Math.round((job.maxUsd - (job.spentUsd || 0)) * 100) / 100);
     job.status = 'starting'; db.write();
     const s = await call('acts/' + actor + '/runs?maxTotalChargeUsd=' + encodeURIComponent(usd) + '&timeout=900', input);
     if (!s.data || !s.data.id) throw Error('Ответ Apify без run ID');
@@ -154,7 +158,8 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       if (r.error || r.errorCode) continue;
       if (job.source !== 'hashtags' && r.timestamp && Date.parse(r.timestamp) < since) continue; // период 30/60/90 дней
       const u = nick(r.ownerUsername); if (!u) continue;
-      const c = by[u] = by[u] || { username: u, items: [], tags: [], brands: [], places: [] };
+      const c = by[u] = by[u] || { username: u, items: [], tags: [], brands: [], places: [], said: [] };
+      if (job.source === 'mentions') { const cap = String(r.caption || '').toLowerCase(); for (const q of job.queries) if (cap.includes(q) && !c.said.includes(q)) c.said.push(q); }
       if (c.items.length < 5) c.items.push({ url: r.url, views: r.videoPlayCount || r.igPlayCount || r.videoViewCount, caption: String(r.caption || '').slice(0, 300) });
       const from = String(r.queryTag || r.inputUrl || '');
       if (job.source === 'hashtags') { const t = from.replace(/^.*\/tags\//, '').replace(/\/$/, ''); if (t && !c.tags.includes(t)) c.tags.push(t); }
@@ -188,7 +193,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     for (const a of Object.keys(byAccount)) { const r = byAccount[a]; byAccount[a] = { added: r.added, avgKz: Math.round(r.kzSum / r.added * 10) / 10, avgViews: Math.round(r.viewsSum / r.added) }; }
     if (added.length) s.batches.push({ id: batchId, name: 'Apify · ' + SOURCES[job.source] + ': ' + ((job.queries || []).length ? '«' + job.queries.join('», «') + '» ' : '') + (job.hashtags.length ? '#' + job.hashtags.join(' #') : job.accounts.map(a => /^\d+$/.test(a) ? a : '@' + a).join(' ')).slice(0, 120), created_at: new Date().toISOString(), count: added.length });
     created.sort((a, b) => b.kz - a.kz || b.reach - a.reach);
-    job.result = { created: added.length, existing: created.length - added.length, skipped, byAccount, sample: created.slice(0, 80) };
+    job.result = { created: added.length, existing: created.length - added.length, checked: job.checked || 0, skipped, byAccount, sample: created.slice(0, 80) };
     job.status = 'done'; job.stage = 'done'; job.finishedAt = new Date().toISOString(); delete job.candidates; db.write();
   }
 
@@ -196,6 +201,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     const s = db.getState(), known = knownIg(), cand = Object.fromEntries((job.candidates || []).map(c => [c.username, c]));
     const loads = Object.fromEntries(job.managerIds.map(id => [id, s.bloggers.filter(b => b.assigned_manager_id === id && b.in_work).length]));
     const batchId = crypto.randomUUID(), now = new Date().toISOString(), created = [], skipped = { private: 0, duplicate: 0, followers: 0, notKz: 0, views: 0, inactive: 0, ads: 0, niche: 0, lang: 0 };
+    job.checked = rows.length;
     for (const p of rows) {
       const u = nick(p.username); if (!u) continue;
       const exists = known.has(u);
@@ -203,8 +209,9 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       if (p.private) { skipped.private++; continue; }
       const c = cand[u] || {}, m = analyze(p, c, job);
       if (!passes(m, job, skipped)) continue;
+      if (job.target && created.filter(x => !x.existing).length >= job.target) { skipped.overTarget = (skipped.overTarget || 0) + 1; continue; } // цель набрана
       known.add(u);
-      const via = c.tags && c.tags.length ? '#' + c.tags.join(' #') : c.brands && c.brands.length ? 'отмечает @' + c.brands.join(', @') : c.places && c.places.length ? 'место: ' + c.places.slice(0, 2).join(', ') : c.seeds ? 'похож на @' + c.seeds.slice(0, 3).join(', @') : '';
+      const via = c.said && c.said.length ? 'упоминает «' + c.said.join('», «') + '»' : c.tags && c.tags.length ? '#' + c.tags.join(' #') : c.brands && c.brands.length ? 'отмечает @' + c.brands.join(', @') : c.places && c.places.length ? 'место: ' + c.places.slice(0, 2).join(', ') : c.seeds ? 'похож на @' + c.seeds.slice(0, 3).join(', @') : '';
       const flags = [m.competitors.length ? '⚠ работает с конкурентом @' + m.competitors.join(', @') : '', m.adShare >= 50 ? 'много рекламы ' + m.adShare + '%' : ''].filter(Boolean);
       const row = { username: u, platform: 'ig', followers: m.followers, reach: m.reach, viewsRatio: m.viewsRatio, er: m.er, adShare: m.adShare, kz: m.kz.score, kzWhy: m.kz.reasons.join('; '), via, brands: c.brands || [], flags: flags.join('; '), lang: m.lang };
       if (exists) { created.push({ ...row, id: 'exists-' + u, existing: true }); continue; }
