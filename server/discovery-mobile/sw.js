@@ -1,0 +1,4 @@
+'use strict';
+// No CRM responses or credentials are cached.
+self.addEventListener('push',event=>{let data={};try{data=event.data?.json()||{}}catch{}const url=typeof data.url==='string'&&data.url.startsWith('/discovery/?')?data.url:'/discovery/';event.waitUntil(self.registration.showNotification('MIXIT Connect',{body:data.body||'Есть новое событие',tag:data.tag||'mixit',data:{url},icon:'/discovery/icon.svg'}));});
+self.addEventListener('notificationclick',event=>{event.notification.close();const url=new URL(event.notification.data?.url||'/discovery/',self.location.origin);if(url.origin!==self.location.origin)return;event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(async windows=>{const w=windows.find(w=>new URL(w.url).pathname.startsWith('/discovery/'));if(w){await w.navigate(url.href);return w.focus();}return clients.openWindow(url.href);}));});
