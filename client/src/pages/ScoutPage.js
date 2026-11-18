@@ -9,13 +9,15 @@ const SOURCES = [
   ['hashtags', 'Хэштеги', 'Рилсы по казахстанским хэштегам: город + тема, казахские, Kaspi.'],
   ['similar', 'Похожие на блогеров', 'Берём 20–30 наших лучших блогеров и собираем похожих — находит тех, кто без хэштегов.'],
   ['places', 'Места', 'Посты с геотегами ТРЦ, салонов, кафе Алматы и Астаны — авторы почти наверняка местные.'],
-  ['tiktok', 'TikTok', 'TikTok по хэштегам с проверкой страны видео (KZ) — самый надёжный гео-фильтр.'],
+  ['tiktok', 'TikTok', 'TikTok: видео по хэштегам и по упоминанию брендов (поиск по словам). Страна видео (KZ) — самый надёжный гео-фильтр.'],
 ];
 // Списки аккаунтов (из базы рыночного сбора; у остальных KZ-брендов Instagram пока не заполнен).
 const LISTS = {
   kz: ['premore_official_kz','sensulu.cosmeticss','alatau.organic','zere_purebeauty','blssm.beauty','sugarlife_shugaring','herra.cis','adinova.kz','pom7.cis'],
-  global: ['anua.global','bioderma','celimax_official','dr.althea_official','estel_official','rorobell_official','tashe.professional'],
+  global: ['bidallibeauty','anua.global','bioderma','celimax_official','dr.althea_official','estel_official','rorobell_official','tashe.professional'],
 };
+// Названия брендов для поиска видео в TikTok (там ищем по словам, а не по аккаунтам).
+const BRAND_WORDS = 'bidalli, premore, sensulu, alatau organic, zere, blssm, sugarlife, herra, adinova, pom7, axora, dry dry, amennisa, ellay';
 const TAGS = {
   'Бьюти × города': 'бьютиалматы, бьютиастана, макияжалматы, макияжастана, визажисталматы, визажистастана, косметикаалматы, косметикаастана, бьютишымкент, макияжшымкент',
   'Казахоязычные': 'беткүтімі, сұлулық, макияжқазақша, косметикақазақша, қазақаруы, qazaqaruy, күтім, бетмаска',
@@ -25,11 +27,12 @@ const TAGS = {
 };
 const NICHES = [['beauty','бьюти'],['care','уход'],['lifestyle','лайфстайл'],['mom','мама']];
 const LANGS = [['ru','русский'],['kk','казахский'],['kk+ru','оба']];
-const BASE = { source:'brands', hashtags:'', accounts:'', competitors:'', perTag:50, maxProfiles:50, minFollowers:3000, maxFollowers:150000, periodDays:30, kzOnly:true, minKz:3, minViews:1000, minViewsPct:5, activeOnly:true, maxAdShare:40, niches:['beauty','care'], langs:[], excludeExisting:true, maxUsd:1, managerIds:[] };
+const BASE = { source:'brands', hashtags:'', queries:'', accounts:'', competitors:'', perTag:50, maxProfiles:50, minFollowers:3000, maxFollowers:150000, periodDays:30, kzOnly:true, minKz:3, minViews:1000, minViewsPct:5, activeOnly:true, maxAdShare:40, niches:['beauty','care'], langs:[], excludeExisting:true, maxUsd:1, managerIds:[] };
 const PRESETS = [
   ['Бьюти КЗ — по отметкам брендов', { source:'brands', accounts:LISTS.kz.join('\n'), periodDays:30, perTag:30, minFollowers:3000, maxFollowers:150000, minViews:1000, minViewsPct:5, niches:['beauty','care'], langs:[], maxAdShare:40, kzOnly:true, minKz:3 }],
   ['Казахоязычные', { source:'hashtags', hashtags:TAGS['Казахоязычные'], perTag:30, minFollowers:3000, maxFollowers:300000, minViews:1000, minViewsPct:5, niches:['beauty','lifestyle'], langs:['kk','kk+ru'], maxAdShare:40, kzOnly:true, minKz:3 }],
   ['Продают через Kaspi', { source:'hashtags', hashtags:TAGS['Kaspi'], perTag:30, minFollowers:5000, maxFollowers:300000, minViews:2000, minViewsPct:5, niches:[], langs:[], maxAdShare:60, kzOnly:true, minKz:3 }],
+  ['TikTok КЗ — бренды и бьюти', { source:'tiktok', queries:BRAND_WORDS, hashtags:'бьютиалматы, макияжалматы, макияжастана, беткүтімі, каспиартикул', perTag:15, maxProfiles:50, minFollowers:3000, maxFollowers:300000, minViews:1000, minViewsPct:5, niches:[], langs:[], maxAdShare:40, kzOnly:true, minKz:3 }],
   ['Мамы и лайфстайл', { source:'hashtags', hashtags:TAGS['Мамы и лайфстайл'], perTag:30, minFollowers:5000, maxFollowers:200000, minViews:1000, minViewsPct:5, niches:['lifestyle','mom'], langs:[], maxAdShare:40, kzOnly:true, minKz:3 }],
 ];
 const PRICE = 0.0027; // $ за результат (пост или профиль), бесплатный/стартовый тариф Apify
@@ -64,11 +67,12 @@ export default function ScoutPage({ currentUser }) {
 
   const accounts = cleanAccounts(form.accounts, form.source);
   const tags = String(form.hashtags||'').split(/[\s,;]+/).map(t=>t.replace(/^#/,'')).filter(Boolean);
+  const queries = form.source==='tiktok' ? String(form.queries||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean) : [];
   const usesTags = ['hashtags','tiktok'].includes(form.source);
   const per = Number(form.perTag)||0, maxP = Number(form.maxProfiles)||0;
-  const firstItems = usesTags ? tags.length * per : form.source==='similar' ? accounts.length : accounts.length * per;
+  const firstItems = usesTags ? (tags.length + queries.length) * per : form.source==='similar' ? accounts.length : accounts.length * per;
   const est = Math.round((firstItems + (form.source==='tiktok' ? 0 : maxP)) * PRICE * 100) / 100;
-  const estText = usesTags ? `${tags.length} тег. × ${per} постов` : form.source==='similar' ? `${accounts.length} стартовых` : `${accounts.length} акк. × ${per} отметок`;
+  const estText = usesTags ? `${tags.length + queries.length} тег./слов × ${per} ${form.source==='tiktok'?'видео':'постов'}` : form.source==='similar' ? `${accounts.length} стартовых` : `${accounts.length} акк. × ${per} отметок`;
 
   const addAccounts = list => set('accounts', [...new Set([...cleanAccounts(form.accounts, form.source), ...list])].join('\n'));
   const addTags = t => set('hashtags', [...new Set([...tags, ...t.split(/,\s*/)])].join(', '));
@@ -126,7 +130,11 @@ export default function ScoutPage({ currentUser }) {
                   <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:6}}>{Object.keys(TAGS).map(k => <button key={k} type="button" className={small} onClick={()=>addTags(TAGS[k])}>+ {k}</button>)}
                     {tags.length > 0 && <button type="button" className={small} onClick={()=>set('hashtags','')}>очистить</button>}</div>
                   <textarea rows={3} value={form.hashtags} onChange={e=>set('hashtags', e.target.value)} placeholder="макияжалматы, беткүтімі, каспиартикул" />
-                  <Hint>Без #, через запятую. Лучше 5–10 узких тегов (город + тема), чем общие #makeup — там весь мир. Сейчас тегов: {tags.length}.</Hint></div>
+                  <Hint>Без #, через запятую. Лучше 5–10 узких тегов (город + тема), чем общие #makeup — там весь мир. Сейчас тегов: {tags.length}.</Hint>
+                  {form.source==='tiktok' && <div style={{marginTop:10}}><label>Поиск видео по словам — названия брендов (через запятую)</label>
+                    <div style={{display:'flex', flexWrap:'wrap', gap:6, margin:'4px 0 6px'}}><button type="button" className={small} onClick={()=>set('queries', [...new Set([...queries.map(x=>x.toLowerCase()), ...BRAND_WORDS.split(/,\s*/)])].join(', '))}>+ Бренды КЗ</button>{queries.length > 0 && <button type="button" className={small} onClick={()=>set('queries','')}>очистить</button>}</div>
+                    <textarea rows={2} value={form.queries} onChange={e=>set('queries', e.target.value)} placeholder="bidalli, premore, pom7" />
+                    <Hint>В TikTok бренды редко отмечают аккаунтом — ищем видео, где бренд назван. Можно только слова, только хэштеги или вместе. Слов: {queries.length}.</Hint></div>}</div>
               ) : (
                 <div className="field" style={{marginTop:10}}><label>{form.source==='places' ? 'Места' : form.source==='similar' ? 'Стартовые блогеры' : 'Аккаунты брендов, магазинов, салонов'}</label>
                   <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:6}}>
@@ -139,7 +147,7 @@ export default function ScoutPage({ currentUser }) {
               )}
               <div style={grid}>
                 <div className="field"><label>Период</label><select value={form.periodDays} onChange={e=>set('periodDays', Number(e.target.value))}><option value={30}>30 дней</option><option value={60}>60 дней</option><option value={90}>90 дней</option></select></div>
-                {form.source !== 'similar' && <div className="field"><label>{usesTags ? 'Постов с каждого тега' : form.source==='places' ? 'Постов с каждого места' : 'Отметок с каждого аккаунта'}</label><input type="number" min={5} max={200} value={form.perTag} onChange={e=>set('perTag', e.target.value)} />
+                {form.source !== 'similar' && <div className="field"><label>{form.source==='tiktok' ? 'Видео с каждого тега/слова' : usesTags ? 'Постов с каждого тега' : form.source==='places' ? 'Постов с каждого места' : 'Отметок с каждого аккаунта'}</label><input type="number" min={5} max={200} value={form.perTag} onChange={e=>set('perTag', e.target.value)} />
                   {form.source==='brands' && <Hint>У крупного бренда 30 отметок — это 1–2 недели. Для 30 дней ставьте 50–100.</Hint>}</div>}
                 <div className="field"><label>Профилей проверить, макс.</label><input type="number" min={5} max={200} value={form.maxProfiles} onChange={e=>set('maxProfiles', e.target.value)} /></div>
               </div>
@@ -194,7 +202,7 @@ export default function ScoutPage({ currentUser }) {
         (data.jobs||[]).map(j => (
           <div key={j.id} style={box}>
             <div style={{display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap'}}>
-              <div><b>{srcName(j.source)}:</b> {(j.hashtags||[]).length ? '#'+j.hashtags.join(' #') : (j.accounts||[]).map(a=>/^\d+$/.test(a)?a:'@'+a).join(', ')}
+              <div><b>{srcName(j.source)}:</b> {(j.queries||[]).length ? '«'+j.queries.join('», «')+'» ' : ''}{(j.hashtags||[]).length ? '#'+j.hashtags.join(' #') : (j.accounts||[]).map(a=>/^\d+$/.test(a)?a:'@'+a).join(', ')}
                 <div style={{fontSize:12, color:'#8a90a6'}}>{new Date(j.createdAt).toLocaleString('ru-RU')} · {j.createdByName} · {j.periodDays||60} дн. · подписчики {fmt(j.minFollowers)}–{j.maxFollowers ? fmt(j.maxFollowers) : '∞'}{j.kzOnly ? ` · KZ от ${j.minKz}` : ''} · потолок {j.maxUsd} ${j.spentUsd ? ` · потрачено ${j.spentUsd} $` : ''}</div></div>
               <div style={{textAlign:'right', fontSize:13}}>
                 <span style={{padding:'2px 8px', borderRadius:8, background: j.status==='done' ? '#e8f7ee' : j.status==='failed' || j.status==='uncertain' ? '#fde8ee' : '#eef2ff'}}>{STATUS[j.status]||j.status}</span>
