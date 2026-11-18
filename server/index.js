@@ -1239,6 +1239,7 @@ require('./finance-bridge').createFinanceBridge({db}).mount(app);
 require('./bitrix-payments').createBitrixPayments({db}).mount(app,auth);
 require('./discovery-search').createSearch({db,makeBlogger}).mount(app,auth);
 require('./discovery-compose').createCompose({db}).mount(app,auth);
+require('./contracts').createContracts({db}).mount(app,auth);
 
 app.post('/api/bloggers/check-duplicate', auth, (req, res) => {
   const { instagram_url, tiktok_url, name } = req.body;
