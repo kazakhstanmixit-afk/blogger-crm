@@ -1385,17 +1385,20 @@ app.post('/api/bloggers/bulk-status', auth, (req, res) => {
   const { blogger_ids, status } = req.body;
   if (!blogger_ids?.length || !status) return res.status(400).json({ error: 'Нужны блогеры и статус' });
   const now = new Date().toISOString();
-  blogger_ids.forEach(bid => {
+  // 19.11.2026: раньше база записывалась на диск после КАЖДОГО блогера — на 50+ блогерах запрос шёл минуты,
+  // и окно «Сменить статус» выглядело некликабельным. Теперь меняем всё в памяти и пишем один раз.
+  const idSet = new Set(blogger_ids.map(String));
+  let updated = 0;
+  for (const b of db.get('bloggers').value()) {
+    if (!idSet.has(String(b.id))) continue;
     const updates = { status, updated_at: now };
     if (status === 'in_work' || status === 'transferred') updates.in_work = true;
     else if (status === 'new' || status === 'contacted' || status === 'replied' || status === 'declined' || status === 'declined_bad') updates.in_work = false;
-    if (status === 'contacted' || status === 'declined' || status === 'declined_bad') {
-      const existing = db.get('bloggers').find({ id: bid }).value();
-      if (!existing?.contacted_at) updates.contacted_at = now;
-    }
-    db.get('bloggers').find({ id: bid }).assign(updates).write();
-  });
-  res.json({ ok: true, updated: blogger_ids.length });
+    if ((status === 'contacted' || status === 'declined' || status === 'declined_bad') && !b.contacted_at) updates.contacted_at = now;
+    Object.assign(b, updates); updated++;
+  }
+  db.write();
+  res.json({ ok: true, updated });
 });
 
 app.post('/api/bloggers/distribute', auth, (req, res) => {
