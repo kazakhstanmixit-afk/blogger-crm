@@ -1236,6 +1236,8 @@ require('./negotiation').createNegotiation({db}).mount(app,auth);
 require('./contact-review').createContactReview({db}).mount(app,auth);
 require('./connect-notifications').createNotifications({db,push:require('web-push')}).mount(app,auth);
 require('./communication').createCommunication({db}).mount(app,auth);
+require('./instagram-pairing').createPairing({db}).mount(app,auth);
+require('./contact-automation').createContactAutomation({db}).mount();
 require('./browser-outbox').createBrowserOutbox({db}).mount(app,auth);
 require('./finance-bridge').createFinanceBridge({db,makeBlogger}).mount(app);
 require('./bitrix-payments').createBitrixPayments({db}).mount(app,auth);

@@ -15,3 +15,5 @@ server/payment-invoices/
 
 # Browser worker private runtime config
 instagram-worker/.env.local
+
+instagram-worker/.env.local*
