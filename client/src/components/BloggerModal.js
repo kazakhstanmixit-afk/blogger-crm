@@ -23,6 +23,58 @@ function cpv(price, reach) {
   if (!price || !reach) return null;
   return parseFloat((price / reach).toFixed(2));
 }
+const REQ_FIELDS = [
+  ['name','Название ИП (без «ИП»)','САРДАРА'], ['iin','ИИН / БИН','12 цифр'], ['head','ФИО полностью','Фамилия Имя Отчество'],
+  ['address','Адрес','город, улица, дом'], ['iban','IBAN (счёт)','KZ…'], ['bank','Банк','АО "Kaspi Bank"'],
+  ['bik','БИК','CASPKZKA'], ['kbe','КБе','19'], ['phone','Телефон',''], ['email','E-mail',''],
+];
+// Договор и счёт из реквизитов ИП: сначала сохраняем реквизиты, потом скачиваем Word.
+function DocumentsBlock({ blogger, requisites, isAdmin }) {
+  const today = new Date().toISOString().slice(0,10);
+  const [doc, setDoc] = useState({ number:'', date: today, city:'Астана', videos: 3, amount: blogger.price_both || blogger.price_reels || '' });
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  const download = async (kind) => {
+    setBusy(kind); setMsg('');
+    try {
+      const s = await apiFetch(`/api/bloggers/${blogger.id}`, { method:'PATCH', body: JSON.stringify({ ip_requisites: requisites }) });
+      if (!s.ok) throw new Error('Не удалось сохранить реквизиты');
+      const r = await apiFetch(`/api/bloggers/${blogger.id}/documents/${kind}`, { method:'POST', body: JSON.stringify({ ...doc, invoiceNumber: doc.number }) });
+      if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error || 'Ошибка'); }
+      const cd = r.headers.get('Content-Disposition') || '';
+      const name = decodeURIComponent((cd.match(/filename\*=UTF-8''([^;]+)/)||[])[1] || (kind==='contract'?'Договор.docx':'Счёт.docx'));
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+      setMsg((kind==='contract'?'Договор':'Счёт') + ' скачан');
+    } catch (e) { setMsg('⚠ ' + e.message); }
+    setBusy('');
+  };
+  const f = (k,v) => setDoc(d=>({...d,[k]:v}));
+  return (
+    <div style={{background:'var(--surface-1)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',marginTop:4}}>
+      <div className="form-row-4">
+        <div className="field"><label>№ договора / счёта</label><input value={doc.number} onChange={e=>f('number',e.target.value)} placeholder="авто" /></div>
+        <div className="field"><label>Дата</label><input type="date" value={doc.date} onChange={e=>f('date',e.target.value)} /></div>
+        <div className="field"><label>Видео (Reels+TikTok)</label><input type="number" min="1" max="20" value={doc.videos} onChange={e=>f('videos',e.target.value)} /></div>
+        <div className="field"><label>Сумма, ₸</label><input type="number" value={doc.amount} onChange={e=>f('amount',e.target.value)} /></div>
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={()=>download('contract')}>{busy==='contract'?'Собираю…':'Договор (Word)'}</button>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={()=>download('invoice')}>{busy==='invoice'?'Собираю…':'Счёт на оплату (Word)'}</button>
+        <input value={doc.city} onChange={e=>f('city',e.target.value)} style={{width:110,padding:'5px 8px',border:'1px solid var(--border)',borderRadius:7,fontSize:12}} title="Город в договоре" />
+        {msg && <span style={{fontSize:12,color:msg.startsWith('⚠')?'var(--red)':'var(--green)'}}>{msg}</span>}
+      </div>
+      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:8}}>Реквизиты и ссылки Instagram/TikTok берутся из карточки. В договоре — пункт о маркировке «Реклама | MIXIT | ИП Нигай».</div>
+      {isAdmin && <label style={{display:'inline-block',fontSize:11,color:'var(--accent)',marginTop:6,cursor:'pointer'}}>
+        Загрузить шаблон договора (.docx)
+        <input type="file" accept=".docx" style={{display:'none'}} onChange={async e=>{const file=e.target.files[0];if(!file)return;const fd=new FormData();fd.append('template',file);
+          const r=await fetch((process.env.REACT_APP_API_URL||'')+'/api/contracts/template',{method:'POST',headers:{Authorization:'Bearer '+localStorage.getItem('token')},body:fd});const d=await r.json().catch(()=>({}));setMsg(r.ok?'Шаблон договора загружен':'⚠ '+(d.error||'Ошибка'));e.target.value='';}} />
+      </label>}
+    </div>
+  );
+}
+
 function cpvColor(v) { if(!v) return '#9ba3be'; if(v<=10) return '#15803d'; if(v<=30) return '#6d28d9'; return '#b91c1c'; }
 
 export default function BloggerModal({ blogger, users, currentUser, onSave, onClose }) {
@@ -49,6 +101,8 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
   }, [isEdit, blogger?.id]);
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const setReq = (k,v) => setForm(f=>({...f, ip_requisites: {...(f.ip_requisites||{}), [k]: v}}));
+  const reqFilled = REQ_FIELDS.filter(([k])=>String((form.ip_requisites||{})[k]||'').trim()).length;
   const n = k => Number(form[k])||0;
 
   const cpvReels = cpv(form.price_reels, form.instagram_avg_reach);
@@ -79,6 +133,7 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
 
     setSaving(true);
     try {
+      if (isEdit && form.ip_requisites) await apiFetch(`/api/bloggers/${blogger.id}`, { method:'PATCH', body: JSON.stringify({ ip_requisites: form.ip_requisites }) });
       await onSave({...form,
         instagram_followers: Number(form.instagram_followers)||0,
         tiktok_followers: Number(form.tiktok_followers)||0,
@@ -202,6 +257,16 @@ export default function BloggerModal({ blogger, users, currentUser, onSave, onCl
             <label>Заметки</label>
             <textarea value={form.notes||''} onChange={e=>set('notes',e.target.value)} placeholder="Дополнительная информация..." />
           </div>
+
+          <details style={{marginTop:6}} open={reqFilled>0 && reqFilled<8}>
+            <summary className="section-divider" style={{cursor:'pointer',listStyle:'revert'}}>Реквизиты ИП и документы <span style={{textTransform:'none',letterSpacing:0,fontWeight:500}}>· заполнено {reqFilled} из {REQ_FIELDS.length}</span></summary>
+            <div className="form-row">
+              {REQ_FIELDS.map(([k,label,ph])=>(
+                <div className="field" key={k}><label>{label}</label><input value={(form.ip_requisites||{})[k]||''} onChange={e=>setReq(k,e.target.value)} placeholder={ph} /></div>
+              ))}
+            </div>
+            {isEdit ? <DocumentsBlock blogger={blogger} requisites={form.ip_requisites||{}} isAdmin={currentUser?.role==='admin'} /> : <div style={{fontSize:12,color:'var(--text-muted)'}}>Договор и счёт можно скачать после сохранения блогера.</div>}
+          </details>
 
           {isEdit && activity.length > 0 && (
             <>

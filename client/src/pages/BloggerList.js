@@ -407,6 +407,19 @@ export default function BloggerList({ currentUser }) {
   const [showBulkStatus, setShowBulkStatus] = useState(false);
   const [visibleCols, setVisibleCols] = useState(new Set(ALL_COLUMNS.filter(c=>c.default).map(c=>c.key)));
   const [quickBarterBlogger, setQuickBarterBlogger] = useState(null);
+  // Одна кнопка: блогер из базы CRM → новая интеграция в Barter Box (ник, телефон, ответственный подставляются там).
+  const sendToBarterBox = async (b) => {
+    const win = window.open('', '_blank');
+    try {
+      const r = await apiFetch('/api/discovery/barter', { method:'POST', body: JSON.stringify({ blogger_id: b.id }) });
+      const data = await r.json().catch(()=>({}));
+      if (!r.ok || !data.url) throw new Error(data.error || 'Barter Box не ответил');
+      if (win) win.location.href = data.url; else window.location.href = data.url;
+    } catch (e) {
+      if (win) win.close();
+      window.alert('Не удалось перенести в Barter Box: ' + e.message);
+    }
+  };
   const [quickTzBlogger, setQuickTzBlogger] = useState(null);
   const timer = useRef(null);
 
@@ -818,7 +831,7 @@ export default function BloggerList({ currentUser }) {
               {show('price_stories') && <SortTh col='price_stories'>Сторис ₸</SortTh>}
               {show('cpv_stories') && <SortTh col='cpv_stories'>CPV Сторис</SortTh>}
               {show('added') && <th>Добавлен</th>}
-              <th></th>
+              <th className="sticky-actions">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -870,10 +883,13 @@ export default function BloggerList({ currentUser }) {
                   {show('price_stories') && <td onClick={e=>e.stopPropagation()}><EditableCell value={b.price_stories} type="number" suffix="₸" onSave={v=>patch(b.id,{price_stories:Number(v)})} /></td>}
                   {show('cpv_stories') && <td><span className={`cpv-badge ${cpvClass(b.cpv_stories)}`}>{b.cpv_stories?b.cpv_stories+'₸':'—'}</span></td>}
                   {show('added') && <td style={{fontSize:11,color:isFresh?'#4f6ef7':'#9ba3be',whiteSpace:'nowrap'}}>{fmtDate(b.created_at)}</td>}
-                  <td onClick={e=>e.stopPropagation()} style={{whiteSpace:'nowrap'}}>
-                    <button className="btn btn-secondary btn-sm" title="Подать ТЗ" onClick={()=>setQuickTzBlogger(b)} style={{marginRight:4,padding:'2px 7px',fontSize:11}}>ТЗ</button>
-                    <button className="btn btn-secondary btn-sm" title="Подать бартер" onClick={()=>setQuickBarterBlogger(b)} style={{marginRight:4,padding:'2px 7px',fontSize:11}}>🎁</button>
-                    <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(b.id)}>🗑</button>
+                  <td onClick={e=>e.stopPropagation()} className="sticky-actions">
+                    <div className="row-actions">
+                      <button className="icon-btn icon-btn-accent" title="Перенести в Barter Box: создать интеграцию с этим блогером" onClick={()=>sendToBarterBox(b)}>В Barter Box</button>
+                      <button className="icon-btn" title="Подать ТЗ" onClick={()=>setQuickTzBlogger(b)}>ТЗ</button>
+                      <button className="icon-btn" title="Подать бартер" onClick={()=>setQuickBarterBlogger(b)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg></button>
+                      <button className="icon-btn icon-btn-danger" title="Удалить" onClick={()=>handleDelete(b.id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+                    </div>
                   </td>
                 </tr>
               );
