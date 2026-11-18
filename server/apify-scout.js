@@ -54,7 +54,7 @@ function analyze(p, cand, job) {
   const caps = posts.map(x => String(x.caption || ''));
   const adShare = posts.length ? Math.round(posts.filter(isAdPost).length / posts.length * 100) : 0;
   const text = { bio: [p.fullName, p.biography, p.businessCategoryName].join(' '), links: [p.externalUrl, ...(p.externalUrls || []).map(u => u && u.url)].join(' '), captions: caps.concat((cand.items || []).map(x => x.caption || '')).join(' '), places: posts.map(x => x.locationName || (x.location && x.location.name) || '').join(' ') + ' ' + (cand.places || []).join(' ') };
-  const kz = kzScore(text, { brand: (cand.brands || [])[0], place: (cand.places || [])[0], cityTag: (cand.tags || []).some(t => RE_CITY.test(t)) });
+  const kz = kzScore(text, { brand: cand.similar ? '' : (cand.brands || [])[0], place: (cand.places || [])[0], cityTag: (cand.tags || []).some(t => RE_CITY.test(t)) });
   const comp = job.competitors.filter(c => new RegExp('@' + c.replace(/\./g, '\\.') + '\\b', 'i').test(caps.join(' ')) || (posts.some(x => (x.mentions || []).map(String).map(s => s.toLowerCase()).includes(c))));
   return { followers, reach, er, recent, adShare, viewsRatio: followers ? Math.round(reach / followers * 100) : 0, lang: langOf(text.bio + ' ' + text.captions), kz, competitors: comp, nicheText: text.bio + ' ' + caps.join(' '), videos: videos.length };
 }
@@ -125,7 +125,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (job.source === 'hashtags') return [ACT.tags, { hashtags: job.hashtags, resultsType: 'reels', resultsLimit: job.perSource, keywordSearch: false }];
     // Упоминания бренда текстом в подписи (без отметки аккаунта): поиск по словам.
     if (job.source === 'mentions') return [ACT.tags, { hashtags: job.queries, resultsType: 'posts', resultsLimit: job.perSource, keywordSearch: true }];
-    if (job.source === 'brands') return [ACT.tagged, { username: job.accounts, resultsLimit: job.perSource }];
+    if (job.source === 'brands' || job.source === 'similar') return [ACT.tagged, { username: job.accounts, resultsLimit: job.perSource }];
     if (job.source === 'places') return [ACT.ig, { directUrls: job.accounts.map(id => 'https://www.instagram.com/explore/locations/' + id + '/'), resultsType: 'posts', resultsLimit: job.perSource, onlyPostsNewerThan: since }];
     // TikTok: хэштеги и/или поиск видео по словам (названия брендов) — страна видео проверяется по locationCreated.
     if (job.source === 'tiktok') return [ACT.tiktok, { ...(job.hashtags.length ? { hashtags: job.hashtags } : {}), ...((job.queries || []).length ? { searchQueries: job.queries, searchSection: '/video' } : {}), resultsPerPage: job.perSource, oldestPostDateUnified: String(job.periodDays) }];
@@ -164,9 +164,11 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       if (c.items.length < 5) c.items.push({ url: r.url, views: r.videoPlayCount || r.igPlayCount || r.videoViewCount, caption: String(r.caption || '').slice(0, 300) });
       const from = String(r.queryTag || r.inputUrl || '');
       if (job.source === 'hashtags') { const t = from.replace(/^.*\/tags\//, '').replace(/\/$/, ''); if (t && !c.tags.includes(t)) c.tags.push(t); }
-      if (job.source === 'brands') { const said = [from, r.caption, ...(r.mentions || []), ...(r.taggedUsers || []).map(t => t && (t.username || t))].join(' ').toLowerCase(); const b = job.accounts.find(a => said.includes(a)) || (job.accounts.length === 1 ? job.accounts[0] : ''); if (b && !c.brands.includes(b)) c.brands.push(b); }
+      if (job.source === 'brands' || job.source === 'similar') { const said = [from, r.caption, ...(r.mentions || []), ...(r.taggedUsers || []).map(t => t && (t.username || t))].join(' ').toLowerCase(); const b = job.accounts.find(a => said.includes(a)) || (job.accounts.length === 1 ? job.accounts[0] : ''); if (b && !c.brands.includes(b)) c.brands.push(b); if (job.source === 'similar') c.similar = true; }
       if (job.source === 'places') { const pl = r.locationName || (r.location && r.location.name) || ((from.match(/locations\/(\d+)/) || [])[1] ? 'место ' + from.match(/locations\/(\d+)/)[1] : 'место из списка'); if (pl && !c.places.includes(pl)) c.places.push(pl); }
     }
+    // «Похожие»: добавляем тех, кого нашли в профилях стартовых блогеров (их отметки и соавторы).
+    for (const sc of (job.source === 'similar' ? job.seedCands || [] : [])) { const c = by[sc.username] = by[sc.username] || { username: sc.username, items: [], tags: [], brands: [], places: [], said: [] }; c.similar = true; for (const b of sc.seeds) if (!c.brands.includes(b)) c.brands.push(b); }
     const all = Object.values(by).filter(c => !job.accounts.includes(c.username));
     job.postsFound = rows.length; job.authorsFound = all.length;
     const fresh = all.filter(a => job.excludeExisting === false || !known.has(a.username)); job.alreadyInCrm = all.filter(a => known.has(a.username)).length;
@@ -175,10 +177,24 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
     if (!job.candidates.length) { job.result = { created: 0 }; job.stage = 'done'; }
     db.write();
   }
-  // «Похожие»: профили стартовых блогеров → их relatedProfiles → кандидаты.
+  // «Похожие»: профили стартовых блогеров → их relatedProfiles + кого они отмечают / с кем снимают коллабы → кандидаты.
+  // 18.11.2026: Instagram почти перестал отдавать relatedProfiles (часто пусто) — тогда вторым шагом берём
+  // авторов, которые сами отмечают этих блогеров (коллабы, похожая аудитория), как в источнике «Отметки брендов».
   function afterSeeds(job, rows) {
     const known = knownIg(), by = {};
-    for (const p of rows) { const seed = nick(p.username); for (const r of (Array.isArray(p.relatedProfiles) ? p.relatedProfiles : [])) { const u = nick(r && r.username); if (!u || r.is_private || job.accounts.includes(u)) continue; (by[u] = by[u] || { username: u, items: [], seeds: [] }).seeds.push(seed); } }
+    const add = (u, seed) => { u = nick(u); if (!u || job.accounts.includes(u) || u === seed) return; const c = by[u] = by[u] || { username: u, items: [], seeds: [] }; if (!c.seeds.includes(seed)) c.seeds.push(seed); };
+    for (const p of rows) { const seed = nick(p.username);
+      for (const r of (Array.isArray(p.relatedProfiles) ? p.relatedProfiles : [])) if (r && !r.is_private) add(r.username, seed);
+      for (const post of (Array.isArray(p.latestPosts) ? p.latestPosts : [])) {
+        for (const t of (post.taggedUsers || [])) add(t && (t.username || t), seed);
+        for (const m of (post.mentions || [])) add(m, seed);
+        for (const co of (post.coauthorProducers || [])) add(co && (co.username || co), seed);
+      } }
+    // брендов и магазинов среди отметок много — их отсекут фильтры подписчиков/KZ на шаге профилей
+    if (Object.keys(by).length < 15 && !job.seedsExpanded) {
+      job.seedsExpanded = true; job.seedCands = Object.values(by).map(c => ({ username: c.username, seeds: c.seeds }));
+      job.stage = 'collect'; job.status = 'pending'; job.nextAt = 0; db.write(); return;
+    }
     const all = Object.values(by); job.authorsFound = all.length;
     const fresh = all.filter(a => job.excludeExisting === false || !known.has(a.username)); job.alreadyInCrm = all.filter(a => known.has(a.username)).length;
     job.candidates = fresh.sort((a, b) => b.seeds.length - a.seeds.length).slice(0, job.maxProfiles);
@@ -212,7 +228,7 @@ function createScout({ db, makeBlogger, env = process.env, fetchImpl = fetch }) 
       if (!passes(m, job, skipped)) continue;
       if (job.target && created.filter(x => !x.existing).length >= job.target) { skipped.overTarget = (skipped.overTarget || 0) + 1; continue; } // цель набрана
       known.add(u);
-      const via = c.said && c.said.length ? 'упоминает «' + c.said.join('», «') + '»' : c.tags && c.tags.length ? '#' + c.tags.join(' #') : c.brands && c.brands.length ? 'отмечает @' + c.brands.join(', @') : c.places && c.places.length ? 'место: ' + c.places.slice(0, 2).join(', ') : c.seeds ? 'похож на @' + c.seeds.slice(0, 3).join(', @') : '';
+      const via = c.said && c.said.length ? 'упоминает «' + c.said.join('», «') + '»' : c.tags && c.tags.length ? '#' + c.tags.join(' #') : c.brands && c.brands.length ? (c.similar ? 'рядом с @' : 'отмечает @') + c.brands.join(', @') : c.places && c.places.length ? 'место: ' + c.places.slice(0, 2).join(', ') : c.seeds ? 'похож на @' + c.seeds.slice(0, 3).join(', @') : '';
       const flags = [m.competitors.length ? '⚠ работает с конкурентом @' + m.competitors.join(', @') : '', m.adShare >= 50 ? 'много рекламы ' + m.adShare + '%' : ''].filter(Boolean);
       const row = { username: u, platform: 'ig', followers: m.followers, reach: m.reach, viewsRatio: m.viewsRatio, er: m.er, adShare: m.adShare, kz: m.kz.score, kzWhy: m.kz.reasons.join('; '), via, brands: c.brands || [], flags: flags.join('; '), lang: m.lang };
       if (exists) { created.push({ ...row, id: 'exists-' + u, existing: true }); continue; }
