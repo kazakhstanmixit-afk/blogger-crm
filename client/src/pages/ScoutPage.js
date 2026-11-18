@@ -9,6 +9,7 @@ const SOURCES = [
   ['hashtags', 'Хэштеги', 'Рилсы по казахстанским хэштегам: город + тема, казахские, Kaspi.'],
   ['similar', 'Похожие на блогеров', 'Берём 20–30 наших лучших блогеров и собираем похожих — находит тех, кто без хэштегов.'],
   ['places', 'Места', 'Посты с геотегами ТРЦ, салонов, кафе Алматы и Астаны — авторы почти наверняка местные.'],
+  ['mentions', 'Упоминают бренд (IG)', 'Посты, где бренд назван текстом в подписи, без отметки аккаунта (например, «bidalli»).'],
   ['tiktok', 'TikTok', 'TikTok: видео по хэштегам и по упоминанию брендов (поиск по словам). Страна видео (KZ) — самый надёжный гео-фильтр.'],
 ];
 // Списки аккаунтов (из базы рыночного сбора; у остальных KZ-брендов Instagram пока не заполнен).
@@ -27,7 +28,7 @@ const TAGS = {
 };
 const NICHES = [['beauty','бьюти'],['care','уход'],['lifestyle','лайфстайл'],['mom','мама']];
 const LANGS = [['ru','русский'],['kk','казахский'],['kk+ru','оба']];
-const BASE = { source:'brands', hashtags:'', queries:'', accounts:'', competitors:'', perTag:50, maxProfiles:50, minFollowers:3000, maxFollowers:150000, periodDays:30, kzOnly:true, minKz:3, minViews:1000, minViewsPct:5, activeOnly:true, maxAdShare:40, niches:['beauty','care'], langs:[], excludeExisting:true, maxUsd:1, managerIds:[] };
+const BASE = { source:'brands', target:'', hashtags:'', queries:'', accounts:'', competitors:'', perTag:50, maxProfiles:50, minFollowers:3000, maxFollowers:150000, periodDays:30, kzOnly:true, minKz:3, minViews:1000, minViewsPct:5, activeOnly:true, maxAdShare:40, niches:['beauty','care'], langs:[], excludeExisting:true, maxUsd:1, managerIds:[] };
 const PRESETS = [
   ['Бьюти КЗ — по отметкам брендов', { source:'brands', accounts:LISTS.kz.join('\n'), periodDays:30, perTag:30, minFollowers:3000, maxFollowers:150000, minViews:1000, minViewsPct:5, niches:['beauty','care'], langs:[], maxAdShare:40, kzOnly:true, minKz:3 }],
   ['Казахоязычные', { source:'hashtags', hashtags:TAGS['Казахоязычные'], perTag:30, minFollowers:3000, maxFollowers:300000, minViews:1000, minViewsPct:5, niches:['beauty','lifestyle'], langs:['kk','kk+ru'], maxAdShare:40, kzOnly:true, minKz:3 }],
@@ -67,20 +68,32 @@ export default function ScoutPage({ currentUser }) {
 
   const accounts = cleanAccounts(form.accounts, form.source);
   const tags = String(form.hashtags||'').split(/[\s,;]+/).map(t=>t.replace(/^#/,'')).filter(Boolean);
-  const queries = form.source==='tiktok' ? String(form.queries||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean) : [];
+  const queries = ['tiktok','mentions'].includes(form.source) ? String(form.queries||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean) : [];
   const usesTags = ['hashtags','tiktok'].includes(form.source);
   const per = Number(form.perTag)||0, maxP = Number(form.maxProfiles)||0;
-  const firstItems = usesTags ? (tags.length + queries.length) * per : form.source==='similar' ? accounts.length : accounts.length * per;
+  const units = usesTags ? tags.length + queries.length : form.source==='mentions' ? queries.length : accounts.length;
+  const firstItems = usesTags || form.source==='mentions' ? units * per : form.source==='similar' ? accounts.length : accounts.length * per;
   const est = Math.round((firstItems + (form.source==='tiktok' ? 0 : maxP)) * PRICE * 100) / 100;
-  const estText = usesTags ? `${tags.length + queries.length} тег./слов × ${per} ${form.source==='tiktok'?'видео':'постов'}` : form.source==='similar' ? `${accounts.length} стартовых` : `${accounts.length} акк. × ${per} отметок`;
+  const estText = form.source==='mentions' ? `${queries.length} слов × ${per} постов` : usesTags ? `${tags.length + queries.length} тег./слов × ${per} ${form.source==='tiktok'?'видео':'постов'}` : form.source==='similar' ? `${accounts.length} стартовых` : `${accounts.length} акк. × ${per} отметок`;
 
+  // Цель «нужно N блогеров»: доля прошедших фильтры — по прошлым запускам (иначе ~12%), на 1 пост ≈ 0.5 нового автора.
+  const passRate = (() => { const done = (data.jobs||[]).filter(j=>j.result && j.result.checked > 0); const c = done.reduce((a,j)=>a+j.result.created,0), k = done.reduce((a,j)=>a+j.result.checked,0); return k >= 30 ? Math.min(0.5, Math.max(0.05, c/k)) : 0.12; })();
+  const planForTarget = () => {
+    const t = Number(form.target)||0; if (!t) { setMsg('⚠ Укажите, сколько блогеров нужно'); return; }
+    const profiles = Math.min(3000, Math.ceil(t / passRate));
+    const perUnit = form.source==='similar' ? per : Math.min(1000, Math.max(5, Math.ceil(profiles / 0.5 / Math.max(1, units))));
+    const first = form.source==='similar' ? accounts.length : Math.max(1, units) * perUnit;
+    const cost = Math.ceil((first + (form.source==='tiktok' ? 0 : profiles)) * PRICE * 10) / 10;
+    setForm(f=>({...f, maxProfiles: form.source==='tiktok' ? Math.min(3000, Math.ceil(t / passRate)) : profiles, perTag: perUnit, maxUsd: Math.min(cost, data.runLimit||1)}));
+    setMsg(cost > (data.runLimit||1) ? `⚠ Для ${t} блогеров нужно ≈ $${cost} (проверить ≈ ${profiles} профилей), а потолок одного запуска $${data.runLimit||1}. Поднимите лимит или запускайте частями.` : `Рассчитано под ${t} блогеров: ≈ ${profiles} профилей, ≈ $${cost}`);
+  };
   const addAccounts = list => set('accounts', [...new Set([...cleanAccounts(form.accounts, form.source), ...list])].join('\n'));
   const addTags = t => set('hashtags', [...new Set([...tags, ...t.split(/,\s*/)])].join(', '));
   const bestBloggers = async () => { try { const r = await apiFetch('/api/scout/best-bloggers?limit=30'); const d = await r.json(); if (!r.ok) throw new Error(d.error||'Ошибка'); if (!d.accounts.length) throw new Error('В базе нет блогеров с оплаченными интеграциями'); addAccounts(d.accounts); } catch(e) { setMsg('⚠ '+e.message); } };
   const run = async () => {
     setBusy(true); setMsg('');
     try {
-      const body = { ...form, accounts: accounts.join('\n') };
+      const body = { ...form, accounts: accounts.join('\n'), firstShare: firstItems + maxP ? Math.round(firstItems / (firstItems + (form.source==='tiktok' ? 0 : maxP)) * 100) / 100 : 0.5 };
       const r = await apiFetch('/api/scout/jobs', { method:'POST', body: JSON.stringify(body) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Ошибка');
       setMsg('Запущено: результаты появятся через 3–8 минут'); load();
@@ -136,6 +149,12 @@ export default function ScoutPage({ currentUser }) {
                     <textarea rows={2} value={form.queries} onChange={e=>set('queries', e.target.value)} placeholder="bidalli, premore, pom7" />
                     <Hint>В TikTok бренды редко отмечают аккаунтом — ищем видео, где бренд назван. Можно только слова, только хэштеги или вместе. Слов: {queries.length}.</Hint></div>}</div>
               ) : (
+                form.source==='mentions' ? (
+                <div className="field" style={{marginTop:10}}><label>Слова в подписи — названия брендов (через запятую)</label>
+                  <div style={{display:'flex', flexWrap:'wrap', gap:6, margin:'4px 0 6px'}}><button type="button" className={small} onClick={()=>set('queries', [...new Set([...queries.map(x=>x.toLowerCase()), ...BRAND_WORDS.split(/,\s*/)])].join(', '))}>+ Бренды КЗ</button>{queries.length > 0 && <button type="button" className={small} onClick={()=>set('queries','')}>очистить</button>}</div>
+                  <textarea rows={2} value={form.queries} onChange={e=>set('queries', e.target.value)} placeholder="bidalli, premore, pom7" />
+                  <Hint>Находит посты, где бренд просто написан словом. Глобальные бренды (bidalli) — только с «Только Казахстан». Слов: {queries.length}.</Hint></div>
+                ) : (
                 <div className="field" style={{marginTop:10}}><label>{form.source==='places' ? 'Места' : form.source==='similar' ? 'Стартовые блогеры' : 'Аккаунты брендов, магазинов, салонов'}</label>
                   <div style={{display:'flex', flexWrap:'wrap', gap:6, marginBottom:6}}>
                     {form.source==='brands' && <><button type="button" className={small} onClick={()=>addAccounts(LISTS.kz)}>+ Бренды КЗ ({LISTS.kz.length})</button><button type="button" className={small} onClick={()=>addAccounts(LISTS.global)}>+ Глобальные бренды ({LISTS.global.length})</button></>}
@@ -144,12 +163,12 @@ export default function ScoutPage({ currentUser }) {
                   </div>
                   <textarea rows={4} value={form.accounts} onChange={e=>set('accounts', e.target.value)} onBlur={()=>set('accounts', cleanAccounts(form.accounts, form.source).join('\n'))} placeholder={form.source==='places' ? 'https://www.instagram.com/explore/locations/318767455/' : '@brand_kz\nhttps://www.instagram.com/salon_almaty/'} />
                   <Hint>{form.source==='places' ? 'Ссылки на места instagram.com/explore/locations/… или их номера.' : 'Ник или ссылка, по одному в строке — можно вставлять что угодно, ссылки превратятся в ники, дубли уберутся. '}{form.source==='brands' ? 'Лучше всего работают локальные КЗ-аккаунты брендов, магазинов и салонов — их отмечают почти только казахстанские блогеры. Глобальные бренды — только с фильтром «Только Казахстан».' : ''} Распознано: {accounts.length}.</Hint></div>
-              )}
+              ))}
               <div style={grid}>
                 <div className="field"><label>Период</label><select value={form.periodDays} onChange={e=>set('periodDays', Number(e.target.value))}><option value={30}>30 дней</option><option value={60}>60 дней</option><option value={90}>90 дней</option></select></div>
-                {form.source !== 'similar' && <div className="field"><label>{form.source==='tiktok' ? 'Видео с каждого тега/слова' : usesTags ? 'Постов с каждого тега' : form.source==='places' ? 'Постов с каждого места' : 'Отметок с каждого аккаунта'}</label><input type="number" min={5} max={200} value={form.perTag} onChange={e=>set('perTag', e.target.value)} />
+                {form.source !== 'similar' && <div className="field"><label>{form.source==='tiktok' ? 'Видео с каждого тега/слова' : form.source==='mentions' ? 'Постов с каждого слова' : usesTags ? 'Постов с каждого тега' : form.source==='places' ? 'Постов с каждого места' : 'Отметок с каждого аккаунта'}</label><input type="number" min={5} max={1000} value={form.perTag} onChange={e=>set('perTag', e.target.value)} />
                   {form.source==='brands' && <Hint>У крупного бренда 30 отметок — это 1–2 недели. Для 30 дней ставьте 50–100.</Hint>}</div>}
-                <div className="field"><label>Профилей проверить, макс.</label><input type="number" min={5} max={200} value={form.maxProfiles} onChange={e=>set('maxProfiles', e.target.value)} /></div>
+                <div className="field"><label>Профилей проверить, макс.</label><input type="number" min={5} max={3000} value={form.maxProfiles} onChange={e=>set('maxProfiles', e.target.value)} /></div>
               </div>
             </div>
 
@@ -187,6 +206,11 @@ export default function ScoutPage({ currentUser }) {
               <label key={u.id} style={{display:'flex', gap:4, alignItems:'center', fontWeight:400, fontSize:13, padding:'3px 8px', border:'1px solid #e2e6ef', borderRadius:8, cursor:'pointer'}}>
                 <input type="checkbox" checked={form.managerIds.includes(u.id)} onChange={()=>toggleManager(u.id)} /> {u.username}</label>))}</div></div>}
 
+          <div style={{display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap', marginTop:12, padding:'10px 12px', borderRadius:10, background:'#f5f3ff'}}>
+            <div className="field" style={{margin:0, width:170}}><label>Сколько блогеров нужно</label><input type="number" min={1} max={5000} value={form.target} onChange={e=>set('target', e.target.value)} placeholder="например, 100" /></div>
+            <button type="button" className="btn btn-secondary" onClick={planForTarget}>Рассчитать под цель</button>
+            <div style={{fontSize:12, color:'#5b6378', maxWidth:560, lineHeight:1.35}}>Подберёт «постов с тега/аккаунта» и «профилей проверить» так, чтобы после фильтров осталось нужное число. Сейчас фильтры пропускают ≈ {Math.round(passRate*100)}% проверенных профилей{(data.jobs||[]).some(j=>j.result && j.result.checked) ? ' (по вашим запускам)' : ' (оценка)'}. Поиск остановится, когда цель набрана.</div>
+          </div>
           <div style={{display:'flex', gap:12, alignItems:'center', flexWrap:'wrap', marginTop:12}}>
             <div className="field" style={{margin:0, width:150}}><label>Потолок, $ (до {data.runLimit||1})</label><input type="number" step="0.1" min={0.1} max={data.runLimit||1} value={form.maxUsd} onChange={e=>set('maxUsd', e.target.value)} /></div>
             <div style={{fontSize:13, padding:'8px 12px', borderRadius:10, background: est > Number(form.maxUsd) ? '#fde8ee' : '#eef7f0', color: est > Number(form.maxUsd) ? '#9b1c3c' : '#1f6b40'}}>
@@ -211,7 +235,7 @@ export default function ScoutPage({ currentUser }) {
             </div>
             {j.lastError && <div style={{fontSize:12, color:'#c0392b', marginTop:6}}>{j.lastError}</div>}
             {j.authorsFound != null && <div style={{fontSize:13, marginTop:8}}>{j.postsFound != null ? `Постов: ${fmt(j.postsFound)} · ` : ''}авторов: {fmt(j.authorsFound)} · уже в базе: {fmt(j.alreadyInCrm)}</div>}
-            {j.result && <div style={{fontSize:13, marginTop:4}}><b>Добавлено в базу: {fmt(j.result.created)}</b>{j.result.existing ? ` · уже были в базе (показаны): ${j.result.existing}` : ''}{j.result.skipped ? ' · отсеяно: ' + [['не KZ', j.result.skipped.notKz], ['подписчики', j.result.skipped.followers], ['просмотры', j.result.skipped.views], ['неактивны', j.result.skipped.inactive], ['много рекламы', j.result.skipped.ads], ['не та ниша', j.result.skipped.niche], ['язык', j.result.skipped.lang], ['закрытые', j.result.skipped.private], ['дубли', j.result.skipped.duplicate]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(', ') : ''}</div>}
+            {j.result && <div style={{fontSize:13, marginTop:4}}><b>Добавлено в базу: {fmt(j.result.created)}{j.target ? ` из ${fmt(j.target)}` : ''}</b>{j.result.checked ? ` · проверено профилей: ${fmt(j.result.checked)}` : ''}{j.result.existing ? ` · уже были в базе (показаны): ${j.result.existing}` : ''}{j.result.skipped ? ' · отсеяно: ' + [['не KZ', j.result.skipped.notKz], ['подписчики', j.result.skipped.followers], ['просмотры', j.result.skipped.views], ['неактивны', j.result.skipped.inactive], ['много рекламы', j.result.skipped.ads], ['не та ниша', j.result.skipped.niche], ['язык', j.result.skipped.lang], ['закрытые', j.result.skipped.private], ['дубли', j.result.skipped.duplicate], ['сверх цели', j.result.skipped.overTarget]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(', ') : ''}</div>}
             {j.result && j.result.byAccount && Object.keys(j.result.byAccount).length > 0 && (
               <div style={{fontSize:12.5, marginTop:6}}>Какие аккаунты приводят блогеров: {Object.entries(j.result.byAccount).sort((a,b)=>b[1].added-a[1].added).map(([a, r]) => <span key={a} style={{display:'inline-block', margin:'2px 6px 2px 0', padding:'1px 8px', borderRadius:8, background:'#f3f4f9'}}>@{a}: {r.added} · KZ {r.avgKz} · медиана {fmt(r.avgViews)}</span>)}</div>)}
             {j.result && (j.result.sample||[]).length > 0 && (
