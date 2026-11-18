@@ -70,6 +70,14 @@ export default function ImportModal({ onClose }) {
           </div>
         )}
 
+        {result && (result.managerChanged > 0 || (result.managerUnknown || []).length > 0 || result.managerIgnored) && (
+          <div style={{fontSize:12.5,marginTop:10,color:'var(--text-muted)'}}>
+            {result.managerChanged > 0 && <div>Менеджер изменён у {result.managerChanged} блогеров.</div>}
+            {(result.managerUnknown || []).length > 0 && <div style={{color:'#f59e0b'}}>Нет такого менеджера в CRM, оставили прежнего: {result.managerUnknown.join(', ')}. Впишите логин менеджера, как в CRM.</div>}
+            {result.managerIgnored && <div>Колонку «Менеджер» может применять только админ.</div>}
+          </div>
+        )}
+
         {error && <div className="error-msg" style={{marginTop:12}}>{error}</div>}
 
         <div style={{display:'flex',gap:10,marginTop:16,justifyContent:'flex-end'}}>
