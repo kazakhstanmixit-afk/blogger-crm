@@ -1472,7 +1472,15 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
       price_stories: ['ценасторис(₸)','стоимостьсторис','price_stories'],
       status: ['статус','status'],
       last_comment: ['последнийкомментарий','комментарий','last_comment'],
+      // 18.11.2026: раньше колонки «Менеджер» и «Категория» из файла молча игнорировались.
+      manager: ['менеджер','ответственный','manager','manager_name'],
+      category: ['категория','category'],
     };
+    // Менеджера из файла применяем только для админа/оператора (менеджер не перекидывает чужих блогеров).
+    const canAssign = ['admin', 'operator'].includes(req.user.role);
+    const mgrKey = v => String(v || '').trim().toLowerCase().replace(/^@/, '').replace(/\s+/g, ' ');
+    const usersByName = new Map(db.get('users').value().filter(u => u.role === 'manager' || u.role === 'admin').map(u => [mgrKey(u.username), u]));
+    let managerChanged = 0; const managerUnknown = new Set();
 
     function findCol(row, keys) {
       if (!keys || !Array.isArray(keys)) return null;
@@ -1536,6 +1544,13 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
         updated_at: batchDate,
       };
 
+      const mCol = findCol(row, aliases.manager), mRaw = mCol ? String(row[mCol] || '').trim() : '';
+      if (canAssign && mRaw) {
+        const u = usersByName.get(mgrKey(mRaw));
+        if (!u) managerUnknown.add(mRaw);
+        else { if (!existing || existing.assigned_manager_id !== u.id) managerChanged++; data.assigned_manager_id = u.id; data.manager_name = u.username; }
+      }
+
       if (status) {
         data.status = status;
         data.in_work = status === 'in_work';
@@ -1581,9 +1596,9 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
           db.get('bloggers').push({
             id: uuidv4(), batch_id: batchId, created_at: batchDate,
             status: status || 'new', in_work: status === 'in_work',
-            decline_reason: null, assigned_manager_id: null,
+            decline_reason: null,
             notes: null, contacted_at: null, price_updated_at: null,
-            ...data,
+            ...data, assigned_manager_id: data.assigned_manager_id || null,
           }).write();
           added++;
         }
@@ -1591,7 +1606,7 @@ app.post('/api/bloggers/import', auth, upload.single('file'), (req, res) => {
     }
 
     if (added > 0) db.get('batches').push({ id: batchId, count: added, created_at: batchDate, imported_by: req.user.username }).write();
-    res.json({ updated, added, skipped, total: updated + added });
+    res.json({ updated, added, skipped, total: updated + added, managerChanged, managerUnknown: [...managerUnknown].slice(0, 20), managerIgnored: !canAssign });
   } catch(e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка импорта: ' + e.message });
