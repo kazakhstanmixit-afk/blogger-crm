@@ -1,6 +1,23 @@
 import {observeChat} from './network-incoming.mjs';
 import {readVisibleMessages} from './incoming.mjs';
 const exact=value=>new RegExp('^'+value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i');
+async function selectRecipientRow(scope,handle,timeout){
+ const result=await scope.evaluateHandle((root,handle)=>{
+  const norm=s=>String(s||'').trim().replace(/^@/,'').toLowerCase(),visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';
+  const matches=[...root.querySelectorAll('*')].filter(e=>visible(e)&&norm(e.innerText||e.textContent)===handle&&!Array.from(e.children).some(c=>visible(c)&&norm(c.innerText||c.textContent)===handle));
+  if(!matches.length)return {reason:'В результатах Direct пока нет точного ника'};
+  const selector='button,[role="button"],[role="option"],label';
+  const rows=[...root.querySelectorAll(selector)].filter(e=>visible(e)&&matches.every(m=>e.contains(m)));
+  const smallest=rows.filter(e=>!rows.some(other=>other!==e&&e.contains(other)));
+  if(smallest.length!==1)return {reason:'В Direct несколько разных строк с этим ником; выбор остановлен'};
+  const row=smallest[0],controls=row.querySelectorAll('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"]');
+  const nested=[...row.querySelectorAll(selector)].filter(e=>matches.some(m=>e.contains(m)));
+  const leaves=nested.filter(e=>!nested.some(other=>other!==e&&e.contains(other)));
+  if(controls.length>1||!controls.length&&leaves.length>1)return {reason:'Не удалось выделить одну строку получателя'};
+  return {row};
+ },handle);
+ try{const reason=await (await result.getProperty('reason')).jsonValue();if(reason)return reason;const row=(await result.getProperty('row')).asElement();if(!row)return 'Не найдена строка получателя';const controls=await row.$$('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"]');if(controls.length===1&&await controls[0].isVisible())await controls[0].check({timeout});else await row.click({timeout});return null;}finally{await result.dispose();}
+}
 async function openDirect(page,handle,origin,entryWaitMs){
  await page.goto(origin+'/direct/new/',{waitUntil:'domcontentloaded'});
  if(/\/accounts\/login|\/challenge|\/checkpoint/.test(page.url()))return 'Требуется ручной вход / проверка Instagram';
@@ -22,9 +39,9 @@ async function openDirect(page,handle,origin,entryWaitMs){
  await search.first().waitFor({state:'visible',timeout:entryWaitMs}).catch(()=>{});
  if(await search.count()!==1||!await search.isVisible())return 'В Direct не найдено однозначное поле поиска получателя';
  await search.fill(handle);const recipient=scope.getByText(exact(handle),{exact:true});await recipient.first().waitFor({state:'visible',timeout:entryWaitMs}).catch(()=>{});
- if(await recipient.count()!==1||!await recipient.isVisible())return 'Direct не показал единственного получателя с точным ником';
- await recipient.click();const next=scope.getByRole('button',{name:/^(Chat|Next|Чат|Далее)$/i});
- if(await next.count()!==1)return 'Не найдена однозначная кнопка открытия диалога';await next.click();return null;
+ const selectionError=await selectRecipientRow(scope,handle.toLowerCase(),entryWaitMs);if(selectionError)return selectionError;
+ const next=scope.getByRole('button',{name:/^(Chat|Next|Чат|Далее)$/i});
+ if(await next.count()!==1)return 'Не найдена однозначная кнопка открытия диалога';try{await next.click({timeout:entryWaitMs});}catch{return 'Instagram не подтвердил выбор получателя: кнопка Chat недоступна';}return null;
 }
 export async function sendApproved(page,job,report,{origin='https://www.instagram.com',headerSelector='header',messageRowSelector='[role="row"]',waitMs=10000,entryWaitMs=8000,ownInstagramId,incomingConfig}={}){
  if(!/^[a-z0-9._]{1,30}$/i.test(job.handle)||(job.operation!=='inspect'&&!job.text?.trim())||job.text.length>1000)throw Error('Invalid approved recipient/message');let sending=false;const screenshot=async()=>Buffer.from(await page.screenshot({type:'png'})).toString('base64');
