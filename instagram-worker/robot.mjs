@@ -16,7 +16,7 @@ async function selectRecipientRow(scope,handle,timeout){
   if(controls.length>1||!controls.length&&leaves.length>1)return {reason:'Не удалось выделить одну строку получателя'};
   return {row};
  },handle);
- try{const reason=await (await result.getProperty('reason')).jsonValue();if(reason)return reason;const row=(await result.getProperty('row')).asElement();if(!row)return 'Не найдена строка получателя';const controls=await row.$$('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"]');if(controls.length===1&&await controls[0].isVisible())await controls[0].check({timeout});else await row.click({timeout});return null;}finally{await result.dispose();}
+ try{const reason=await (await result.getProperty('reason')).jsonValue();if(reason)return reason;const row=(await result.getProperty('row')).asElement();if(!row)return 'Не найдена строка получателя';const controls=await row.$$('input[type="checkbox"],input[type="radio"],[role="checkbox"],[role="radio"]');if(controls.length===1&&await controls[0].isVisible())await controls[0].click({timeout});else await row.click({timeout});return null;}finally{await result.dispose();}
 }
 async function openDirect(page,handle,origin,entryWaitMs){
  await page.goto(origin+'/direct/new/',{waitUntil:'domcontentloaded'});
