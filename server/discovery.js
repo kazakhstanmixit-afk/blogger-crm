@@ -3,7 +3,7 @@ const crypto=require('crypto');
 const path=require('path');
 class DiscoveryError extends Error{constructor(message,status=400){super(message);this.status=status;}}
 function need(v,m,s){if(!v)throw new DiscoveryError(m,s)}
-function nickname(value){let s=String(value||'').trim().toLowerCase();if(s.includes('instagram.com/'))s=s.split('instagram.com/')[1].split(/[/?#]/)[0];s=s.replace(/^@/,'');return /^[a-z0-9._]{1,30}$/.test(s)&&!['p','reel','reels','stories','explore','accounts'].includes(s)?s:null;}
+const {parseInstagramHandle:nickname}=require('./instagram-profile');
 function expandRelated(rows){
  need(Array.isArray(rows),'Нужен массив строк');
  const expanded=[];
